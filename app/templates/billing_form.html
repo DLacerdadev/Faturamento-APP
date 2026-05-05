@@ -1,0 +1,919 @@
+{% extends "base.html" %}
+
+{% block title %}Gerar Fatura - Telos Consultoria{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-card {
+        background: var(--gray-800);
+        padding: 1.5rem;
+        max-width: 700px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-row.single {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-group label {
+        display: block;
+        color: var(--gold);
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 0.5rem;
+    }
+    
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 0.875rem 1rem;
+        background: var(--gray-700);
+        border: 1px solid var(--gray-600);
+        color: var(--gray-100);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+        box-sizing: border-box;
+    }
+    
+    .form-group input:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: var(--gold);
+    }
+    
+    .form-group select option {
+        background: var(--gray-800);
+        color: var(--gray-100);
+    }
+    
+    .btn-generate {
+        width: 100%;
+        padding: 1rem;
+        background: var(--gold);
+        color: var(--gray-900);
+        border: none;
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-top: 1rem;
+    }
+    
+    .btn-generate:hover {
+        background: #c49a3f;
+    }
+    
+    .btn-generate:disabled {
+        background: var(--gray-600);
+        cursor: not-allowed;
+    }
+    
+    .summary-box {
+        background: var(--gray-700);
+        border-left: 4px solid var(--gold);
+        padding: 1.5rem;
+        margin-top: 2rem;
+        display: none;
+    }
+    
+    .summary-box.active {
+        display: block;
+    }
+    
+    .summary-box h4 {
+        color: var(--gold);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 1rem;
+    }
+    
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+    
+    .summary-item {
+        text-align: center;
+    }
+    
+    .summary-item .label {
+        color: var(--gray-400);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .summary-item .value {
+        color: var(--gold);
+        font-size: 1.5rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+        margin-top: 0.25rem;
+        word-break: break-word;
+    }
+    
+    .loading-indicator {
+        display: none;
+        text-align: center;
+        padding: 2rem;
+    }
+    
+    .loading-indicator.active {
+        display: block;
+    }
+    
+    .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid var(--gray-700);
+        border-top-color: var(--gold);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    .format-options {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .format-option {
+        flex: 1;
+        padding: 1rem;
+        background: var(--gray-700);
+        border: 2px solid var(--gray-600);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .format-option:hover {
+        border-color: var(--gray-500);
+    }
+    
+    .format-option.selected {
+        border-color: var(--gold);
+        background: rgba(212, 168, 75, 0.1);
+    }
+    
+    .format-option input {
+        display: none;
+    }
+    
+    .format-option .title {
+        color: var(--gray-100);
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .format-option .desc {
+        color: var(--gray-400);
+        font-size: 0.75rem;
+    }
+    
+    .info-text {
+        color: var(--gray-400);
+        font-size: 0.75rem;
+        margin-top: 0.5rem;
+    }
+    
+    /* Responsivo - Tablet */
+    @media (max-width: 768px) {
+        .form-card {
+            padding: 1rem;
+        }
+        
+        .form-row {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+        
+        .summary-grid {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+        }
+        
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--gray-600);
+        }
+        
+        .summary-item:last-child {
+            border-bottom: none;
+        }
+        
+        .summary-item .value {
+            font-size: 1.25rem;
+        }
+        
+        .format-options {
+            flex-direction: column;
+        }
+        
+        .format-option {
+            padding: 0.875rem;
+        }
+    }
+    
+    /* Responsivo - Mobile */
+    @media (max-width: 480px) {
+        .form-card {
+            padding: 0.75rem;
+        }
+        
+        .form-group input,
+        .form-group select {
+            padding: 0.75rem;
+            font-size: 0.8rem;
+        }
+        
+        .btn-generate {
+            padding: 0.875rem;
+            font-size: 0.875rem;
+            letter-spacing: 1px;
+        }
+        
+        .summary-box {
+            padding: 1rem;
+        }
+        
+        .summary-item .value {
+            font-size: 1rem;
+        }
+        
+        .format-option .title {
+            font-size: 0.875rem;
+        }
+        
+        .format-option .desc {
+            font-size: 0.7rem;
+        }
+    }
+    
+    /* Seção Folha de Pagamento */
+    .section-divider {
+        border-top: 2px solid var(--gold);
+        margin: 2.5rem 0;
+        padding-top: 2rem;
+    }
+    
+    .section-title {
+        color: var(--gold);
+        font-size: 1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-bottom: 1.5rem;
+    }
+    
+    .payroll-table-container {
+        max-height: 500px;
+        overflow-y: auto;
+        margin-top: 1.5rem;
+        display: none;
+    }
+    
+    .payroll-table-container.active {
+        display: block;
+    }
+    
+    .payroll-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+    }
+    
+    .payroll-table th {
+        background: var(--gray-700);
+        color: var(--gold);
+        padding: 0.75rem 0.5rem;
+        text-align: left;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.7rem;
+        letter-spacing: 1px;
+        position: sticky;
+        top: 0;
+    }
+    
+    .payroll-table td {
+        padding: 0.5rem;
+        border-bottom: 1px solid var(--gray-700);
+        color: var(--gray-300);
+    }
+    
+    .payroll-table tr:hover td {
+        background: var(--gray-700);
+    }
+    
+    .employee-row {
+        background: var(--gray-800);
+    }
+    
+    .employee-row td {
+        padding-top: 1rem;
+        border-top: 2px solid var(--gray-600);
+    }
+    
+    .employee-name {
+        color: var(--gray-100);
+        font-weight: 600;
+    }
+    
+    .event-row td {
+        padding-left: 1.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .event-value {
+        color: var(--gold);
+        font-family: 'JetBrains Mono', monospace;
+        text-align: right;
+    }
+    
+    .payroll-summary {
+        background: var(--gray-700);
+        border-left: 4px solid var(--gold);
+        padding: 1rem;
+        margin-top: 1rem;
+        display: none;
+    }
+    
+    .payroll-summary.active {
+        display: block;
+    }
+    
+    .payroll-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+    
+    .payroll-summary-item .label {
+        color: var(--gray-400);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+    }
+    
+    .payroll-summary-item .value {
+        color: var(--gold);
+        font-size: 1.25rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .employee-card {
+        background: var(--gray-700);
+        margin-bottom: 1rem;
+        padding: 1rem;
+    }
+    
+    .employee-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--gray-600);
+    }
+    
+    .employee-info {
+        flex: 1;
+    }
+    
+    .employee-matricula {
+        color: var(--gold);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+    }
+    
+    .employee-nome {
+        color: var(--gray-100);
+        font-weight: 600;
+        font-size: 1rem;
+        margin-top: 0.25rem;
+    }
+    
+    .employee-cargo {
+        color: var(--gray-400);
+        font-size: 0.8rem;
+    }
+    
+    .employee-salario {
+        text-align: right;
+    }
+    
+    .employee-salario .label {
+        color: var(--gray-400);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+    }
+    
+    .employee-salario .value {
+        color: var(--gold);
+        font-size: 1rem;
+        font-weight: 600;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .events-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.5rem;
+    }
+    
+    .event-item {
+        background: var(--gray-800);
+        padding: 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+    }
+    
+    .event-item .event-desc {
+        color: var(--gray-300);
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .event-item .event-val {
+        color: var(--gold);
+        font-family: 'JetBrains Mono', monospace;
+        margin-left: 0.5rem;
+    }
+    
+    #payroll-codccu {
+        height: auto;
+        min-height: 150px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    
+    #payroll-codccu option {
+        padding: 0.5rem;
+        cursor: pointer;
+    }
+    
+    #payroll-codccu option:hover,
+    #payroll-codccu option:checked {
+        background: var(--gold);
+        color: var(--gray-900);
+    }
+    
+    #payroll-codccu-filter {
+        margin-bottom: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Gerar Fatura</h1>
+</div>
+
+<div class="form-card">
+    <form id="billing-form">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="periodo">Periodo (Competencia)</label>
+                <input type="date" id="periodo" name="periodo" required>
+                <p class="info-text">Selecione o primeiro dia do mes de referencia</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="codcal">Tipo de Calculo</label>
+                <select id="codcal" name="codcal">
+                    <option value="" selected>Todos os calculos</option>
+                    <option value="362">362 - Folha Mensal (Nov+)</option>
+                    <option value="356">356 - Folha Mensal (Out-)</option>
+                    <option value="109">109 - Rescisao</option>
+                    <option value="4">4 - Adiantamento</option>
+                </select>
+                <p class="info-text">O codigo pode variar entre meses (356 ou 362)</p>
+            </div>
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label for="codccu">Centro de Custo</label>
+                <select id="codccu" name="codccu">
+                    <option value="">Todos os centros de custo</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="sitafa">Situacao do Funcionario</label>
+                <select id="sitafa" name="sitafa">
+                    <option value="1" selected>1 - Trabalhando</option>
+                    <option value="7">7 - Demitido</option>
+                    <option value="3">3 - Auxilio Doenca</option>
+                    <option value="">Todas as situacoes</option>
+                </select>
+                <p class="info-text">Trabalhando e a situacao padrao para faturamento</p>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label>Formato de Exportacao</label>
+            <div class="format-options">
+                <label class="format-option selected">
+                    <input type="radio" name="format" value="detailed" checked>
+                    <div class="title">Detalhado</div>
+                    <div class="desc">Cada evento como linha separada (para auditoria)</div>
+                </label>
+                <label class="format-option">
+                    <input type="radio" name="format" value="aggregated">
+                    <div class="title">Agregado</div>
+                    <div class="desc">Somado por funcionario (resumido)</div>
+                </label>
+            </div>
+        </div>
+        
+        <button type="button" class="btn btn-outline" onclick="loadSummary()" style="width: 100%; margin-top: 1.5rem;">
+            Consultar Resumo
+        </button>
+        
+        <div class="loading-indicator" id="loading">
+            <div class="spinner"></div>
+            <p style="color: var(--gray-400);">Carregando dados...</p>
+        </div>
+        
+        <div class="summary-box" id="summary-box">
+            <h4>Resumo do Periodo</h4>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="label">Lancamentos</div>
+                    <div class="value" id="total-lancamentos">0</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">Funcionarios</div>
+                    <div class="value" id="total-funcionarios">0</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">Periodo</div>
+                    <div class="value" id="periodo-ref" style="font-size: 1rem;">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <button type="submit" class="btn-generate" id="btn-generate">
+            Gerar e Baixar Excel
+        </button>
+        
+        <!-- Seção Folha de Pagamento -->
+        <div class="section-divider">
+            <h3 class="section-title">Consultar Folha de Pagamento</h3>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="payroll-periodo">Periodo</label>
+                    <input type="date" id="payroll-periodo" name="payroll-periodo" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="payroll-codccu-filter">Centro de Custo</label>
+                    <input type="text" id="payroll-codccu-filter" placeholder="Digite para filtrar..." autocomplete="off">
+                    <select id="payroll-codccu" name="payroll-codccu" required size="6" style="margin-top: 0.5rem;">
+                        <option value="">Carregando centros de custo...</option>
+                    </select>
+                    <p class="info-text">Digite para filtrar e clique para selecionar</p>
+                </div>
+            </div>
+            
+            <div class="format-options" style="margin-top: 0;">
+                <button type="button" class="btn btn-outline" onclick="loadPayroll()" style="flex: 1;">
+                    Consultar Folha
+                </button>
+                <button type="button" class="btn-generate" onclick="downloadPayrollExcel()" style="flex: 1; margin-top: 0;">
+                    Baixar Excel
+                </button>
+            </div>
+            
+            <div class="loading-indicator" id="payroll-loading">
+                <div class="spinner"></div>
+                <p style="color: var(--gray-400);">Carregando folha de pagamento...</p>
+            </div>
+            
+            <div class="payroll-summary" id="payroll-summary">
+                <div class="payroll-summary-grid">
+                    <div class="payroll-summary-item">
+                        <div class="label">Funcionarios</div>
+                        <div class="value" id="payroll-total-func">0</div>
+                    </div>
+                    <div class="payroll-summary-item">
+                        <div class="label">Eventos</div>
+                        <div class="value" id="payroll-total-eventos">0</div>
+                    </div>
+                    <div class="payroll-summary-item">
+                        <div class="label">Centro de Custo</div>
+                        <div class="value" id="payroll-ccu" style="font-size: 0.9rem;">-</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="payroll-table-container" id="payroll-container">
+                <div id="payroll-cards"></div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const token = AUTH_TOKEN;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadCostCenters();
+    loadAllCostCenters();
+    setDefaultDate();
+    setupFormatOptions();
+});
+
+function setDefaultDate() {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const dateStr = firstDay.toISOString().split('T')[0];
+    document.getElementById('periodo').value = dateStr;
+    document.getElementById('payroll-periodo').value = dateStr;
+}
+
+async function loadCostCenters() {
+    try {
+        const response = await fetch('/integrations/senior/cost-centers');
+        const data = await response.json();
+        
+        if (data.status === 'ok' && data.data) {
+            const select = document.getElementById('codccu');
+            data.data.forEach(ccu => {
+                const option = document.createElement('option');
+                option.value = ccu.codccu;
+                option.textContent = `${ccu.codccu} - ${ccu.nomccu || 'Sem nome'}`;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Erro ao carregar centros de custo:', error);
+    }
+}
+
+function setupFormatOptions() {
+    document.querySelectorAll('.format-option').forEach(option => {
+        option.addEventListener('click', function() {
+            document.querySelectorAll('.format-option').forEach(o => o.classList.remove('selected'));
+            this.classList.add('selected');
+            this.querySelector('input').checked = true;
+        });
+    });
+}
+
+async function loadSummary() {
+    const periodo = document.getElementById('periodo').value;
+    if (!periodo) {
+        alert('Selecione o periodo');
+        return;
+    }
+    
+    const codccu = document.getElementById('codccu').value;
+    const codcal = document.getElementById('codcal').value;
+    const sitafa = document.getElementById('sitafa').value;
+    
+    document.getElementById('loading').classList.add('active');
+    document.getElementById('summary-box').classList.remove('active');
+    
+    try {
+        let url = `/integrations/senior/billing/summary?periodo=${periodo}`;
+        if (codccu) url += `&codccu=${encodeURIComponent(codccu)}`;
+        if (codcal) url += `&codcal=${codcal}`;
+        if (sitafa) url += `&sitafa=${sitafa}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.status === 'ok') {
+            document.getElementById('total-lancamentos').textContent = data.total_lancamentos.toLocaleString('pt-BR');
+            document.getElementById('total-funcionarios').textContent = data.total_funcionarios.toLocaleString('pt-BR');
+            document.getElementById('periodo-ref').textContent = periodo.substring(0, 7);
+            document.getElementById('summary-box').classList.add('active');
+        } else {
+            alert('Erro: ' + (data.message || 'Erro desconhecido'));
+        }
+    } catch (error) {
+        alert('Erro ao consultar: ' + error.message);
+    } finally {
+        document.getElementById('loading').classList.remove('active');
+    }
+}
+
+document.getElementById('billing-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const periodo = document.getElementById('periodo').value;
+    if (!periodo) {
+        alert('Selecione o periodo');
+        return;
+    }
+    
+    const codccu = document.getElementById('codccu').value;
+    const codcal = document.getElementById('codcal').value;
+    const sitafa = document.getElementById('sitafa').value;
+    const format = document.querySelector('input[name="format"]:checked').value;
+    
+    let url = `/integrations/senior/billing/export?periodo=${periodo}&format=${format}`;
+    if (codccu) url += `&codccu=${encodeURIComponent(codccu)}`;
+    if (codcal) url += `&codcal=${codcal}`;
+    if (sitafa) url += `&sitafa=${sitafa}`;
+    
+    window.location.href = url;
+});
+
+let allCostCenters = [];
+
+async function loadAllCostCenters() {
+    try {
+        const response = await fetch('/integrations/senior/cost-centers/all');
+        const data = await response.json();
+        
+        if (data.status === 'ok' && data.data) {
+            allCostCenters = data.data;
+            renderCostCenterOptions(allCostCenters);
+            setupCostCenterFilter();
+        }
+    } catch (error) {
+        console.error('Erro ao carregar centros de custo:', error);
+    }
+}
+
+function renderCostCenterOptions(centers) {
+    const select = document.getElementById('payroll-codccu');
+    select.innerHTML = '';
+    
+    if (centers.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Nenhum resultado encontrado';
+        select.appendChild(option);
+        return;
+    }
+    
+    centers.forEach(ccu => {
+        const option = document.createElement('option');
+        option.value = ccu.codccu;
+        option.textContent = `${ccu.codccu} - ${ccu.nomccu || 'Sem nome'}`;
+        select.appendChild(option);
+    });
+}
+
+function setupCostCenterFilter() {
+    const filterInput = document.getElementById('payroll-codccu-filter');
+    
+    filterInput.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        
+        if (!searchTerm) {
+            renderCostCenterOptions(allCostCenters);
+            return;
+        }
+        
+        const filtered = allCostCenters.filter(ccu => {
+            const code = String(ccu.codccu).toLowerCase();
+            const name = (ccu.nomccu || '').toLowerCase();
+            return code.includes(searchTerm) || name.includes(searchTerm);
+        });
+        
+        renderCostCenterOptions(filtered);
+    });
+}
+
+function downloadPayrollExcel() {
+    const periodo = document.getElementById('payroll-periodo').value;
+    const codccu = document.getElementById('payroll-codccu').value;
+    
+    if (!periodo) {
+        alert('Selecione o periodo');
+        return;
+    }
+    
+    if (!codccu) {
+        alert('Selecione um centro de custo');
+        return;
+    }
+    
+    const url = `/integrations/senior/payroll/export?periodo=${periodo}&codccu=${encodeURIComponent(codccu)}`;
+    window.location.href = url;
+}
+
+async function loadPayroll() {
+    const periodo = document.getElementById('payroll-periodo').value;
+    const codccu = document.getElementById('payroll-codccu').value;
+    
+    if (!periodo) {
+        alert('Selecione o periodo');
+        return;
+    }
+    
+    if (!codccu) {
+        alert('Selecione um centro de custo');
+        return;
+    }
+    
+    document.getElementById('payroll-loading').classList.add('active');
+    document.getElementById('payroll-summary').classList.remove('active');
+    document.getElementById('payroll-container').classList.remove('active');
+    
+    try {
+        const url = `/integrations/senior/payroll?periodo=${periodo}&codccu=${encodeURIComponent(codccu)}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.status === 'ok') {
+            document.getElementById('payroll-total-func').textContent = data.total_funcionarios.toLocaleString('pt-BR');
+            document.getElementById('payroll-total-eventos').textContent = data.total_eventos.toLocaleString('pt-BR');
+            document.getElementById('payroll-ccu').textContent = codccu;
+            document.getElementById('payroll-summary').classList.add('active');
+            
+            renderPayrollCards(data.data);
+            document.getElementById('payroll-container').classList.add('active');
+        } else {
+            alert('Erro: ' + (data.message || 'Erro desconhecido'));
+        }
+    } catch (error) {
+        alert('Erro ao consultar: ' + error.message);
+    } finally {
+        document.getElementById('payroll-loading').classList.remove('active');
+    }
+}
+
+function renderPayrollCards(employees) {
+    const container = document.getElementById('payroll-cards');
+    container.innerHTML = '';
+    
+    if (!employees || employees.length === 0) {
+        container.innerHTML = '<p style="color: var(--gray-400); text-align: center;">Nenhum funcionario encontrado</p>';
+        return;
+    }
+    
+    employees.forEach(emp => {
+        const card = document.createElement('div');
+        card.className = 'employee-card';
+        
+        const salarioFormatado = emp.salario ? emp.salario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-';
+        
+        let eventsHtml = '';
+        if (emp.eventos && emp.eventos.length > 0) {
+            eventsHtml = emp.eventos.map(ev => {
+                const valorFormatado = ev.valor_evento ? ev.valor_evento.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00';
+                const refFormatado = ev.referencia_evento ? ev.referencia_evento.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
+                return `
+                    <div class="event-item">
+                        <span class="event-desc" title="${ev.descricao_evento || ''}">${ev.descricao_evento || ev.codigo_evento}</span>
+                        <span class="event-val">${refFormatado ? refFormatado + ' | ' : ''}R$ ${valorFormatado}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        card.innerHTML = `
+            <div class="employee-header">
+                <div class="employee-info">
+                    <div class="employee-matricula">Mat: ${emp.matricula}</div>
+                    <div class="employee-nome">${emp.nome_funcionario || '-'}</div>
+                    <div class="employee-cargo">${emp.cargo || '-'}</div>
+                </div>
+                <div class="employee-salario">
+                    <div class="label">Salario</div>
+                    <div class="value">${salarioFormatado}</div>
+                </div>
+            </div>
+            <div class="events-grid">
+                ${eventsHtml}
+            </div>
+        `;
+        
+        container.appendChild(card);
+    });
+}
+{% endblock %}

@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload de Dados - Sistema de Gestão</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        
+        .navbar {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .navbar h1 {
+            font-size: 1.5rem;
+            color: #4facfe;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+        
+        .nav-links a {
+            color: #fff;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        
+        .page-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .page-header h2 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .page-header p {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .upload-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .upload-card h3 {
+            color: #4facfe;
+            margin-bottom: 1.5rem;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
+        }
+        
+        .form-group select,
+        .form-group input[type="month"] {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 1rem;
+        }
+        
+        .form-group select:focus,
+        .form-group input[type="month"]:focus {
+            outline: none;
+            border-color: #4facfe;
+        }
+        
+        .form-group select option {
+            background: #1a1a2e;
+            color: #fff;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .file-input-wrapper:hover {
+            border-color: #4facfe;
+            background: rgba(79, 172, 254, 0.1);
+        }
+        
+        .file-input-wrapper.dragover {
+            border-color: #00f2fe;
+            background: rgba(0, 242, 254, 0.1);
+        }
+        
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        .file-input-wrapper .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .file-input-wrapper .text {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .file-input-wrapper .selected-file {
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            background: rgba(79, 172, 254, 0.2);
+            border-radius: 8px;
+            color: #4facfe;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: #fff;
+            border: none;
+            padding: 0.875rem 2rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(79, 172, 254, 0.4);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .result-box {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .result-box.success {
+            background: rgba(46, 213, 115, 0.2);
+            border: 1px solid rgba(46, 213, 115, 0.5);
+            display: block;
+        }
+        
+        .result-box.error {
+            background: rgba(255, 71, 87, 0.2);
+            border: 1px solid rgba(255, 71, 87, 0.5);
+            display: block;
+        }
+        
+        .result-summary {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .result-summary .stat {
+            text-align: center;
+        }
+        
+        .result-summary .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4facfe;
+        }
+        
+        .result-summary .stat-label {
+            font-size: 0.875rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .error-list {
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 0.875rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .error-list li {
+            margin-bottom: 0.25rem;
+            padding-left: 1rem;
+        }
+        
+        .columns-mapped {
+            margin-top: 1rem;
+            font-size: 0.875rem;
+        }
+        
+        .columns-mapped h4 {
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 0.5rem;
+        }
+        
+        .columns-mapped ul {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .columns-mapped li {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
+        }
+        
+        .tab-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        .tab-btn.active {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            border-color: transparent;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .info-box {
+            background: rgba(79, 172, 254, 0.1);
+            border: 1px solid rgba(79, 172, 254, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .info-box h4 {
+            color: #4facfe;
+            margin-bottom: 0.5rem;
+        }
+        
+        .info-box ul {
+            margin-left: 1.5rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .info-box li {
+            margin-bottom: 0.25rem;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 1rem;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+        
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid #4facfe;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>Sistema de Gestão</h1>
+        <div class="nav-links">
+            <a href="/dashboard?token={{ token }}">Dashboard</a>
+            <a href="/customers?token={{ token }}">Clientes</a>
+            <a href="/data-upload?token={{ token }}" class="active">Upload de Dados</a>
+            <a href="/reports?token={{ token }}">Relatórios</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <div class="page-header">
+            <h2>Upload de Dados Brutos</h2>
+            <p>Importe dados de funcionários, benefícios, ponto e exames via Excel ou CSV</p>
+        </div>
+        
+        <div class="upload-card">
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="employees">Funcionários</button>
+                <button class="tab-btn" data-tab="benefits">Benefícios</button>
+                <button class="tab-btn" data-tab="time">Ponto</button>
+                <button class="tab-btn" data-tab="exams">Exames</button>
+            </div>
+            
+            <!-- Tab: Funcionários -->
+            <div id="tab-employees" class="tab-content active">
+                <div class="info-box">
+                    <h4>Colunas esperadas para Funcionários:</h4>
+                    <ul>
+                        <li><strong>CPF</strong> (obrigatório) - cpf, CPF, documento</li>
+                        <li><strong>Nome</strong> (obrigatório) - nome, NOME, funcionario</li>
+                        <li>Matrícula - matricula, MATRICULA, mat</li>
+                        <li>Centro de Custo - centro_custo, CENTRO_CUSTO, cc</li>
+                        <li>Cargo - cargo, CARGO, funcao</li>
+                        <li>Departamento - departamento, DEPARTAMENTO, setor</li>
+                        <li>Data Admissão - data_admissao, admissao</li>
+                        <li>Email, Telefone, Endereço, Cidade, Estado, CEP</li>
+                    </ul>
+                </div>
+                
+                <form id="form-employees" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="customer-employees">Cliente</label>
+                        <select id="customer-employees" name="customer_id" required>
+                            <option value="">Selecione o cliente...</option>
+                            {% for customer in customers %}
+                            <option value="{{ customer.id }}">{{ customer.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Arquivo (Excel ou CSV)</label>
+                        <div class="file-input-wrapper" id="file-wrapper-employees">
+                            <input type="file" id="file-employees" name="file" accept=".xlsx,.xls,.csv" required>
+                            <div class="icon">📄</div>
+                            <div class="text">Arraste um arquivo ou clique para selecionar</div>
+                            <div class="selected-file" id="selected-employees" style="display: none;"></div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn">Importar Funcionários</button>
+                    
+                    <div class="loading" id="loading-employees">
+                        <div class="spinner"></div>
+                        <p>Processando arquivo...</p>
+                    </div>
+                    
+                    <div class="result-box" id="result-employees"></div>
+                </form>
+            </div>
+            
+            <!-- Tab: Benefícios -->
+            <div id="tab-benefits" class="tab-content">
+                <div class="info-box">
+                    <h4>Colunas esperadas para Benefícios:</h4>
+                    <ul>
+                        <li><strong>CPF ou Matrícula</strong> (obrigatório) - para identificar o funcionário</li>
+                        <li><strong>Tipo Benefício</strong> (obrigatório) - tipo_beneficio, beneficio, tipo</li>
+                        <li>Valor - valor, VALOR</li>
+                        <li>Quantidade - quantidade, qtd</li>
+                        <li>Valor Total - valor_total, total</li>
+                        <li>Descrição - descricao</li>
+                        <li>Observações - observacoes, obs</li>
+                    </ul>
+                    <p style="margin-top: 0.5rem; color: #ff9f43;"><strong>Nota:</strong> Os funcionários devem estar cadastrados previamente.</p>
+                </div>
+                
+                <form id="form-benefits" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="customer-benefits">Cliente</label>
+                        <select id="customer-benefits" name="customer_id" required>
+                            <option value="">Selecione o cliente...</option>
+                            {% for customer in customers %}
+                            <option value="{{ customer.id }}">{{ customer.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="mes-benefits">Mês de Referência</label>
+                        <input type="month" id="mes-benefits" name="mes_referencia" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Arquivo (Excel ou CSV)</label>
+                        <div class="file-input-wrapper" id="file-wrapper-benefits">
+                            <input type="file" id="file-benefits" name="file" accept=".xlsx,.xls,.csv" required>
+                            <div class="icon">📄</div>
+                            <div class="text">Arraste um arquivo ou clique para selecionar</div>
+                            <div class="selected-file" id="selected-benefits" style="display: none;"></div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn">Importar Benefícios</button>
+                    
+                    <div class="loading" id="loading-benefits">
+                        <div class="spinner"></div>
+                        <p>Processando arquivo...</p>
+                    </div>
+                    
+                    <div class="result-box" id="result-benefits"></div>
+                </form>
+            </div>
+            
+            <!-- Tab: Ponto -->
+            <div id="tab-time" class="tab-content">
+                <div class="info-box">
+                    <h4>Colunas esperadas para Ponto:</h4>
+                    <ul>
+                        <li><strong>CPF ou Matrícula</strong> (obrigatório) - para identificar o funcionário</li>
+                        <li>Data - data, DATA</li>
+                        <li>Horas Trabalhadas - horas_trabalhadas, horas</li>
+                        <li>Horas Extras - horas_extras, he</li>
+                        <li>Horas Noturnas - horas_noturnas, hn</li>
+                        <li>Faltas - faltas</li>
+                        <li>Atrasos - atrasos</li>
+                        <li>DSR - dsr</li>
+                        <li>Banco de Horas - banco_horas, bh</li>
+                    </ul>
+                    <p style="margin-top: 0.5rem; color: #ff9f43;"><strong>Nota:</strong> Os funcionários devem estar cadastrados previamente.</p>
+                </div>
+                
+                <form id="form-time" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="customer-time">Cliente</label>
+                        <select id="customer-time" name="customer_id" required>
+                            <option value="">Selecione o cliente...</option>
+                            {% for customer in customers %}
+                            <option value="{{ customer.id }}">{{ customer.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="mes-time">Mês de Referência</label>
+                        <input type="month" id="mes-time" name="mes_referencia" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Arquivo (Excel ou CSV)</label>
+                        <div class="file-input-wrapper" id="file-wrapper-time">
+                            <input type="file" id="file-time" name="file" accept=".xlsx,.xls,.csv" required>
+                            <div class="icon">📄</div>
+                            <div class="text">Arraste um arquivo ou clique para selecionar</div>
+                            <div class="selected-file" id="selected-time" style="display: none;"></div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn">Importar Ponto</button>
+                    
+                    <div class="loading" id="loading-time">
+                        <div class="spinner"></div>
+                        <p>Processando arquivo...</p>
+                    </div>
+                    
+                    <div class="result-box" id="result-time"></div>
+                </form>
+            </div>
+            
+            <!-- Tab: Exames -->
+            <div id="tab-exams" class="tab-content">
+                <div class="info-box">
+                    <h4>Colunas esperadas para Exames:</h4>
+                    <ul>
+                        <li><strong>CPF ou Matrícula</strong> (obrigatório) - para identificar o funcionário</li>
+                        <li><strong>Tipo Exame</strong> (obrigatório) - tipo_exame, exame</li>
+                        <li><strong>Data Exame</strong> (obrigatório) - data_exame, data</li>
+                        <li>Data Validade - data_validade, validade</li>
+                        <li>Status - status, situacao</li>
+                        <li>Resultado - resultado</li>
+                        <li>Clínica - clinica, prestador</li>
+                        <li>Médico - medico</li>
+                        <li>CRM - crm</li>
+                    </ul>
+                    <p style="margin-top: 0.5rem; color: #ff9f43;"><strong>Nota:</strong> Os funcionários devem estar cadastrados previamente.</p>
+                </div>
+                
+                <form id="form-exams" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="customer-exams">Cliente</label>
+                        <select id="customer-exams" name="customer_id" required>
+                            <option value="">Selecione o cliente...</option>
+                            {% for customer in customers %}
+                            <option value="{{ customer.id }}">{{ customer.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Arquivo (Excel ou CSV)</label>
+                        <div class="file-input-wrapper" id="file-wrapper-exams">
+                            <input type="file" id="file-exams" name="file" accept=".xlsx,.xls,.csv" required>
+                            <div class="icon">📄</div>
+                            <div class="text">Arraste um arquivo ou clique para selecionar</div>
+                            <div class="selected-file" id="selected-exams" style="display: none;"></div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn">Importar Exames</button>
+                    
+                    <div class="loading" id="loading-exams">
+                        <div class="spinner"></div>
+                        <p>Processando arquivo...</p>
+                    </div>
+                    
+                    <div class="result-box" id="result-exams"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const TOKEN = '{{ token }}';
+        
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                this.classList.add('active');
+                document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+            });
+        });
+        
+        function setupFileInput(type) {
+            const fileInput = document.getElementById('file-' + type);
+            const wrapper = document.getElementById('file-wrapper-' + type);
+            const selectedDiv = document.getElementById('selected-' + type);
+            
+            fileInput.addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    selectedDiv.textContent = this.files[0].name;
+                    selectedDiv.style.display = 'block';
+                } else {
+                    selectedDiv.style.display = 'none';
+                }
+            });
+            
+            wrapper.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('dragover');
+            });
+            
+            wrapper.addEventListener('dragleave', function() {
+                this.classList.remove('dragover');
+            });
+            
+            wrapper.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+                fileInput.files = e.dataTransfer.files;
+                if (e.dataTransfer.files.length > 0) {
+                    selectedDiv.textContent = e.dataTransfer.files[0].name;
+                    selectedDiv.style.display = 'block';
+                }
+            });
+        }
+        
+        ['employees', 'benefits', 'time', 'exams'].forEach(setupFileInput);
+        
+        function showResult(type, data, isError = false) {
+            const resultBox = document.getElementById('result-' + type);
+            resultBox.className = 'result-box ' + (isError ? 'error' : 'success');
+            
+            if (isError) {
+                resultBox.innerHTML = '<p><strong>Erro:</strong> ' + data + '</p>';
+            } else {
+                let html = '<div class="result-summary">';
+                html += '<div class="stat"><div class="stat-value">' + data.data.total_rows + '</div><div class="stat-label">Total de linhas</div></div>';
+                
+                if (data.data.inserted !== undefined) {
+                    html += '<div class="stat"><div class="stat-value">' + data.data.inserted + '</div><div class="stat-label">Inseridos</div></div>';
+                }
+                if (data.data.updated !== undefined) {
+                    html += '<div class="stat"><div class="stat-value">' + data.data.updated + '</div><div class="stat-label">Atualizados</div></div>';
+                }
+                if (data.data.skipped !== undefined) {
+                    html += '<div class="stat"><div class="stat-value">' + data.data.skipped + '</div><div class="stat-label">Ignorados</div></div>';
+                }
+                html += '</div>';
+                
+                if (data.data.columns_mapped && Object.keys(data.data.columns_mapped).length > 0) {
+                    html += '<div class="columns-mapped"><h4>Colunas mapeadas:</h4><ul>';
+                    for (const [field, col] of Object.entries(data.data.columns_mapped)) {
+                        html += '<li>' + field + ' → ' + col + '</li>';
+                    }
+                    html += '</ul></div>';
+                }
+                
+                if (data.data.errors && data.data.errors.length > 0) {
+                    html += '<div style="margin-top: 1rem;"><h4 style="color: #ff9f43;">Avisos (' + data.data.errors.length + '):</h4>';
+                    html += '<ul class="error-list">';
+                    data.data.errors.slice(0, 20).forEach(err => {
+                        html += '<li>' + err + '</li>';
+                    });
+                    if (data.data.errors.length > 20) {
+                        html += '<li>... e mais ' + (data.data.errors.length - 20) + ' avisos</li>';
+                    }
+                    html += '</ul></div>';
+                }
+                
+                resultBox.innerHTML = html;
+            }
+        }
+        
+        document.getElementById('form-employees').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const loading = document.getElementById('loading-employees');
+            const resultBox = document.getElementById('result-employees');
+            resultBox.className = 'result-box';
+            loading.classList.add('active');
+            
+            const formData = new FormData(this);
+            formData.append('token', TOKEN);
+            
+            try {
+                const response = await fetch('/api/data-upload/employees', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                loading.classList.remove('active');
+                
+                if (response.ok) {
+                    showResult('employees', data);
+                } else {
+                    showResult('employees', data.detail || 'Erro desconhecido', true);
+                }
+            } catch (err) {
+                loading.classList.remove('active');
+                showResult('employees', err.message, true);
+            }
+        });
+        
+        document.getElementById('form-benefits').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const loading = document.getElementById('loading-benefits');
+            const resultBox = document.getElementById('result-benefits');
+            resultBox.className = 'result-box';
+            loading.classList.add('active');
+            
+            const formData = new FormData(this);
+            formData.append('token', TOKEN);
+            
+            try {
+                const response = await fetch('/api/data-upload/benefits', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                loading.classList.remove('active');
+                
+                if (response.ok) {
+                    showResult('benefits', data);
+                } else {
+                    showResult('benefits', data.detail || 'Erro desconhecido', true);
+                }
+            } catch (err) {
+                loading.classList.remove('active');
+                showResult('benefits', err.message, true);
+            }
+        });
+        
+        document.getElementById('form-time').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const loading = document.getElementById('loading-time');
+            const resultBox = document.getElementById('result-time');
+            resultBox.className = 'result-box';
+            loading.classList.add('active');
+            
+            const formData = new FormData(this);
+            formData.append('token', TOKEN);
+            
+            try {
+                const response = await fetch('/api/data-upload/time-records', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                loading.classList.remove('active');
+                
+                if (response.ok) {
+                    showResult('time', data);
+                } else {
+                    showResult('time', data.detail || 'Erro desconhecido', true);
+                }
+            } catch (err) {
+                loading.classList.remove('active');
+                showResult('time', err.message, true);
+            }
+        });
+        
+        document.getElementById('form-exams').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const loading = document.getElementById('loading-exams');
+            const resultBox = document.getElementById('result-exams');
+            resultBox.className = 'result-box';
+            loading.classList.add('active');
+            
+            const formData = new FormData(this);
+            formData.append('token', TOKEN);
+            
+            try {
+                const response = await fetch('/api/data-upload/exams', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                loading.classList.remove('active');
+                
+                if (response.ok) {
+                    showResult('exams', data);
+                } else {
+                    showResult('exams', data.detail || 'Erro desconhecido', true);
+                }
+            } catch (err) {
+                loading.classList.remove('active');
+                showResult('exams', err.message, true);
+            }
+        });
+    </script>
+</body>
+</html>

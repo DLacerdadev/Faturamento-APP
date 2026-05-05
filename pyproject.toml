@@ -1,0 +1,24 @@
+[project]
+name = "faturamento-app"
+version = "0.1.0"
+description = "Sistema de faturamento RH – integração Senior ERP"
+requires-python = ">=3.11"
+dependencies = [
+    "aiofiles>=25.1.0",
+    "fastapi>=0.135.1",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.6",
+    "lxml>=6.0.2",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.1",
+    "passlib>=1.7.4",
+    "psycopg2-binary>=2.9.11",
+    "pydantic>=2.12.5",
+    "pyodbc>=5.3.0",
+    "python-dotenv>=1.2.2",
+    "python-multipart>=0.0.22",
+    "requests>=2.32.5",
+    "sqlalchemy>=2.0.48",
+    "starlette>=0.50.0",
+    "uvicorn>=0.42.0",
+]

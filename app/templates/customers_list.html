@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Clientes - Telos Consultoria{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Clientes</h1>
+    <a href="/customers/new?token={{ token }}" class="btn">Novo Cliente</a>
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Descricao</th>
+                <th>Criado em</th>
+                <th>Acoes</th>
+            </tr>
+        </thead>
+        <tbody id="customers-table">
+            {% for customer in customers %}
+            <tr>
+                <td>{{ customer.id }}</td>
+                <td style="color: var(--gray-100);">{{ customer.name }}</td>
+                <td>{{ customer.description or '-' }}</td>
+                <td>{{ customer.created_at[:10] if customer.created_at else '-' }}</td>
+                <td>
+                    <a href="/customers/{{ customer.id }}?token={{ token }}" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.75rem;">Ver</a>
+                    <button onclick="deleteCustomer({{ customer.id }})" class="btn btn-danger" style="padding: 0.5rem 1rem; font-size: 0.75rem;">Excluir</button>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" style="text-align: center; color: var(--gray-500);">Nenhum cliente cadastrado</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+async function deleteCustomer(id) {
+    if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+    
+    try {
+        const response = await fetch('/api/customers/' + id, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': 'Bearer ' + AUTH_TOKEN
+            }
+        });
+        
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            alert('Erro ao excluir cliente');
+        }
+    } catch (e) {
+        alert('Erro ao excluir cliente');
+    }
+}
+{% endblock %}

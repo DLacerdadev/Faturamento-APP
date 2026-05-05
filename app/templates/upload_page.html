@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Upload de Dados - Sistema de Gestão{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 2rem; color: #2c3e50;">Upload de Dados</h2>
+
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Importar Clientes</h3>
+    <p style="margin-bottom: 1.5rem; color: #666;">
+        Envie um arquivo Excel (.xlsx, .xls), CSV (.csv) ou JSON (.json) contendo os dados dos clientes.
+    </p>
+    
+    <form id="uploadForm" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="fileInput">Selecione o arquivo:</label>
+            <input type="file" id="fileInput" name="file" accept=".xlsx,.xls,.csv,.json" required>
+        </div>
+        
+        <button type="submit" class="btn btn-success">Enviar Arquivo</button>
+    </form>
+    
+    <div id="uploadResult" style="margin-top: 1.5rem; display: none;"></div>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 1rem; color: #2c3e50;">Formatos Suportados</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+        <div style="padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <h4 style="color: #2c3e50; margin-bottom: 0.5rem;">Excel (.xlsx, .xls)</h4>
+            <p style="color: #666; font-size: 0.875rem;">Arquivos do Microsoft Excel com planilhas de clientes.</p>
+        </div>
+        <div style="padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <h4 style="color: #2c3e50; margin-bottom: 0.5rem;">CSV (.csv)</h4>
+            <p style="color: #666; font-size: 0.875rem;">Arquivos de texto com valores separados por vírgula.</p>
+        </div>
+        <div style="padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <h4 style="color: #2c3e50; margin-bottom: 0.5rem;">JSON (.json)</h4>
+            <p style="color: #666; font-size: 0.875rem;">Arquivos JSON com array de objetos de clientes.</p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 1rem; color: #2c3e50;">Campos Reconhecidos</h3>
+    <p style="margin-bottom: 1rem; color: #666;">
+        O sistema reconhece automaticamente os seguintes campos (com suas variações):
+    </p>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div>
+            <strong>Nome:</strong> name, customer_name, full_name, client_name
+        </div>
+        <div>
+            <strong>Email:</strong> email, customer_email, email_address
+        </div>
+        <div>
+            <strong>Telefone:</strong> phone, phone_number, telephone
+        </div>
+        <div>
+            <strong>Empresa:</strong> company, company_name, organization
+        </div>
+        <div>
+            <strong>Endereço:</strong> address, street_address
+        </div>
+        <div>
+            <strong>Cidade:</strong> city
+        </div>
+        <div>
+            <strong>Estado:</strong> state
+        </div>
+        <div>
+            <strong>País:</strong> country
+        </div>
+        <div>
+            <strong>CEP:</strong> postal_code, zip_code, zip, postcode
+        </div>
+        <div>
+            <strong>Tipo:</strong> customer_type, type, category
+        </div>
+        <div>
+            <strong>Receita:</strong> total_revenue, revenue, total_sales
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const fileInput = document.getElementById('fileInput');
+        const resultDiv = document.getElementById('uploadResult');
+        
+        if (!fileInput.files.length) {
+            alert('Por favor, selecione um arquivo.');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        
+        resultDiv.innerHTML = '<div class="alert" style="background: #e3f2fd; color: #0277bd; border: 1px solid #90caf9;">Processando arquivo...</div>';
+        resultDiv.style.display = 'block';
+        
+        try {
+            const response = await fetch('/api/uploads/customers', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                let message = `<strong>Upload concluído com sucesso!</strong><br>`;
+                message += `Clientes criados: ${result.created}<br>`;
+                message += `Clientes atualizados: ${result.updated}<br>`;
+                message += `Total processado: ${result.total_processed}`;
+                
+                if (result.errors && result.errors.length > 0) {
+                    message += `<br><br><strong>Erros (${result.errors.length}):</strong><br>`;
+                    message += result.errors.slice(0, 5).map(e => `- ${e.error}`).join('<br>');
+                }
+                
+                resultDiv.innerHTML = `<div class="alert alert-success">${message}</div>`;
+                fileInput.value = '';
+                
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 3000);
+            } else {
+                resultDiv.innerHTML = `<div class="alert alert-error"><strong>Erro:</strong> ${result.detail || 'Erro ao processar arquivo'}</div>`;
+            }
+        } catch (error) {
+            console.error('Erro:', error);
+            resultDiv.innerHTML = `<div class="alert alert-error"><strong>Erro:</strong> Falha ao enviar arquivo</div>`;
+        }
+    });
+</script>
+{% endblock %}

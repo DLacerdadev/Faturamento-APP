@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documento Institucional - Telos Consultoria</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+            .page-break { page-break-before: always; }
+        }
+
+        :root {
+            --gold: #D4A84B;
+            --gold-light: #E5BE6A;
+            --gold-dark: #B8923F;
+            --dark: #1A1A1A;
+            --gray-100: #F5F5F5;
+            --gray-200: #E8E8E8;
+            --gray-300: #D4D4D4;
+            --gray-600: #6B6B6B;
+            --gray-800: #3D3D3D;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            color: var(--dark);
+            background: #fff;
+            line-height: 1.8;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .header {
+            background: var(--dark);
+            padding: 3.5rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                linear-gradient(90deg, rgba(212,168,75,0.05) 1px, transparent 1px),
+                linear-gradient(rgba(212,168,75,0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .header .container {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-left { display: flex; align-items: center; gap: 1.5rem; }
+        .header img { height: 60px; }
+        .header h1 {
+            color: var(--gold);
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .header p {
+            color: var(--gray-300);
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+        .header-badge {
+            background: var(--gold);
+            color: var(--dark);
+            padding: 0.5rem 1.5rem;
+            font-weight: 700;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .cover {
+            background: linear-gradient(135deg, var(--dark) 0%, #2a2a2a 100%);
+            padding: 5rem 0;
+            text-align: center;
+            position: relative;
+        }
+
+        .cover::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 3px;
+            background: var(--gold);
+        }
+
+        .cover h2 {
+            color: #fff;
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 0.75rem;
+        }
+
+        .cover h3 {
+            color: var(--gold);
+            font-size: 1.1rem;
+            font-weight: 500;
+            letter-spacing: 1.5px;
+            margin-bottom: 2rem;
+        }
+
+        .cover .subtitle {
+            color: var(--gray-300);
+            font-size: 0.9rem;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.7;
+        }
+
+        .section { padding: 3rem 0; }
+        .section + .section { border-top: 1px solid var(--gray-200); }
+
+        .section-number {
+            color: var(--gold);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 2px;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .section-title {
+            color: var(--gold-dark);
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 0.75rem;
+        }
+
+        .section h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--dark);
+            margin-bottom: 1.25rem;
+            line-height: 1.3;
+        }
+
+        .section p {
+            color: var(--gray-800);
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+        }
+
+        .highlight-box {
+            background: var(--gray-100);
+            border-left: 4px solid var(--gold);
+            padding: 1.5rem 2rem;
+            margin: 1.5rem 0;
+        }
+
+        .highlight-box p {
+            color: var(--gray-800);
+            font-size: 0.9rem;
+            margin-bottom: 0;
+        }
+
+        .highlight-box strong {
+            color: var(--dark);
+        }
+
+        .pillars {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .pillar {
+            background: var(--gray-100);
+            padding: 1.5rem;
+            position: relative;
+        }
+
+        .pillar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--gold);
+        }
+
+        .pillar h4 {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--dark);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.75rem;
+        }
+
+        .pillar p {
+            font-size: 0.85rem;
+            color: var(--gray-600);
+            margin-bottom: 0;
+            line-height: 1.6;
+        }
+
+        .ecosystem-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .eco-item {
+            background: var(--dark);
+            color: #fff;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .eco-item h4 {
+            color: var(--gold);
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .eco-item p {
+            color: var(--gray-300);
+            font-size: 0.8rem;
+            line-height: 1.5;
+            margin-bottom: 0;
+        }
+
+        .benefits-list {
+            list-style: none;
+            margin: 1.5rem 0;
+        }
+
+        .benefits-list li {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            font-size: 0.95rem;
+            color: var(--gray-800);
+        }
+
+        .benefits-list li:last-child { border-bottom: none; }
+
+        .benefit-marker {
+            width: 8px;
+            height: 8px;
+            background: var(--gold);
+            flex-shrink: 0;
+            margin-top: 0.5rem;
+        }
+
+        .closing {
+            background: var(--dark);
+            padding: 4rem 0;
+            text-align: center;
+        }
+
+        .closing h3 {
+            color: var(--gold);
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 1.5rem;
+        }
+
+        .closing p {
+            color: var(--gray-300);
+            font-size: 0.95rem;
+            max-width: 700px;
+            margin: 0 auto 1rem;
+            line-height: 1.8;
+        }
+
+        .closing-line {
+            width: 80px;
+            height: 3px;
+            background: var(--gold);
+            margin: 2rem auto 0;
+        }
+
+        .footer {
+            background: var(--dark);
+            border-top: 1px solid rgba(212,168,75,0.2);
+            padding: 1.5rem 0;
+            text-align: center;
+        }
+
+        .footer p {
+            color: var(--gray-600);
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+        }
+
+        .print-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--gold);
+            color: var(--dark);
+            border: none;
+            padding: 0.75rem 1.5rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .print-btn:hover { background: var(--gold-light); }
+
+        .confidential {
+            text-align: center;
+            padding: 1rem 0;
+            background: var(--dark);
+        }
+
+        .confidential span {
+            color: var(--gold);
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            border: 1px solid var(--gold);
+            padding: 0.3rem 1rem;
+        }
+    </style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">Imprimir / PDF</button>
+
+<div class="header">
+    <div class="container">
+        <div class="header-left">
+            <img src="/static/logo-telos.webp" alt="Telos Consultoria" onerror="this.style.display='none'">
+            <div>
+                <h1>Telos Consultoria</h1>
+                <p>Documento Institucional</p>
+            </div>
+        </div>
+        <div class="header-badge">Confidencial</div>
+    </div>
+</div>
+
+<div class="cover">
+    <div class="container">
+        <h2>Sistema de Gestao Telos</h2>
+        <h3>Plataforma Operacional Integrada</h3>
+        <p class="subtitle">Documento executivo sobre o papel estrategico do Sistema de Gestao Telos no ecossistema tecnologico da TELOS Consultoria, sua capacidade operacional e os beneficios diretos para parceiros corporativos.</p>
+    </div>
+</div>
+
+<div class="confidential">
+    <span>Documento Confidencial - Uso Restrito</span>
+</div>
+
+<!-- SECAO 1 -->
+<div class="section">
+    <div class="container">
+        <span class="section-number">01</span>
+        <div class="section-title">Visao e Proposito</div>
+        <h3>Por que o Sistema de Gestao Telos existe</h3>
+
+        <p>Operacoes de mao de obra temporaria em grande escala envolvem um volume elevado de informacoes criticas: dados de colaboradores, folha de pagamento, controle de beneficios, exames ocupacionais, faturamento por centro de custo, conformidade regulatoria e prestacao de contas a clientes corporativos com altissimo nivel de exigencia.</p>
+
+        <p>Quando essas informacoes sao geridas de forma fragmentada — em planilhas isoladas, processos manuais ou sistemas genericos — os riscos operacionais se multiplicam: inconsistencias em dados, atrasos em faturamento, falhas em auditorias e perda de visibilidade sobre a operacao.</p>
+
+        <p>O Sistema de Gestao Telos foi desenvolvido para eliminar essas vulnerabilidades. Ele centraliza, organiza e automatiza os fluxos operacionais que sustentam a prestacao de servicos da TELOS, garantindo que cada informacao esteja correta, rastreavel e disponivel no momento em que e necessaria.</p>
+
+        <div class="highlight-box">
+            <p><strong>O proposito e claro:</strong> oferecer controle absoluto sobre a operacao, com previsibilidade, padronizacao e capacidade de escala, independentemente do volume de colaboradores geridos ou da complexidade da estrutura do cliente.</p>
+        </div>
+    </div>
+</div>
+
+<!-- SECAO 2 -->
+<div class="section page-break">
+    <div class="container">
+        <span class="section-number">02</span>
+        <div class="section-title">Papel Estrategico na Operacao</div>
+        <h3>Como o sistema sustenta a operacao da TELOS</h3>
+
+        <p>O Sistema de Gestao Telos nao e uma ferramenta auxiliar. Ele e o nucleo operacional que conecta todos os processos criticos da empresa, desde a admissao de um colaborador ate o faturamento final ao cliente.</p>
+
+        <p>Na pratica, o sistema atua em tres frentes simultaneas:</p>
+
+        <div class="pillars">
+            <div class="pillar">
+                <h4>Automacao de Processos</h4>
+                <p>Ingestao automatica de dados de folha de pagamento, beneficios, exames medicos e eventos trabalhistas. Processos que antes exigiam horas de trabalho manual agora sao executados em minutos, com validacao integrada.</p>
+            </div>
+            <div class="pillar">
+                <h4>Organizacao Estruturada</h4>
+                <p>Cada informacao possui um local definido, um formato padronizado e um historico rastreavel. Centros de custo, periodos de competencia e eventos de folha seguem uma estrutura rigida que impede inconsistencias.</p>
+            </div>
+            <div class="pillar">
+                <h4>Reducao de Riscos</h4>
+                <p>A eliminacao de processos manuais reduz drasticamente a possibilidade de erros humanos em calculos de faturamento, classificacao de eventos trabalhistas e geracao de relatorios para clientes.</p>
+            </div>
+            <div class="pillar">
+                <h4>Velocidade Operacional</h4>
+                <p>Exportacoes de faturamento, relatorios por centro de custo e consultas a dados de folha sao gerados sob demanda, sem intermediarios, permitindo respostas rapidas a demandas do cliente.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SECAO 3 -->
+<div class="section">
+    <div class="container">
+        <span class="section-number">03</span>
+        <div class="section-title">Governanca, Controle e Rastreabilidade</div>
+        <h3>Visibilidade total sobre cada etapa da operacao</h3>
+
+        <p>Em operacoes de grande escala, a capacidade de rastrear cada dado, cada decisao e cada movimentacao e o que separa uma gestao confiavel de uma gestao vulneravel. O Sistema de Gestao Telos foi construido com governanca como premissa, nao como funcionalidade adicional.</p>
+
+        <div class="pillars">
+            <div class="pillar">
+                <h4>Padronizacao de Dados</h4>
+                <p>Todos os dados que entram no sistema passam por validacao e normalizacao, garantindo consistencia independente da fonte de origem — seja uma planilha do cliente, um sistema ERP externo ou uma base de dados legada.</p>
+            </div>
+            <div class="pillar">
+                <h4>Rastreabilidade Completa</h4>
+                <p>Cada registro possui identificacao unica, historico de alteracoes e vinculo com o periodo de competencia e centro de custo correspondente, permitindo auditoria precisa em qualquer momento.</p>
+            </div>
+            <div class="pillar">
+                <h4>Controle de Acesso</h4>
+                <p>O sistema opera com autenticacao segura e sessoes controladas, garantindo que apenas usuarios autorizados tenham acesso as informacoes e funcionalidades pertinentes ao seu perfil.</p>
+            </div>
+            <div class="pillar">
+                <h4>Base para Auditorias</h4>
+                <p>A estrutura de dados do sistema foi projetada para atender requisitos de auditoria corporativa, com registros integros, datas de referencia claras e separacao logica entre entidades operacionais.</p>
+            </div>
+        </div>
+
+        <div class="highlight-box">
+            <p><strong>Resultado pratico:</strong> quando um cliente solicita uma verificacao, um relatorio detalhado ou uma conciliacao de valores, a TELOS tem a informacao pronta, precisa e documentada — sem necessidade de reconstrucao manual de dados.</p>
+        </div>
+    </div>
+</div>
+
+<!-- SECAO 4 -->
+<div class="section page-break">
+    <div class="container">
+        <span class="section-number">04</span>
+        <div class="section-title">Inteligencia Artificial como Apoio Operacional</div>
+        <h3>Tecnologia orientada a eficiencia e evolucao continua</h3>
+
+        <p>A TELOS adota inteligencia artificial de forma responsavel e orientada a resultados concretos. No contexto do Sistema de Gestao Telos, a IA atua como ferramenta de apoio operacional, e nao como substituto de decisoes humanas criticas.</p>
+
+        <p>As aplicacoes atuais e planejadas de inteligencia artificial incluem:</p>
+
+        <ul class="benefits-list">
+            <li>
+                <div class="benefit-marker"></div>
+                <div><strong>Classificacao automatica de eventos:</strong> identificacao e categorizacao de eventos trabalhistas com base em padroes historicos, reduzindo o tempo de mapeamento manual e aumentando a precisao na composicao de faturamento.</div>
+            </li>
+            <li>
+                <div class="benefit-marker"></div>
+                <div><strong>Deteccao de inconsistencias:</strong> analise automatizada de dados de folha para identificar valores atipicos, divergencias entre periodos e registros incompletos antes que impactem o faturamento.</div>
+            </li>
+            <li>
+                <div class="benefit-marker"></div>
+                <div><strong>Suporte a decisao operacional:</strong> organizacao e priorizacao de informacoes para que gestores tenham clareza sobre acoes necessarias, prazos criticos e pontos de atencao em cada ciclo de faturamento.</div>
+            </li>
+            <li>
+                <div class="benefit-marker"></div>
+                <div><strong>Evolucao preditiva:</strong> a arquitetura do sistema esta preparada para incorporar modelos preditivos que antecipem necessidades de alocacao, identifiquem padroes de turnover e otimizem a gestao de recursos humanos temporarios.</div>
+            </li>
+        </ul>
+
+        <div class="highlight-box">
+            <p><strong>Posicionamento:</strong> a TELOS nao utiliza inteligencia artificial como argumento de marketing. Utiliza como ferramenta real, com aplicacao pratica, governanca sobre os resultados e transparencia sobre suas limitacoes.</p>
+        </div>
+    </div>
+</div>
+
+<!-- SECAO 5 -->
+<div class="section">
+    <div class="container">
+        <span class="section-number">05</span>
+        <div class="section-title">Integracao com o Ecossistema Tecnologico</div>
+        <h3>Parte de uma infraestrutura integrada e coesa</h3>
+
+        <p>O Sistema de Gestao Telos nao opera isoladamente. Ele e parte de um ecossistema tecnologico proprietario da TELOS, projetado para garantir que todas as areas da operacao se comuniquem de forma fluida, consistente e segura.</p>
+
+        <div class="ecosystem-grid">
+            <div class="eco-item">
+                <h4>ERP Integrado</h4>
+                <p>Conexao direta com o sistema de gestao de pessoas (Senior HCM), permitindo consulta e importacao automatica de dados de folha, colaboradores e eventos.</p>
+            </div>
+            <div class="eco-item">
+                <h4>Banco de Dados Centralizado</h4>
+                <p>Repositorio unico e estruturado para todas as informacoes operacionais, eliminando duplicidades e garantindo uma unica fonte de verdade.</p>
+            </div>
+            <div class="eco-item">
+                <h4>Exportacao por Modelo</h4>
+                <p>Geracao de relatorios e faturamentos no formato especifico de cada cliente, com mapeamento automatico de eventos e estrutura de dados personalizada.</p>
+            </div>
+            <div class="eco-item">
+                <h4>Controle de Exames</h4>
+                <p>Gestao integrada de exames ocupacionais com vinculo direto ao faturamento, garantindo que custos de saude e seguranca sejam corretamente computados.</p>
+            </div>
+            <div class="eco-item">
+                <h4>Gestao de Beneficios</h4>
+                <p>Processamento automatizado de vale-transporte, vale-refeicao e demais beneficios com calculo integrado ao ciclo de faturamento.</p>
+            </div>
+            <div class="eco-item">
+                <h4>Gestao de EPIs</h4>
+                <p>Controle de compras e distribuicao de equipamentos de protecao individual, com documentacao armazenada e vinculada ao periodo de competencia.</p>
+            </div>
+        </div>
+
+        <p>Essa integracao garante que uma informacao registrada em qualquer ponto do ecossistema esteja imediatamente disponivel em todos os demais processos que dela dependam, eliminando retrabalho e inconsistencias.</p>
+    </div>
+</div>
+
+<!-- SECAO 6 -->
+<div class="section page-break">
+    <div class="container">
+        <span class="section-number">06</span>
+        <div class="section-title">Impacto Direto para Clientes Corporativos</div>
+        <h3>Beneficios concretos para parceiros de alto nivel de exigencia</h3>
+
+        <p>Clientes corporativos que operam com volumes elevados de mao de obra temporaria exigem de seus parceiros nao apenas execucao, mas controle demonstravel, transparencia nas informacoes e capacidade de resposta imediata. O Sistema de Gestao Telos entrega exatamente isso.</p>
+
+        <ul class="benefits-list">
+            <li>
+                <div class="benefit-marker"></div>
+                <div><strong>Faturamento preciso e auditavel:</strong> cada valor apresentado ao cliente e composto a partir de dados verificados, com rastreabilidade completa desde o evento de folha ate a linha do faturamento.</div>
+            </li>
+            <li>
+                <div class="benefit-marker"></div>
+                <div><strong>Relatorios sob demanda por centro de custo:</strong> visao detalhada da operacao segmentada por unidade, filial ou centro de custo do cliente, com a granularidade necessaria para gestao e auditoria.</div>
+            </li>
+            <li>
+                <div class="benefit-marker"></div>
+                <div><strong>Formato personalizado de entrega:</strong> faturamento e relatorios gerados no formato especifico do cliente, respeitando nomenclaturas, estruturas de dados e regras de negocio proprias de cada parceiro.</div>
+            </li>
+            <li>
+                <div class="benefit-marker"></div>
+                <div><strong>Transparencia total:</strong> o cliente tem visibilidade sobre a composicao de cada valor — proventos, descontos, encargos, beneficios e custos adicionais — sem zonas cinzentas ou informacoes consolidadas sem detalhamento.</div>
+            </li>
+            <li>
+                <div class="benefit-marker"></div>
+                <div><strong>Capacidade de escala segura:</strong> o aumento no volume de colaboradores geridos nao compromete a qualidade da informacao, a velocidade de processamento ou a precisao do faturamento.</div>
+            </li>
+            <li>
+                <div class="benefit-marker"></div>
+                <div><strong>Reducao de atrito operacional:</strong> menos trocas de e-mails para esclarecimentos, menos retrabalho por dados incorretos e menos tempo gasto em reconciliacoes — tanto para a TELOS quanto para o cliente.</div>
+            </li>
+        </ul>
+
+        <div class="highlight-box">
+            <p><strong>Para o cliente corporativo, o resultado e direto:</strong> um parceiro que entrega informacoes corretas, no prazo, no formato adequado e com capacidade de comprovar cada numero apresentado.</p>
+        </div>
+    </div>
+</div>
+
+<!-- SECAO 7 -->
+<div class="closing">
+    <div class="container">
+        <h3>Posicionamento Final</h3>
+        <p>O Sistema de Gestao Telos e tecnologia proprietaria da TELOS Consultoria. Nao e um produto de mercado. Nao e uma ferramenta generica adaptada. E uma plataforma construida internamente para resolver os desafios reais de operacoes complexas de mao de obra temporaria.</p>
+        <p>Cada funcionalidade foi desenvolvida a partir de necessidades operacionais concretas, validada em ambiente real e aprimorada continuamente com base na experiencia acumulada em operacoes de grande escala.</p>
+        <p>Esse investimento em tecnologia proprietaria reflete o compromisso da TELOS com a excelencia operacional, a seguranca da informacao e a construcao de parcerias estrategicas de longo prazo com clientes que exigem — e merecem — o mais alto padrao de gestao.</p>
+        <div class="closing-line"></div>
+    </div>
+</div>
+
+<div class="footer">
+    <p>TELOS CONSULTORIA &mdash; DOCUMENTO CONFIDENCIAL &mdash; TODOS OS DIREITOS RESERVADOS</p>
+</div>
+
+</body>
+</html>

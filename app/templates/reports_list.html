@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Relatórios - Sistema de Gestão{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 2rem; color: #2c3e50;">Relatórios</h2>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3 style="color: #2c3e50;">Gerar Novo Relatório</h3>
+    </div>
+    
+    <form id="generateReportForm">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="reportName">Nome do Relatório:</label>
+                <input type="text" id="reportName" name="reportName" required placeholder="Ex: Relatório de Clientes 2024">
+            </div>
+            
+            <div class="form-group">
+                <label for="reportType">Tipo de Relatório:</label>
+                <select id="reportType" name="reportType" required>
+                    <option value="customers">Clientes</option>
+                    <option value="employees">Funcionários</option>
+                    <option value="summary">Resumo</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="fileFormat">Formato:</label>
+                <select id="fileFormat" name="fileFormat" required>
+                    <option value="xlsx">Excel (.xlsx)</option>
+                    <option value="csv">CSV (.csv)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Descrição (opcional):</label>
+                <input type="text" id="description" name="description" placeholder="Descrição do relatório">
+            </div>
+        </div>
+        
+        <button type="submit" class="btn btn-success">Gerar Relatório</button>
+    </form>
+    
+    <div id="generateResult" style="margin-top: 1.5rem; display: none;"></div>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Relatórios Gerados</h3>
+    
+    <table id="reportsTable">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Tipo</th>
+                <th>Formato</th>
+                <th>Status</th>
+                <th>Data de Criação</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem; color: #999;">
+                    Carregando relatórios...
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadReports() {
+        try {
+            const response = await fetch('/api/reports/');
+            const reports = await response.json();
+            
+            const tbody = document.querySelector('#reportsTable tbody');
+            
+            if (reports.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #999;">Nenhum relatório gerado ainda</td></tr>';
+            } else {
+                tbody.innerHTML = reports.map(report => {
+                    const createdDate = new Date(report.created_at).toLocaleString('pt-BR');
+                    const statusColor = report.status === 'completed' ? '#27ae60' : report.status === 'failed' ? '#e74c3c' : '#f39c12';
+                    
+                    return `
+                        <tr>
+                            <td>${report.name}</td>
+                            <td style="text-transform: capitalize;">${report.report_type}</td>
+                            <td style="text-transform: uppercase;">${report.file_format}</td>
+                            <td><span style="padding: 0.25rem 0.75rem; background: ${statusColor}; color: white; border-radius: 12px; font-size: 0.875rem;">${report.status}</span></td>
+                            <td>${createdDate}</td>
+                            <td>
+                                ${report.status === 'completed' ? 
+                                    `<a href="/api/reports/${report.id}/download" class="btn" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Download</a>` : 
+                                    '<span style="color: #999;">-</span>'
+                                }
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        } catch (error) {
+            console.error('Erro ao carregar relatórios:', error);
+            document.querySelector('#reportsTable tbody').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #e74c3c;">Erro ao carregar relatórios</td></tr>';
+        }
+    }
+    
+    document.getElementById('generateReportForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const resultDiv = document.getElementById('generateResult');
+        
+        const payload = {
+            name: formData.get('reportName'),
+            report_type: formData.get('reportType'),
+            file_format: formData.get('fileFormat'),
+            description: formData.get('description') || null
+        };
+        
+        resultDiv.innerHTML = '<div class="alert" style="background: #e3f2fd; color: #0277bd; border: 1px solid #90caf9;">Gerando relatório...</div>';
+        resultDiv.style.display = 'block';
+        
+        try {
+            const response = await fetch('/api/reports/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                resultDiv.innerHTML = '<div class="alert alert-success"><strong>Sucesso!</strong> Relatório gerado com sucesso!</div>';
+                e.target.reset();
+                
+                setTimeout(() => {
+                    loadReports();
+                    resultDiv.style.display = 'none';
+                }, 2000);
+            } else {
+                resultDiv.innerHTML = `<div class="alert alert-error"><strong>Erro:</strong> ${result.detail || 'Erro ao gerar relatório'}</div>`;
+            }
+        } catch (error) {
+            console.error('Erro:', error);
+            resultDiv.innerHTML = '<div class="alert alert-error"><strong>Erro:</strong> Falha ao gerar relatório</div>';
+        }
+    });
+    
+    loadReports();
+</script>
+{% endblock %}

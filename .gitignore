@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Banco de dados local (gerado em runtime)
+*.db
+*.sqlite
+*.sqlite3
+
+# Variáveis de ambiente com segredos
+.env
+
+# Arquivos gerados pela aplicação
+app/generated_reports/
+app/excel_templates/
+epi_documents/
+
+# Assets de desenvolvimento / Replit
+attached_assets/
+
+# Logs
+*.log

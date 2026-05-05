@@ -1,0 +1,3020 @@
+{% extends "base.html" %}
+
+{% block title %}Faturamento RH - Telos Consultoria{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 0;
+        border-bottom: 1px solid var(--gray-700);
+    }
+    
+    .tab-btn {
+        padding: 1rem 2rem;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--gray-400);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-family: 'Space Grotesk', sans-serif;
+        transition: all 0.2s ease;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -1px;
+    }
+    
+    .tab-btn.active {
+        color: var(--gold);
+        border-bottom-color: var(--gold);
+        background: var(--gray-800);
+    }
+    
+    .tab-btn:hover:not(.active) {
+        color: var(--gray-200);
+        background: var(--gray-700);
+    }
+    
+    .tab-content {
+        display: none;
+        padding: 2rem 0;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+    
+    .upload-area {
+        border: 2px dashed var(--gray-600);
+        padding: 3rem 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: var(--gray-800);
+        max-width: 600px;
+    }
+    
+    .upload-area:hover {
+        border-color: var(--gold);
+        background: rgba(212, 168, 75, 0.05);
+    }
+    
+    .upload-area.dragover {
+        border-color: var(--gold);
+        background: rgba(212, 168, 75, 0.1);
+    }
+    
+    .upload-area input[type="file"] {
+        display: none;
+    }
+    
+    .upload-area .icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+    
+    .upload-area p {
+        color: var(--gray-300);
+        margin-bottom: 0.5rem;
+    }
+    
+    .upload-area .hint {
+        font-size: 0.75rem;
+        color: var(--gray-500);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .upload-area .file-name {
+        margin-top: 1rem;
+        color: var(--gold);
+        font-weight: 600;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .result-box {
+        margin-top: 1.5rem;
+        padding: 1.5rem;
+        display: none;
+        border-left: 4px solid;
+    }
+    
+    .result-box.success {
+        background: rgba(74, 222, 128, 0.1);
+        border-color: var(--success);
+        color: var(--success);
+        display: block;
+    }
+    
+    .result-box.error {
+        background: rgba(248, 113, 113, 0.1);
+        border-color: var(--error);
+        color: var(--error);
+        display: block;
+    }
+    
+    .result-box h4 {
+        margin-bottom: 0.75rem;
+    }
+    
+    .result-box ul {
+        margin-left: 1.5rem;
+    }
+    
+    .result-box li {
+        margin-bottom: 0.25rem;
+    }
+    
+    .loading {
+        display: none;
+        text-align: center;
+        padding: 2rem;
+    }
+    
+    .loading.active {
+        display: block;
+    }
+    
+    .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid var(--gray-700);
+        border-top-color: var(--gold);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    .info-box {
+        background: var(--gray-700);
+        padding: 1.5rem;
+        margin-top: 2rem;
+        border-left: 4px solid var(--gold);
+    }
+    
+    .info-box h4 {
+        color: var(--gold);
+        margin-bottom: 1rem;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .info-box p {
+        color: var(--gray-300);
+        font-size: 0.875rem;
+        line-height: 1.8;
+    }
+    
+    .grand-total {
+        background: var(--gray-700);
+        border-left: 4px solid var(--gold);
+        padding: 1.5rem;
+        margin-top: 2rem;
+    }
+    
+    .grand-total h3 {
+        font-size: 0.75rem;
+        color: var(--gray-400);
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-bottom: 0.5rem;
+    }
+    
+    .grand-total .amount {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--gold);
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .summary-card {
+        background: var(--gray-700);
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .summary-card h4 {
+        color: var(--gray-100);
+        margin-bottom: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .summary-total {
+        color: var(--gold);
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .items-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 1rem;
+    }
+    
+    .item-box {
+        background: var(--gray-800);
+        padding: 1rem;
+        border-left: 3px solid var(--gold);
+    }
+    
+    .item-box .type {
+        font-size: 0.75rem;
+        color: var(--gray-400);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 0.5rem;
+    }
+    
+    .item-box .value {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--gold);
+        font-family: 'JetBrains Mono', monospace;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Faturamento RH</h1>
+</div>
+
+<div class="tabs">
+    <button class="tab-btn active" onclick="showTab('upload-folha')">Upload Folha</button>
+    <button class="tab-btn" onclick="showTab('upload-exames')">Upload Exames</button>
+    <button class="tab-btn" onclick="showTab('folha-pagamento')">Folha de Pagamento</button>
+    <button class="tab-btn" onclick="showTab('exportar-faturamento')">Exportar Faturamento</button>
+    <button class="tab-btn" onclick="showTab('folha-senior')">Folha Senior</button>
+    <button class="tab-btn" onclick="showTab('exames-medicos')">Exames</button>
+    <button class="tab-btn" onclick="showTab('epi-compras')">EPIs</button>
+    <button class="tab-btn" onclick="showTab('valores-adicionais')">Valores Adicionais</button>
+</div>
+
+<div id="upload-folha" class="tab-content active">
+    <div class="card">
+        <div class="card-header">
+            <h2>Upload de Folha de Pagamento</h2>
+        </div>
+        
+        <form id="payroll-form">
+            <div class="form-group">
+                <label for="mes_referencia">Mes de Referencia</label>
+                <input type="month" id="mes_referencia" name="mes_referencia" required style="max-width: 300px;">
+            </div>
+            
+            <div class="upload-area" id="payroll-upload-area">
+                <input type="file" id="payroll-file" name="file" accept=".xlsx,.xls,.csv">
+                <div class="icon">📊</div>
+                <p>Arraste o arquivo aqui ou clique para selecionar</p>
+                <p class="hint">Formatos aceitos: Excel (.xlsx, .xls) ou CSV</p>
+                <p class="file-name" id="payroll-file-name"></p>
+            </div>
+            
+            <div style="margin-top: 1.5rem;">
+                <button type="submit" class="btn" id="payroll-submit">Processar Folha</button>
+            </div>
+        </form>
+        
+        <div class="loading" id="payroll-loading">
+            <div class="spinner"></div>
+            <p style="color: var(--gray-400);">Processando arquivo...</p>
+        </div>
+        
+        <div class="result-box" id="payroll-result"></div>
+        
+        <div class="info-box">
+            <h4>Colunas Mapeadas</h4>
+            <p>
+                <strong style="color: var(--gold);">Funcionario:</strong> CPF, Nome, Cargo, Funcao, Salario Base, Data Admissao<br>
+                <strong style="color: var(--gold);">Empresa:</strong> CNPJ FEMSA, Nome Empresa<br>
+                <strong style="color: var(--gold);">Unidade:</strong> CNPJ Unidade, Nome Unidade, Centro Custo FEMSA<br>
+                <strong style="color: var(--gold);">Itens da Folha:</strong> Salario Dia, Horas Extras, Vale Transporte, Vale Refeicao, Premio/Bonus, Tributos, Encargos, Taxa Faturamento
+            </p>
+        </div>
+    </div>
+</div>
+
+<div id="upload-exames" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>Upload de Exames Medicos</h2>
+        </div>
+        
+        <form id="exams-form">
+            <div class="upload-area" id="exams-upload-area">
+                <input type="file" id="exams-file" name="file" accept=".xlsx,.xls,.csv">
+                <div class="icon">🏥</div>
+                <p>Arraste o arquivo aqui ou clique para selecionar</p>
+                <p class="hint">Formatos aceitos: Excel (.xlsx, .xls) ou CSV</p>
+                <p class="file-name" id="exams-file-name"></p>
+            </div>
+            
+            <div style="margin-top: 1.5rem;">
+                <button type="submit" class="btn" id="exams-submit">Processar Exames</button>
+            </div>
+        </form>
+        
+        <div class="loading" id="exams-loading">
+            <div class="spinner"></div>
+            <p style="color: var(--gray-400);">Processando arquivo...</p>
+        </div>
+        
+        <div class="result-box" id="exams-result"></div>
+        
+        <div class="info-box">
+            <h4>Colunas Esperadas</h4>
+            <p>CNPJ da Unidade, CPF, Nome, Tipo, Exame, Dt.Pedido, Dt.Exame, Dt.Inativacao, Vl.Cobrar R$</p>
+        </div>
+    </div>
+</div>
+
+<div id="folha-pagamento" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>Consultar Folha de Pagamento</h2>
+        </div>
+        
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+            <div class="form-group">
+                <label for="payroll-periodo">Periodo</label>
+                <input type="date" id="payroll-periodo" name="payroll-periodo" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="payroll-codccu-filter">Centros de Custo</label>
+                <input type="text" id="payroll-codccu-filter" placeholder="Digite para filtrar..." autocomplete="off" style="margin-bottom: 0.5rem;">
+                <select id="payroll-codccu" name="payroll-codccu" multiple required size="8" style="height: auto; min-height: 180px; max-height: 250px; overflow-y: auto;">
+                    <option value="">Carregando centros de custo...</option>
+                </select>
+                <p style="color: var(--gray-400); font-size: 0.75rem; margin-top: 0.5rem;">Clique para selecionar/desselecionar multiplos centros de custo</p>
+                <div id="payroll-selected-ccus" style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.25rem;"></div>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 1rem;">
+            <button type="button" class="btn btn-outline" onclick="loadPayroll()" style="flex: 1;">
+                Consultar Folha
+            </button>
+            <button type="button" class="btn" onclick="downloadPayrollExcel()" style="flex: 1;">
+                Baixar Excel
+            </button>
+        </div>
+        
+        <div class="loading" id="payroll-loading">
+            <div class="spinner"></div>
+            <p style="color: var(--gray-400);">Carregando folha de pagamento...</p>
+        </div>
+        
+        <div class="payroll-summary" id="payroll-summary" style="background: var(--gray-700); border-left: 4px solid var(--gold); padding: 1rem; margin-top: 1rem; display: none;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                <div>
+                    <div style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Funcionarios</div>
+                    <div style="color: var(--gold); font-size: 1.25rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="payroll-total-func">0</div>
+                </div>
+                <div>
+                    <div style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Eventos</div>
+                    <div style="color: var(--gold); font-size: 1.25rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="payroll-total-eventos">0</div>
+                </div>
+                <div>
+                    <div style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Centro de Custo</div>
+                    <div style="color: var(--gold); font-size: 0.9rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="payroll-ccu">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="payroll-container" style="max-height: 500px; overflow-y: auto; margin-top: 1.5rem; display: none;">
+            <div id="payroll-cards"></div>
+        </div>
+    </div>
+</div>
+
+<div id="exportar-faturamento" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>Exportar Faturamento</h2>
+        </div>
+        
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+            <div class="form-group">
+                <label for="export-periodo">Periodo</label>
+                <input type="date" id="export-periodo" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="export-modelo">Modelo de Exportacao</label>
+                <select id="export-modelo" required>
+                    <option value="femsa">FEMSA</option>
+                    <option value="skyrail">Skyrail</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label for="export-codccu-filter">Centro de Custo</label>
+            <input type="text" id="export-codccu-filter" placeholder="Digite para filtrar..." autocomplete="off" style="margin-bottom: 0.5rem;">
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <button type="button" class="btn btn-secondary" onclick="selectAllExportCcus()" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; background: var(--gray-600);">Selecionar Todos</button>
+                <button type="button" class="btn btn-secondary" onclick="deselectAllExportCcus()" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; background: var(--gray-600);">Limpar Seleção</button>
+            </div>
+            <select id="export-codccu" multiple size="8" style="height: auto; min-height: 200px; max-height: 300px; overflow-y: auto;">
+                <option value="">Carregando centros de custo...</option>
+            </select>
+            <p style="color: var(--gray-400); font-size: 0.75rem; margin-top: 0.5rem;">Clique para selecionar/desmarcar. Pode selecionar varios.</p>
+            <div id="export-selected-count" style="color: var(--gold); font-size: 0.8rem; margin-top: 0.5rem; font-weight: 600;"></div>
+        </div>
+        
+        <!-- 
+        <div style="background: var(--gray-700); padding: 1.5rem; margin-bottom: 1.5rem; border-left: 4px solid var(--gold);">
+            <h3 style="color: var(--gold); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">Importar Exames Medicos</h3>
+            <p style="color: var(--gray-400); font-size: 0.8rem; margin-bottom: 1rem;">Importe a planilha de controle de exames para incluir os valores na coluna "TAXA EXAMES MEDICOS".</p>
+            
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <input type="file" id="exams-file" accept=".xlsx,.xls" style="flex: 1; min-width: 200px;">
+                <button type="button" class="btn btn-secondary" onclick="uploadExamsFile()" style="background: var(--gray-600);">
+                    Importar Exames
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="clearExamsData()" style="background: var(--gray-600); color: #ff6b6b;">
+                    Limpar
+                </button>
+            </div>
+            
+            <div id="exams-status" style="margin-top: 1rem; display: none;">
+                <div style="display: flex; gap: 2rem;">
+                    <div>
+                        <span style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Funcionarios</span>
+                        <div style="color: var(--gold); font-size: 1.1rem; font-weight: 700;" id="exams-count">0</div>
+                    </div>
+                    <div>
+                        <span style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Total Exames</span>
+                        <div style="color: var(--gold); font-size: 1.1rem; font-weight: 700;" id="exams-total">R$ 0,00</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="loading" id="exams-loading" style="margin-top: 1rem;">
+                <div class="spinner"></div>
+                <p style="color: var(--gray-400);">Processando planilha...</p>
+            </div>
+        </div>
+        
+        <div style="background: var(--gray-700); padding: 1.5rem; margin-bottom: 1.5rem; border-left: 4px solid #4CAF50;">
+            <h3 style="color: #4CAF50; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">Importar Sodexo</h3>
+            <p style="color: var(--gray-400); font-size: 0.8rem; margin-bottom: 1rem;">Importe o CSV Sodexo para incluir os valores na coluna "VALE REFEICAO".</p>
+            
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <input type="file" id="benefits-file" accept=".csv" style="flex: 1; min-width: 200px;">
+                <button type="button" class="btn btn-secondary" onclick="uploadBenefitsFile()" style="background: var(--gray-600);">
+                    Importar Beneficios
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="clearBenefitsData()" style="background: var(--gray-600); color: #ff6b6b;">
+                    Limpar
+                </button>
+            </div>
+            
+            <div id="benefits-status" style="margin-top: 1rem; display: none;">
+                <div style="display: flex; gap: 2rem;">
+                    <div>
+                        <span style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Funcionarios</span>
+                        <div style="color: #4CAF50; font-size: 1.1rem; font-weight: 700;" id="benefits-count">0</div>
+                    </div>
+                    <div>
+                        <span style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Total Beneficios</span>
+                        <div style="color: #4CAF50; font-size: 1.1rem; font-weight: 700;" id="benefits-total">R$ 0,00</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="loading" id="benefits-loading" style="margin-top: 1rem;">
+                <div class="spinner"></div>
+                <p style="color: var(--gray-400);">Processando CSV...</p>
+            </div>
+        </div>
+        
+        <div style="background: var(--gray-700); padding: 1.5rem; margin-bottom: 1.5rem; border-left: 4px solid #2196F3;">
+            <h3 style="color: #2196F3; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">Importar Flash</h3>
+            <p style="color: var(--gray-400); font-size: 0.8rem; margin-bottom: 1rem;">Importe o CSV Flash (dados armazenados em memoria).</p>
+            
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <input type="file" id="flash-file" accept=".csv" style="flex: 1; min-width: 200px;">
+                <button type="button" class="btn btn-secondary" onclick="uploadFlashFile()" style="background: var(--gray-600);">
+                    Importar Flash
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="clearFlashData()" style="background: var(--gray-600); color: #ff6b6b;">
+                    Limpar
+                </button>
+            </div>
+            
+            <div id="flash-status" style="margin-top: 1rem; display: none;">
+                <div style="display: flex; gap: 2rem;">
+                    <div>
+                        <span style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Funcionarios</span>
+                        <div style="color: #2196F3; font-size: 1.1rem; font-weight: 700;" id="flash-count">0</div>
+                    </div>
+                    <div>
+                        <span style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Total Flash</span>
+                        <div style="color: #2196F3; font-size: 1.1rem; font-weight: 700;" id="flash-total">R$ 0,00</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="loading" id="flash-loading" style="margin-top: 1rem;">
+                <div class="spinner"></div>
+                <p style="color: var(--gray-400);">Processando CSV...</p>
+            </div>
+        </div>
+        
+        <div style="background: var(--gray-700); padding: 1.5rem; margin-bottom: 1.5rem; border-left: 4px solid #E91E63;">
+            <h3 style="color: #E91E63; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">Importar iFood Beneficios</h3>
+            <p style="color: var(--gray-400); font-size: 0.8rem; margin-bottom: 1rem;">Importe o CSV iFood (dados armazenados em memoria).</p>
+            
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <input type="file" id="ifood-file" accept=".csv" style="flex: 1; min-width: 200px;">
+                <button type="button" class="btn btn-secondary" onclick="uploadIfoodFile()" style="background: var(--gray-600);">
+                    Importar iFood
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="clearIfoodData()" style="background: var(--gray-600); color: #ff6b6b;">
+                    Limpar
+                </button>
+            </div>
+            
+            <div id="ifood-status" style="margin-top: 1rem; display: none;">
+                <div style="display: flex; gap: 2rem;">
+                    <div>
+                        <span style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Funcionarios</span>
+                        <div style="color: #E91E63; font-size: 1.1rem; font-weight: 700;" id="ifood-count">0</div>
+                    </div>
+                    <div>
+                        <span style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Total iFood</span>
+                        <div style="color: #E91E63; font-size: 1.1rem; font-weight: 700;" id="ifood-total">R$ 0,00</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="loading" id="ifood-loading" style="margin-top: 1rem;">
+                <div class="spinner"></div>
+                <p style="color: var(--gray-400);">Processando CSV...</p>
+            </div>
+        </div>
+        -->
+        
+        <button type="button" class="btn" onclick="downloadBillingExport()">
+            Exportar Faturamento
+        </button>
+        
+        <div class="loading" id="export-loading">
+            <div class="spinner"></div>
+            <p style="color: var(--gray-400);">Gerando arquivo...</p>
+        </div>
+        
+        <div class="info-box" style="margin-top: 1.5rem;">
+            <h4>Modelo FEMSA</h4>
+            <p>Gera planilha no formato padrao FEMSA com todas as colunas de faturamento, eventos com Qtde e Valor, taxas e encargos.</p>
+            <p style="margin-top: 0.5rem;">Se a planilha de exames for importada, os valores serao incluidos automaticamente na coluna "TAXA EXAMES MEDICOS".</p>
+        </div>
+    </div>
+</div>
+
+<div id="folha-senior" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>Folha Senior</h2>
+        </div>
+
+        <p style="color: var(--gray-400); font-size: 0.875rem; margin-bottom: 1.5rem;">
+            Exporta a folha de pagamento diretamente do webservice Senior. As colunas são geradas dinamicamente com base nos eventos retornados.
+        </p>
+
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+            <div class="form-group">
+                <label for="senior-periodo">Período</label>
+                <input type="date" id="senior-periodo" required>
+            </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+            <label for="senior-codccu-filter">Centro de Custo</label>
+            <input type="text" id="senior-codccu-filter" placeholder="Digite para filtrar..." autocomplete="off" style="margin-bottom: 0.5rem;">
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <button type="button" class="btn btn-secondary" onclick="selectAllSeniorCcus()" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; background: var(--gray-600);">Selecionar Todos</button>
+                <button type="button" class="btn btn-secondary" onclick="deselectAllSeniorCcus()" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; background: var(--gray-600);">Limpar Seleção</button>
+            </div>
+            <select id="senior-codccu" multiple size="8" style="height: auto; min-height: 200px; max-height: 300px; overflow-y: auto;">
+                <option value="">Carregando centros de custo...</option>
+            </select>
+            <p style="color: var(--gray-400); font-size: 0.75rem; margin-top: 0.5rem;">Clique para selecionar/desmarcar. Pode selecionar vários.</p>
+            <div id="senior-selected-count" style="color: var(--gold); font-size: 0.8rem; margin-top: 0.5rem; font-weight: 600;"></div>
+        </div>
+
+        <button type="button" class="btn" onclick="downloadSeniorExport()">
+            Exportar Folha Senior
+        </button>
+
+        <div class="loading" id="senior-loading" style="display: none; margin-top: 1rem;">
+            <div class="spinner"></div>
+            <p style="color: var(--gray-400);">Buscando dados e gerando planilha...</p>
+        </div>
+
+        <div class="info-box" style="margin-top: 1.5rem;">
+            <h4>Folha Senior — Exportação Dinâmica</h4>
+            <p>Gera planilha com colunas fixas (matrícula, nome, CPF, centro de custo, cargo, salário, admissão) e colunas dinâmicas para cada evento encontrado na folha, com Qtde e Valor por funcionário.</p>
+        </div>
+    </div>
+</div>
+
+<div id="exames-medicos" class="tab-content">
+    <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 id="exames-form-title">Cadastrar Exame Medico</h2>
+            <div>
+                <button type="button" class="btn btn-outline" id="btn-toggle-exam-form" onclick="toggleExamForm()" style="font-size: 0.8rem; padding: 0.5rem 1rem;">Novo Exame</button>
+            </div>
+        </div>
+
+        <div id="exam-form-container" style="display: none;">
+            <input type="hidden" id="exam-edit-id" value="">
+
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label for="exam-func-filter">Nome do Funcionario</label>
+                <input type="text" id="exam-func-filter" placeholder="Digite para buscar funcionario..." autocomplete="off" style="margin-bottom: 0.5rem;">
+                <select id="exam-func-select" size="5" style="width: 100%; height: auto; min-height: 120px; max-height: 200px; overflow-y: auto; display: none;">
+                </select>
+                <div id="exam-func-selected" style="margin-top: 0.5rem; color: var(--gold); font-weight: 600; font-size: 0.9rem;"></div>
+                <input type="hidden" id="exam-numcad" value="">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label for="exam-data">Data Exame</label>
+                <input type="date" id="exam-data" style="max-width: 250px;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="form-group">
+                    <label for="exam-clinic">Clinic</label>
+                    <input type="number" id="exam-clinic" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-audio">Audio</label>
+                    <input type="number" id="exam-audio" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-acuid">Acuid</label>
+                    <input type="number" id="exam-acuid" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-hemo">Hemo</label>
+                    <input type="number" id="exam-hemo" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-lipidograma">Lipidograma</label>
+                    <input type="number" id="exam-lipidograma" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-rx_coluna">RX Coluna</label>
+                    <input type="number" id="exam-rx_coluna" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-met_e_cet">Met e Cet</label>
+                    <input type="number" id="exam-met_e_cet" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-acet_u">Acet U</label>
+                    <input type="number" id="exam-acet_u" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-hg">HG</label>
+                    <input type="number" id="exam-hg" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-retic">Retic</label>
+                    <input type="number" id="exam-retic" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-ac_trans">Ac Trans</label>
+                    <input type="number" id="exam-ac_trans" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-eeg">EEG</label>
+                    <input type="number" id="exam-eeg" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-ecg">ECG</label>
+                    <input type="number" id="exam-ecg" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-etanol">Etanol</label>
+                    <input type="number" id="exam-etanol" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-glice">Glice</label>
+                    <input type="number" id="exam-glice" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-gama_gt">Gama GT</label>
+                    <input type="number" id="exam-gama_gt" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-tgp">TGP</label>
+                    <input type="number" id="exam-tgp" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-rx_torax">RX Torax</label>
+                    <input type="number" id="exam-rx_torax" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-espiro">Espiro</label>
+                    <input type="number" id="exam-espiro" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-rx_lomb">RX Lomb</label>
+                    <input type="number" id="exam-rx_lomb" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+                <div class="form-group">
+                    <label for="exam-aval_psicossocial">Aval Psicossocial</label>
+                    <input type="number" id="exam-aval_psicossocial" step="0.01" min="0" value="0" class="exam-value-input">
+                </div>
+            </div>
+
+            <div style="background: var(--gray-700); border-left: 4px solid var(--gold); padding: 1rem 1.5rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="color: var(--gray-400); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px;">Total</span>
+                    <div id="exam-total-display" style="color: var(--gold); font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;">R$ 0,00</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button type="button" class="btn" onclick="saveExam()">Salvar Exame</button>
+                <button type="button" class="btn btn-outline" onclick="cancelExamEdit()">Cancelar</button>
+            </div>
+
+            <div class="loading" id="exam-save-loading">
+                <div class="spinner"></div>
+                <p style="color: var(--gray-400);">Salvando...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h2>Listagem de Exames</h2>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1rem;">
+            <input type="text" id="exam-list-filter" placeholder="Filtrar por nome do funcionario..." autocomplete="off">
+        </div>
+
+        <div class="loading" id="exam-list-loading">
+            <div class="spinner"></div>
+            <p style="color: var(--gray-400);">Carregando exames...</p>
+        </div>
+
+        <div id="exam-list-container" style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+                <thead>
+                    <tr style="border-bottom: 2px solid var(--gold);">
+                        <th style="padding: 0.75rem 0.5rem; text-align: left; color: var(--gold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Nome</th>
+                        <th style="padding: 0.75rem 0.5rem; text-align: center; color: var(--gold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Data</th>
+                        <th style="padding: 0.75rem 0.5rem; text-align: right; color: var(--gold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Total</th>
+                        <th style="padding: 0.75rem 0.5rem; text-align: center; color: var(--gold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Acoes</th>
+                    </tr>
+                </thead>
+                <tbody id="exam-list-tbody"></tbody>
+            </table>
+        </div>
+
+        <div id="exam-pagination" style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1.5rem;">
+        </div>
+
+        <div id="exam-list-info" style="text-align: center; color: var(--gray-400); font-size: 0.8rem; margin-top: 0.5rem;"></div>
+    </div>
+</div>
+
+<div id="valores-adicionais" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>Valores Adicionais</h2>
+        </div>
+        
+        <div style="background: var(--gray-700); padding: 1.5rem; margin-bottom: 1.5rem;">
+            <h3 style="color: var(--gold); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">Novo Valor Adicional</h3>
+            
+            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="form-group">
+                    <label for="av-codccu-filter">Centro de Custo</label>
+                    <input type="text" id="av-codccu-filter" placeholder="Digite para filtrar..." autocomplete="off" style="margin-bottom: 0.5rem;">
+                    <select id="av-codccu" required size="4" style="height: auto; min-height: 100px; max-height: 150px; overflow-y: auto;">
+                        <option value="">Carregando...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="av-valor">Valor (R$)</label>
+                    <input type="number" id="av-valor" step="0.01" min="0" placeholder="0,00" required>
+                    
+                    <label for="av-descricao" style="margin-top: 1rem;">Descricao (opcional)</label>
+                    <input type="text" id="av-descricao" placeholder="Ex: Taxa adicional, Ajuste, etc.">
+                </div>
+            </div>
+            
+            <button type="button" class="btn" onclick="createAdditionalValue()">
+                Adicionar Valor
+            </button>
+        </div>
+        
+        <h3 style="color: var(--gold); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">Lista de Valores Adicionais</h3>
+        
+        <div class="loading" id="av-loading">
+            <div class="spinner"></div>
+            <p style="color: var(--gray-400);">Carregando valores...</p>
+        </div>
+        
+        <div id="av-list"></div>
+        
+        <div id="av-empty" style="display: none; text-align: center; color: var(--gray-400); padding: 2rem;">
+            Nenhum valor adicional cadastrado
+        </div>
+    </div>
+</div>
+
+<div id="epi-compras" class="tab-content">
+    <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 id="epi-form-title">Cadastrar Compra de EPIs</h2>
+            <div>
+                <button type="button" class="btn btn-outline" id="btn-toggle-epi-form" onclick="toggleEpiForm()" style="font-size: 0.8rem; padding: 0.5rem 1rem;">Nova Compra</button>
+            </div>
+        </div>
+
+        <div id="epi-form-container" style="display: none;">
+            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="form-group">
+                    <label for="epi-empresa">Empresa</label>
+                    <select id="epi-empresa">
+                        <option value="FEMSA" selected>FEMSA</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Mes/Ano</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <select id="epi-mes" style="flex: 1;" required>
+                            <option value="">Mes...</option>
+                            <option value="01">Janeiro</option>
+                            <option value="02">Fevereiro</option>
+                            <option value="03">Marco</option>
+                            <option value="04">Abril</option>
+                            <option value="05">Maio</option>
+                            <option value="06">Junho</option>
+                            <option value="07">Julho</option>
+                            <option value="08">Agosto</option>
+                            <option value="09">Setembro</option>
+                            <option value="10">Outubro</option>
+                            <option value="11">Novembro</option>
+                            <option value="12">Dezembro</option>
+                        </select>
+                        <select id="epi-ano" style="flex: 1;" required>
+                            <option value="">Ano...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label for="epi-observacao">Observacao (opcional)</label>
+                <input type="text" id="epi-observacao" placeholder="Ex: Compra trimestral, Reposicao, etc.">
+            </div>
+
+            <input type="hidden" id="epi-edit-id" value="">
+
+            <div style="background: var(--gray-700); padding: 1rem; margin-bottom: 1rem; border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="color: var(--gold); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px;">Itens da Compra</h3>
+                    <button type="button" class="btn btn-outline" onclick="addEpiItem()" style="font-size: 0.75rem; padding: 0.3rem 0.8rem;">+ Adicionar Item</button>
+                </div>
+                <div id="epi-items-container">
+                </div>
+                <div style="text-align: right; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--gray-600);">
+                    <span style="color: var(--gray-400); font-size: 0.85rem;">Total Geral: </span>
+                    <span id="epi-total-geral" style="color: var(--gold); font-weight: 700; font-size: 1.1rem;">R$ 0,00</span>
+                </div>
+            </div>
+
+            <div style="background: var(--gray-700); padding: 1rem; margin-bottom: 1rem; border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <h3 style="color: var(--gold); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px;">Notas Fiscais / Documentos</h3>
+                    <button type="button" class="btn btn-outline" onclick="document.getElementById('epi-file-input').click()" style="font-size: 0.75rem; padding: 0.3rem 0.8rem;">+ Anexar Arquivo</button>
+                </div>
+                <input type="file" id="epi-file-input" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" style="display:none;" onchange="onEpiFilesSelected(this)">
+                <div id="epi-files-list" style="font-size: 0.85rem; color: var(--gray-300);"></div>
+                <p id="epi-files-empty" style="color: var(--gray-500); font-size: 0.8rem; margin: 0;">Nenhum arquivo selecionado</p>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button type="button" class="btn" onclick="saveEpiPackage()">Salvar Compra</button>
+                <button type="button" class="btn btn-outline" onclick="cancelEpiForm()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h2>Compras Cadastradas</h2>
+        </div>
+
+        <div id="epi-loading" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <p>Carregando...</p>
+        </div>
+
+        <div id="epi-list-container" style="overflow-x: auto;">
+            <table class="data-table" id="epi-table">
+                <thead>
+                    <tr>
+                        <th>Empresa</th>
+                        <th>Mes/Ano</th>
+                        <th>Qtd Itens</th>
+                        <th>Total (R$)</th>
+                        <th>Documentos</th>
+                        <th>Acoes</th>
+                    </tr>
+                </thead>
+                <tbody id="epi-table-body">
+                </tbody>
+            </table>
+        </div>
+
+        <div id="epi-list-info" style="text-align: center; color: var(--gray-400); font-size: 0.8rem; margin-top: 0.5rem;"></div>
+        <div id="epi-pagination" style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 1rem;"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const token = AUTH_TOKEN;
+
+function showTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+    
+    if (tabId === 'epi-compras') {
+        loadEpiPackages();
+    }
+    if (tabId === 'valores-adicionais') {
+        loadAdditionalValues();
+    }
+}
+
+function setupUploadArea(areaId, fileInputId, fileNameId) {
+    const area = document.getElementById(areaId);
+    const fileInput = document.getElementById(fileInputId);
+    const fileName = document.getElementById(fileNameId);
+    
+    area.addEventListener('click', () => fileInput.click());
+    
+    area.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        area.classList.add('dragover');
+    });
+    
+    area.addEventListener('dragleave', () => {
+        area.classList.remove('dragover');
+    });
+    
+    area.addEventListener('drop', (e) => {
+        e.preventDefault();
+        area.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            fileName.textContent = e.dataTransfer.files[0].name;
+        }
+    });
+    
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files.length) {
+            fileName.textContent = fileInput.files[0].name;
+        }
+    });
+}
+
+setupUploadArea('payroll-upload-area', 'payroll-file', 'payroll-file-name');
+setupUploadArea('exams-upload-area', 'exams-file', 'exams-file-name');
+
+function showResult(elementId, result) {
+    const el = document.getElementById(elementId);
+    if (result.success) {
+        el.className = 'result-box success';
+        let html = '<h4>Processamento concluido!</h4><ul>';
+        if (result.companies_created) html += `<li>Empresas criadas: ${result.companies_created}</li>`;
+        if (result.units_created) html += `<li>Unidades criadas: ${result.units_created}</li>`;
+        if (result.employees_created) html += `<li>Funcionarios criados: ${result.employees_created}</li>`;
+        if (result.contracts_created) html += `<li>Contratos criados: ${result.contracts_created}</li>`;
+        if (result.items_created) html += `<li>Itens criados: ${result.items_created}</li>`;
+        if (result.exams_created) html += `<li>Exames criados: ${result.exams_created}</li>`;
+        html += '</ul>';
+        el.innerHTML = html;
+    } else {
+        el.className = 'result-box error';
+        let html = '<h4>Erro no processamento</h4><ul>';
+        if (result.errors) {
+            result.errors.forEach(err => {
+                html += `<li>${err}</li>`;
+            });
+        }
+        html += '</ul>';
+        el.innerHTML = html;
+    }
+}
+
+document.getElementById('payroll-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const file = document.getElementById('payroll-file').files[0];
+    const mesRef = document.getElementById('mes_referencia').value;
+    
+    if (!file) { alert('Selecione um arquivo'); return; }
+    if (!mesRef) { alert('Selecione o mes de referencia'); return; }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('mes_referencia', mesRef);
+    formData.append('token', token);
+    
+    document.getElementById('payroll-loading').classList.add('active');
+    document.getElementById('payroll-result').className = 'result-box';
+    document.getElementById('payroll-submit').disabled = true;
+    
+    try {
+        const response = await fetch('/api/billing/upload-payroll', { method: 'POST', body: formData });
+        const result = await response.json();
+        showResult('payroll-result', result);
+    } catch (error) {
+        showResult('payroll-result', { success: false, errors: [error.message] });
+    } finally {
+        document.getElementById('payroll-loading').classList.remove('active');
+        document.getElementById('payroll-submit').disabled = false;
+    }
+});
+
+document.getElementById('exams-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const file = document.getElementById('exams-file').files[0];
+    if (!file) { alert('Selecione um arquivo'); return; }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('token', token);
+    
+    document.getElementById('exams-loading').classList.add('active');
+    document.getElementById('exams-result').className = 'result-box';
+    document.getElementById('exams-submit').disabled = true;
+    
+    try {
+        const response = await fetch('/api/billing/upload-exams', { method: 'POST', body: formData });
+        const result = await response.json();
+        showResult('exams-result', result);
+    } catch (error) {
+        showResult('exams-result', { success: false, errors: [error.message] });
+    } finally {
+        document.getElementById('exams-loading').classList.remove('active');
+        document.getElementById('exams-submit').disabled = false;
+    }
+});
+
+async function loadPeriods() {
+    document.getElementById('periods-loading').classList.add('active');
+    document.getElementById('periods-table').style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/billing/periods?token=' + token);
+        const data = await response.json();
+        
+        const tbody = document.getElementById('periods-tbody');
+        tbody.innerHTML = '';
+        
+        if (data.periods && data.periods.length > 0) {
+            data.periods.forEach(p => {
+                const statusClass = p.status === 'completed' ? 'badge-success' : 
+                                   p.status === 'processing' ? 'badge-warning' : 'badge-neutral';
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${p.id}</td>
+                        <td style="color: var(--gray-100);">${p.company_name || '-'}</td>
+                        <td>${p.mes_referencia || '-'}</td>
+                        <td><span class="badge ${statusClass}">${p.status}</span></td>
+                        <td>${p.created_at ? p.created_at.substring(0, 10) : '-'}</td>
+                        <td>
+                            <button class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.75rem;" onclick="viewPeriodSummary(${p.id})">Ver</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            document.getElementById('periods-table').style.display = 'table';
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--gray-500);">Nenhum periodo encontrado</td></tr>';
+            document.getElementById('periods-table').style.display = 'table';
+        }
+    } catch (error) {
+        console.error('Erro ao carregar periodos:', error);
+    } finally {
+        document.getElementById('periods-loading').classList.remove('active');
+    }
+}
+
+async function loadPeriodsForSelect() {
+    try {
+        const response = await fetch('/api/billing/periods?token=' + token);
+        const data = await response.json();
+        
+        const select = document.getElementById('periodo-select');
+        select.innerHTML = '<option value="">Selecione um periodo...</option>';
+        
+        if (data.periods) {
+            data.periods.forEach(p => {
+                select.innerHTML += `<option value="${p.id}">${p.company_name || 'Empresa'} - ${p.mes_referencia}</option>`;
+            });
+        }
+    } catch (error) {
+        console.error('Erro ao carregar periodos:', error);
+    }
+}
+
+async function loadSummary() {
+    const periodId = document.getElementById('periodo-select').value;
+    if (!periodId) {
+        document.getElementById('summary-content').style.display = 'none';
+        return;
+    }
+    
+    document.getElementById('summary-loading').classList.add('active');
+    document.getElementById('summary-content').style.display = 'none';
+    
+    try {
+        const response = await fetch(`/api/billing/periods/${periodId}/summary?token=${token}`);
+        const data = await response.json();
+        
+        if (data.summary) {
+            let grandTotal = 0;
+            const container = document.getElementById('employees-summary');
+            container.innerHTML = '';
+            
+            data.summary.forEach(emp => {
+                let empTotal = 0;
+                let itemsHtml = '';
+                
+                if (emp.items) {
+                    emp.items.forEach(item => {
+                        empTotal += item.total || 0;
+                        itemsHtml += `
+                            <div class="item-box">
+                                <div class="type">${item.type || '-'}</div>
+                                <div class="value">R$ ${(item.total || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                grandTotal += empTotal;
+                
+                container.innerHTML += `
+                    <div class="summary-card">
+                        <h4>
+                            <span>${emp.employee_name || 'Funcionario'}</span>
+                            <span class="summary-total">R$ ${empTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                        </h4>
+                        <div class="items-grid">${itemsHtml}</div>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('grand-total-amount').textContent = `R$ ${grandTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+            document.getElementById('summary-content').style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Erro ao carregar resumo:', error);
+    } finally {
+        document.getElementById('summary-loading').classList.remove('active');
+    }
+}
+
+function viewPeriodSummary(periodId) {
+    showTab('resumo');
+    setTimeout(() => {
+        document.getElementById('periodo-select').value = periodId;
+        loadSummary();
+    }, 100);
+}
+
+// Folha de Pagamento functions
+let allCostCenters = [];
+
+function setPayrollDefaultDate() {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const dateStr = firstDay.toISOString().split('T')[0];
+    const periodoInput = document.getElementById('payroll-periodo');
+    if (periodoInput) {
+        periodoInput.value = dateStr;
+    }
+}
+
+async function loadAllCostCenters() {
+    try {
+        const response = await fetch('/integrations/senior/cost-centers');
+        const data = await response.json();
+        
+        if (data.status === 'ok' && data.data) {
+            allCostCenters = data.data;
+            renderCostCenterOptions(allCostCenters);
+            // Também renderiza para a aba de exportação para garantir que use a mesma lista com filtro de empresa
+            if (typeof renderExportCostCenterOptions === 'function') {
+                renderExportCostCenterOptions(allCostCenters);
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar centros de custo:', error);
+    }
+}
+
+function renderCostCenterOptions(centers) {
+    const select = document.getElementById('payroll-codccu');
+    if (!select) return;
+    
+    const selectedValues = Array.from(select.selectedOptions).map(opt => opt.value);
+    
+    select.innerHTML = '';
+    centers.forEach(ccu => {
+        const option = document.createElement('option');
+        option.value = ccu.codccu;
+        option.textContent = `${ccu.codccu} - ${ccu.nomccu || 'Sem nome'}`;
+        if (selectedValues.includes(String(ccu.codccu))) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    });
+}
+
+function updateSelectedCcusDisplay() {
+    const select = document.getElementById('payroll-codccu');
+    const container = document.getElementById('payroll-selected-ccus');
+    if (!select || !container) return;
+    
+    const selectedOptions = Array.from(select.selectedOptions);
+    
+    if (selectedOptions.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = selectedOptions.map(opt => `
+        <span style="background: var(--gold); color: var(--gray-900); padding: 0.2rem 0.5rem; font-size: 0.7rem; font-family: 'JetBrains Mono', monospace;">
+            ${opt.value}
+        </span>
+    `).join('');
+}
+
+function setupCostCenterFilter() {
+    const filterInput = document.getElementById('payroll-codccu-filter');
+    const select = document.getElementById('payroll-codccu');
+    if (!filterInput) return;
+    
+    filterInput.addEventListener('input', function() {
+        const filter = this.value.toLowerCase();
+        if (!filter) {
+            renderCostCenterOptions(allCostCenters);
+            return;
+        }
+        const filtered = allCostCenters.filter(ccu => {
+            const code = String(ccu.codccu).toLowerCase();
+            const name = (ccu.nomccu || '').toLowerCase();
+            return code.includes(filter) || name.includes(filter);
+        });
+        renderCostCenterOptions(filtered);
+    });
+    
+    if (select) {
+        select.addEventListener('mousedown', function(e) {
+            if (e.target.tagName === 'OPTION') {
+                e.preventDefault();
+                const option = e.target;
+                option.selected = !option.selected;
+                updateSelectedCcusDisplay();
+            }
+        });
+    }
+}
+
+async function loadPayroll() {
+    const periodo = document.getElementById('payroll-periodo').value;
+    const select = document.getElementById('payroll-codccu');
+    const selectedCcus = Array.from(select.selectedOptions).map(opt => opt.value);
+    
+    if (!periodo) {
+        alert('Selecione o periodo');
+        return;
+    }
+    if (selectedCcus.length === 0) {
+        alert('Selecione pelo menos um centro de custo');
+        return;
+    }
+    
+    document.getElementById('payroll-loading').classList.add('active');
+    document.getElementById('payroll-summary').style.display = 'none';
+    document.getElementById('payroll-container').style.display = 'none';
+    
+    try {
+        const ccuParams = selectedCcus.map(ccu => `codccu=${encodeURIComponent(ccu)}`).join('&');
+        const url = `/integrations/senior/payroll?periodo=${periodo}&${ccuParams}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.status === 'ok') {
+            document.getElementById('payroll-total-func').textContent = data.total_funcionarios || 0;
+            document.getElementById('payroll-total-eventos').textContent = data.total_eventos || 0;
+            document.getElementById('payroll-ccu').textContent = selectedCcus.length > 1 ? `${selectedCcus.length} selecionados` : selectedCcus[0];
+            document.getElementById('payroll-summary').style.display = 'block';
+            
+            renderPayrollCards(data.funcionarios || []);
+            document.getElementById('payroll-container').style.display = 'block';
+        } else {
+            alert('Erro: ' + (data.message || 'Erro desconhecido'));
+        }
+    } catch (error) {
+        alert('Erro ao consultar folha: ' + error.message);
+    } finally {
+        document.getElementById('payroll-loading').classList.remove('active');
+    }
+}
+
+function renderPayrollCards(funcionarios) {
+    const container = document.getElementById('payroll-cards');
+    container.innerHTML = '';
+    
+    if (!funcionarios.length) {
+        container.innerHTML = '<p style="color: var(--gray-400); text-align: center;">Nenhum funcionario encontrado</p>';
+        return;
+    }
+    
+    funcionarios.forEach(emp => {
+        const card = document.createElement('div');
+        card.style.cssText = 'background: var(--gray-700); margin-bottom: 1rem; padding: 1rem;';
+        
+        let eventsHtml = '';
+        if (emp.eventos && emp.eventos.length) {
+            emp.eventos.forEach(ev => {
+                const valor = parseFloat(ev.valor_evento || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                eventsHtml += `
+                    <div style="background: var(--gray-800); padding: 0.5rem; display: flex; justify-content: space-between; font-size: 0.75rem;">
+                        <span style="color: var(--gray-300); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${ev.descricao_evento || ev.codigo_evento}</span>
+                        <span style="color: var(--gold); font-family: 'JetBrains Mono', monospace; margin-left: 0.5rem;">R$ ${valor}</span>
+                    </div>
+                `;
+            });
+        }
+        
+        const salario = parseFloat(emp.salario || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+        
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--gray-600);">
+                <div style="flex: 1;">
+                    <div style="color: var(--gold); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">Mat. ${emp.matricula}</div>
+                    <div style="color: var(--gray-100); font-weight: 600; font-size: 1rem; margin-top: 0.25rem;">${emp.nome_funcionario || '-'}</div>
+                    <div style="color: var(--gray-400); font-size: 0.8rem;">${emp.cargo || '-'}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Salario Base</div>
+                    <div style="color: var(--gold); font-size: 1rem; font-weight: 600; font-family: 'JetBrains Mono', monospace;">R$ ${salario}</div>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem;">
+                ${eventsHtml}
+            </div>
+        `;
+        
+        container.appendChild(card);
+    });
+}
+
+function downloadPayrollExcel() {
+    const periodo = document.getElementById('payroll-periodo').value;
+    const select = document.getElementById('payroll-codccu');
+    const selectedCcus = Array.from(select.selectedOptions).map(opt => opt.value);
+    
+    if (!periodo) {
+        alert('Selecione o periodo');
+        return;
+    }
+    if (selectedCcus.length === 0) {
+        alert('Selecione pelo menos um centro de custo');
+        return;
+    }
+    
+    const ccuParams = selectedCcus.map(ccu => `codccu=${encodeURIComponent(ccu)}`).join('&');
+    window.location.href = `/integrations/senior/payroll/export?periodo=${periodo}&${ccuParams}`;
+}
+
+// Initialize payroll tab on load
+document.addEventListener('DOMContentLoaded', function() {
+    setPayrollDefaultDate();
+    setExportDefaultDate();
+    loadAllCostCenters();
+    setupCostCenterFilter();
+    setupAVCostCenterFilter();
+    setupExportCostCenterFilter();
+    setupExportMultiSelect();
+    checkExamsStatus();
+    checkBenefitsStatus();
+    checkFlashStatus();
+    checkIfoodStatus();
+    initExamsTab();
+});
+
+function setExportDefaultDate() {
+    const today = new Date();
+    today.setMonth(today.getMonth() - 1);
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('export-periodo').value = firstDay.toISOString().split('T')[0];
+}
+
+function renderExportCostCenterOptions(centers) {
+    const select = document.getElementById('export-codccu');
+    if (!select) return;
+    select.innerHTML = '';
+    centers.forEach(ccu => {
+        const option = document.createElement('option');
+        option.value = ccu.codccu;
+        option.dataset.nome = ccu.nomccu || '';
+        option.textContent = `${ccu.codccu} - ${ccu.nomccu || 'Sem nome'}`;
+        select.appendChild(option);
+    });
+}
+
+function setupExportCostCenterFilter() {
+    const filterInput = document.getElementById('export-codccu-filter');
+    if (!filterInput) return;
+    
+    const waitForCenters = setInterval(() => {
+        if (allCostCenters.length > 0) {
+            clearInterval(waitForCenters);
+            renderExportCostCenterOptions(allCostCenters);
+        }
+    }, 100);
+    
+    filterInput.addEventListener('input', function() {
+        const filter = this.value.toLowerCase();
+        if (!filter) {
+            renderExportCostCenterOptions(allCostCenters);
+            return;
+        }
+        const filtered = allCostCenters.filter(ccu => {
+            const code = String(ccu.codccu).toLowerCase();
+            const name = (ccu.nomccu || '').toLowerCase();
+            return code.includes(filter) || name.includes(filter);
+        });
+        renderExportCostCenterOptions(filtered);
+    });
+}
+
+function downloadBillingExport() {
+    const periodo = document.getElementById('export-periodo').value;
+    const select = document.getElementById('export-codccu');
+    const selectedOptions = Array.from(select.selectedOptions).map(opt => opt.value).filter(v => v);
+    const modelo = document.getElementById('export-modelo').value;
+    
+    if (!periodo) {
+        alert('Selecione o periodo');
+        return;
+    }
+    if (selectedOptions.length === 0) {
+        alert('Selecione pelo menos um centro de custo');
+        return;
+    }
+    
+    document.getElementById('export-loading').classList.add('active');
+    
+    const codccuParams = selectedOptions.map(c => `codccu=${encodeURIComponent(c)}`).join('&');
+    window.location.href = `/integrations/senior/billing/export-${modelo}?periodo=${periodo}&${codccuParams}`;
+    
+    setTimeout(() => {
+        document.getElementById('export-loading').classList.remove('active');
+    }, 3000);
+}
+
+function setupExportMultiSelect() {
+    const select = document.getElementById('export-codccu');
+    if (!select) return;
+    
+    select.addEventListener('mousedown', function(e) {
+        if (e.target.tagName === 'OPTION') {
+            e.preventDefault();
+            const option = e.target;
+            option.selected = !option.selected;
+            updateExportSelectedCount();
+        }
+    });
+}
+
+function updateExportSelectedCount() {
+    const select = document.getElementById('export-codccu');
+    const countDiv = document.getElementById('export-selected-count');
+    if (!select || !countDiv) return;
+    
+    const count = Array.from(select.selectedOptions).filter(opt => opt.value).length;
+    countDiv.textContent = count > 0 ? `${count} centro(s) selecionado(s)` : '';
+}
+
+function selectAllExportCcus() {
+    const select = document.getElementById('export-codccu');
+    if (!select) return;
+    Array.from(select.options).forEach(opt => {
+        if (opt.value) opt.selected = true;
+    });
+    updateExportSelectedCount();
+}
+
+function deselectAllExportCcus() {
+    const select = document.getElementById('export-codccu');
+    if (!select) return;
+    Array.from(select.options).forEach(opt => opt.selected = false);
+    updateExportSelectedCount();
+}
+
+// ===================== FOLHA SENIOR =====================
+
+function renderSeniorCostCenterOptions(centers) {
+    const select = document.getElementById('senior-codccu');
+    if (!select) return;
+    select.innerHTML = '';
+    centers.forEach(ccu => {
+        const option = document.createElement('option');
+        option.value = ccu.codccu;
+        option.dataset.nome = ccu.nomccu || '';
+        option.textContent = `${ccu.codccu} - ${ccu.nomccu || 'Sem nome'}`;
+        select.appendChild(option);
+    });
+}
+
+function setupSeniorCostCenterFilter() {
+    const filterInput = document.getElementById('senior-codccu-filter');
+    if (!filterInput) return;
+
+    const waitForCenters = setInterval(() => {
+        if (allCostCenters.length > 0) {
+            clearInterval(waitForCenters);
+            renderSeniorCostCenterOptions(allCostCenters);
+        }
+    }, 100);
+
+    filterInput.addEventListener('input', function() {
+        const filter = this.value.toLowerCase();
+        if (!filter) {
+            renderSeniorCostCenterOptions(allCostCenters);
+            return;
+        }
+        const filtered = allCostCenters.filter(ccu => {
+            const code = String(ccu.codccu).toLowerCase();
+            const name = (ccu.nomccu || '').toLowerCase();
+            return code.includes(filter) || name.includes(filter);
+        });
+        renderSeniorCostCenterOptions(filtered);
+    });
+}
+
+function setupSeniorMultiSelect() {
+    const select = document.getElementById('senior-codccu');
+    if (!select) return;
+
+    select.addEventListener('mousedown', function(e) {
+        if (e.target.tagName === 'OPTION') {
+            e.preventDefault();
+            e.target.selected = !e.target.selected;
+            updateSeniorSelectedCount();
+        }
+    });
+}
+
+function updateSeniorSelectedCount() {
+    const select = document.getElementById('senior-codccu');
+    const countDiv = document.getElementById('senior-selected-count');
+    if (!select || !countDiv) return;
+    const count = Array.from(select.selectedOptions).filter(opt => opt.value).length;
+    countDiv.textContent = count > 0 ? `${count} centro(s) selecionado(s)` : '';
+}
+
+function selectAllSeniorCcus() {
+    const select = document.getElementById('senior-codccu');
+    if (!select) return;
+    Array.from(select.options).forEach(opt => { if (opt.value) opt.selected = true; });
+    updateSeniorSelectedCount();
+}
+
+function deselectAllSeniorCcus() {
+    const select = document.getElementById('senior-codccu');
+    if (!select) return;
+    Array.from(select.options).forEach(opt => opt.selected = false);
+    updateSeniorSelectedCount();
+}
+
+function setExportSeniorDefaultDate() {
+    const today = new Date();
+    today.setMonth(today.getMonth() - 1);
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const el = document.getElementById('senior-periodo');
+    if (el) el.value = firstDay.toISOString().split('T')[0];
+}
+
+function downloadSeniorExport() {
+    const periodo = document.getElementById('senior-periodo').value;
+    const select = document.getElementById('senior-codccu');
+    const selectedOptions = Array.from(select.selectedOptions).map(opt => opt.value).filter(v => v);
+
+    if (!periodo) {
+        alert('Selecione o período');
+        return;
+    }
+    if (selectedOptions.length === 0) {
+        alert('Selecione pelo menos um centro de custo');
+        return;
+    }
+
+    const loading = document.getElementById('senior-loading');
+    if (loading) loading.style.display = 'block';
+
+    const codccuParams = selectedOptions.map(c => `codccu=${encodeURIComponent(c)}`).join('&');
+    window.location.href = `/integrations/senior/payroll/export-senior?periodo=${periodo}&${codccuParams}`;
+
+    setTimeout(() => {
+        if (loading) loading.style.display = 'none';
+    }, 5000);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    setExportSeniorDefaultDate();
+    setupSeniorCostCenterFilter();
+    setupSeniorMultiSelect();
+});
+
+// ===================== END FOLHA SENIOR =====================
+
+// Exams upload functions
+async function uploadExamsFile() {
+    const fileInput = document.getElementById('exams-file');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Selecione um arquivo de exames');
+        return;
+    }
+    
+    const loading = document.getElementById('exams-loading');
+    loading.classList.add('active');
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const response = await fetch('/integrations/senior/exams/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            updateExamsStatus(data.funcionarios, data.total_exames);
+            alert(`Planilha importada: ${data.funcionarios} funcionarios, total R$ ${data.total_exames.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`);
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    } catch (error) {
+        alert('Erro ao importar planilha: ' + error.message);
+    } finally {
+        loading.classList.remove('active');
+    }
+}
+
+async function clearExamsData() {
+    if (!confirm('Limpar dados de exames importados?')) return;
+    
+    try {
+        const response = await fetch('/integrations/senior/exams/clear', {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            document.getElementById('exams-status').style.display = 'none';
+            document.getElementById('exams-file').value = '';
+            alert('Dados de exames removidos');
+        }
+    } catch (error) {
+        alert('Erro: ' + error.message);
+    }
+}
+
+function updateExamsStatus(count, total) {
+    const statusDiv = document.getElementById('exams-status');
+    document.getElementById('exams-count').textContent = count;
+    document.getElementById('exams-total').textContent = `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    statusDiv.style.display = 'block';
+}
+
+async function checkExamsStatus() {
+    try {
+        const response = await fetch('/integrations/senior/exams/status');
+        const data = await response.json();
+        
+        if (data.has_data) {
+            updateExamsStatus(data.funcionarios, data.total_exames);
+        }
+    } catch (error) {
+        console.error('Erro ao verificar status de exames:', error);
+    }
+}
+
+// Benefits upload functions
+async function uploadBenefitsFile() {
+    const fileInput = document.getElementById('benefits-file');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Selecione um arquivo CSV de beneficios');
+        return;
+    }
+    
+    const loading = document.getElementById('benefits-loading');
+    loading.classList.add('active');
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const response = await fetch('/integrations/senior/benefits/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            updateBenefitsStatus(data.funcionarios, data.total_beneficios);
+            alert(`CSV importado: ${data.funcionarios} funcionarios, total R$ ${data.total_beneficios.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`);
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    } catch (error) {
+        alert('Erro ao importar CSV: ' + error.message);
+    } finally {
+        loading.classList.remove('active');
+    }
+}
+
+async function clearBenefitsData() {
+    if (!confirm('Limpar dados de beneficios importados?')) return;
+    
+    try {
+        const response = await fetch('/integrations/senior/benefits/clear', {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            document.getElementById('benefits-status').style.display = 'none';
+            document.getElementById('benefits-file').value = '';
+            alert('Dados de beneficios removidos');
+        }
+    } catch (error) {
+        alert('Erro: ' + error.message);
+    }
+}
+
+function updateBenefitsStatus(count, total) {
+    const statusDiv = document.getElementById('benefits-status');
+    document.getElementById('benefits-count').textContent = count;
+    document.getElementById('benefits-total').textContent = `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    statusDiv.style.display = 'block';
+}
+
+async function checkBenefitsStatus() {
+    try {
+        const response = await fetch('/integrations/senior/benefits/status');
+        const data = await response.json();
+        
+        if (data.has_data) {
+            updateBenefitsStatus(data.funcionarios, data.total_beneficios);
+        }
+    } catch (error) {
+        console.error('Erro ao verificar status de beneficios:', error);
+    }
+}
+
+// Flash upload functions
+async function uploadFlashFile() {
+    const fileInput = document.getElementById('flash-file');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Selecione um arquivo CSV Flash');
+        return;
+    }
+    
+    const loading = document.getElementById('flash-loading');
+    loading.classList.add('active');
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const response = await fetch('/integrations/senior/flash/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            updateFlashStatus(data.funcionarios, data.total_flash);
+            alert(`CSV Flash importado: ${data.funcionarios} funcionarios, total R$ ${data.total_flash.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`);
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    } catch (error) {
+        alert('Erro ao importar CSV: ' + error.message);
+    } finally {
+        loading.classList.remove('active');
+    }
+}
+
+async function clearFlashData() {
+    if (!confirm('Limpar dados Flash importados?')) return;
+    
+    try {
+        const response = await fetch('/integrations/senior/flash/clear', {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            document.getElementById('flash-status').style.display = 'none';
+            document.getElementById('flash-file').value = '';
+            alert('Dados Flash removidos');
+        }
+    } catch (error) {
+        alert('Erro: ' + error.message);
+    }
+}
+
+function updateFlashStatus(count, total) {
+    const statusDiv = document.getElementById('flash-status');
+    document.getElementById('flash-count').textContent = count;
+    document.getElementById('flash-total').textContent = `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    statusDiv.style.display = 'block';
+}
+
+async function checkFlashStatus() {
+    try {
+        const response = await fetch('/integrations/senior/flash/status');
+        const data = await response.json();
+        
+        if (data.has_data) {
+            updateFlashStatus(data.funcionarios, data.total_flash);
+        }
+    } catch (error) {
+        console.error('Erro ao verificar status Flash:', error);
+    }
+}
+
+// iFood upload functions
+async function uploadIfoodFile() {
+    const fileInput = document.getElementById('ifood-file');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Selecione um arquivo CSV iFood');
+        return;
+    }
+    
+    const loading = document.getElementById('ifood-loading');
+    loading.classList.add('active');
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const response = await fetch('/integrations/senior/ifood/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            updateIfoodStatus(data.funcionarios, data.total_ifood);
+            alert(`CSV iFood importado: ${data.funcionarios} funcionarios, total R$ ${data.total_ifood.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`);
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    } catch (error) {
+        alert('Erro ao importar CSV: ' + error.message);
+    } finally {
+        loading.classList.remove('active');
+    }
+}
+
+async function clearIfoodData() {
+    if (!confirm('Limpar dados iFood importados?')) return;
+    
+    try {
+        const response = await fetch('/integrations/senior/ifood/clear', {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            document.getElementById('ifood-status').style.display = 'none';
+            document.getElementById('ifood-file').value = '';
+            alert('Dados iFood removidos');
+        }
+    } catch (error) {
+        alert('Erro: ' + error.message);
+    }
+}
+
+function updateIfoodStatus(count, total) {
+    const statusDiv = document.getElementById('ifood-status');
+    document.getElementById('ifood-count').textContent = count;
+    document.getElementById('ifood-total').textContent = `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+    statusDiv.style.display = 'block';
+}
+
+async function checkIfoodStatus() {
+    try {
+        const response = await fetch('/integrations/senior/ifood/status');
+        const data = await response.json();
+        
+        if (data.has_data) {
+            updateIfoodStatus(data.funcionarios, data.total_ifood);
+        }
+    } catch (error) {
+        console.error('Erro ao verificar status iFood:', error);
+    }
+}
+
+// Additional Values functions
+function renderAVCostCenterOptions(centers) {
+    const select = document.getElementById('av-codccu');
+    if (!select) return;
+    select.innerHTML = '';
+    centers.forEach(ccu => {
+        const option = document.createElement('option');
+        option.value = ccu.codccu;
+        option.dataset.nome = ccu.nomccu || '';
+        option.textContent = `${ccu.codccu} - ${ccu.nomccu || 'Sem nome'}`;
+        select.appendChild(option);
+    });
+}
+
+function setupAVCostCenterFilter() {
+    const filterInput = document.getElementById('av-codccu-filter');
+    if (!filterInput) return;
+    
+    const waitForCenters = setInterval(() => {
+        if (allCostCenters.length > 0) {
+            clearInterval(waitForCenters);
+            renderAVCostCenterOptions(allCostCenters);
+        }
+    }, 100);
+    
+    filterInput.addEventListener('input', function() {
+        const filter = this.value.toLowerCase();
+        if (!filter) {
+            renderAVCostCenterOptions(allCostCenters);
+            return;
+        }
+        const filtered = allCostCenters.filter(ccu => {
+            const code = String(ccu.codccu).toLowerCase();
+            const name = (ccu.nomccu || '').toLowerCase();
+            return code.includes(filter) || name.includes(filter);
+        });
+        renderAVCostCenterOptions(filtered);
+    });
+}
+
+async function loadAdditionalValues() {
+    document.getElementById('av-loading').classList.add('active');
+    document.getElementById('av-list').innerHTML = '';
+    document.getElementById('av-empty').style.display = 'none';
+    
+    try {
+        const response = await fetch(`/api/billing/additional-values?token=${token}`);
+        const data = await response.json();
+        
+        if (data.status === 'ok' && data.data) {
+            if (data.data.length === 0) {
+                document.getElementById('av-empty').style.display = 'block';
+            } else {
+                renderAdditionalValuesList(data.data);
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar valores adicionais:', error);
+    } finally {
+        document.getElementById('av-loading').classList.remove('active');
+    }
+}
+
+function renderAdditionalValuesList(values) {
+    const container = document.getElementById('av-list');
+    container.innerHTML = '';
+    
+    values.forEach(v => {
+        const valorFormatado = parseFloat(v.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+        const card = document.createElement('div');
+        card.id = `av-item-${v.id}`;
+        card.style.cssText = 'background: var(--gray-700); padding: 1rem; margin-bottom: 0.75rem;';
+        card.innerHTML = `
+            <div class="av-display" style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1;">
+                    <div style="display: flex; gap: 1rem; align-items: baseline;">
+                        <span style="color: var(--gold); font-family: 'JetBrains Mono', monospace; font-weight: 600;">${v.codccu}</span>
+                        <span style="color: var(--gray-300); font-size: 0.875rem;">${v.nome_ccu || ''}</span>
+                    </div>
+                    <div style="color: var(--gray-400); font-size: 0.75rem; margin-top: 0.25rem;">${v.descricao || '-'}</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="color: var(--gold); font-size: 1.25rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;">R$ ${valorFormatado}</span>
+                    <button onclick="showEditForm(${v.id}, '${v.valor}', '${(v.descricao || '').replace(/'/g, "\\'")}', '${v.codccu}', '${(v.nome_ccu || '').replace(/'/g, "\\'")}')" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.75rem;">
+                        Editar
+                    </button>
+                    <button onclick="deleteAdditionalValue(${v.id})" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.75rem; color: var(--error); border-color: var(--error);">
+                        Remover
+                    </button>
+                </div>
+            </div>
+            <div class="av-edit" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--gray-600);">
+                <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: end;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.75rem;">Valor (R$)</label>
+                        <input type="number" id="edit-valor-${v.id}" step="0.01" min="0" value="${v.valor}">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.75rem;">Descricao</label>
+                        <input type="text" id="edit-descricao-${v.id}" value="${v.descricao || ''}">
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="saveEditAdditionalValue(${v.id})" class="btn" style="padding: 0.5rem 1rem; font-size: 0.75rem;">
+                            Salvar
+                        </button>
+                        <button onclick="cancelEditForm(${v.id})" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.75rem;">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+function showEditForm(id, valor, descricao, codccu, nomeCcu) {
+    const card = document.getElementById(`av-item-${id}`);
+    if (!card) return;
+    card.querySelector('.av-display').style.display = 'none';
+    card.querySelector('.av-edit').style.display = 'block';
+}
+
+function cancelEditForm(id) {
+    const card = document.getElementById(`av-item-${id}`);
+    if (!card) return;
+    card.querySelector('.av-display').style.display = 'flex';
+    card.querySelector('.av-edit').style.display = 'none';
+}
+
+async function saveEditAdditionalValue(id) {
+    const valor = document.getElementById(`edit-valor-${id}`).value;
+    const descricao = document.getElementById(`edit-descricao-${id}`).value;
+    
+    if (!valor || parseFloat(valor) <= 0) {
+        alert('Informe um valor valido');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/billing/additional-values/${id}?token=${token}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                valor: parseFloat(valor),
+                descricao: descricao
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'ok') {
+            loadAdditionalValues();
+        } else {
+            alert('Erro ao atualizar valor adicional');
+        }
+    } catch (error) {
+        alert('Erro ao atualizar valor adicional: ' + error.message);
+    }
+}
+
+async function createAdditionalValue() {
+    const select = document.getElementById('av-codccu');
+    const codccu = select.value;
+    const nome_ccu = select.selectedOptions[0]?.dataset.nome || '';
+    const valor = document.getElementById('av-valor').value;
+    const descricao = document.getElementById('av-descricao').value;
+    
+    if (!codccu) {
+        alert('Selecione o centro de custo');
+        return;
+    }
+    if (!valor || parseFloat(valor) <= 0) {
+        alert('Informe um valor valido');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/billing/additional-values?token=${token}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                codccu: codccu,
+                nome_ccu: nome_ccu,
+                descricao: descricao,
+                valor: parseFloat(valor)
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'ok') {
+            document.getElementById('av-valor').value = '';
+            document.getElementById('av-descricao').value = '';
+            loadAdditionalValues();
+        } else {
+            alert('Erro ao criar valor adicional');
+        }
+    } catch (error) {
+        alert('Erro ao criar valor adicional: ' + error.message);
+    }
+}
+
+async function deleteAdditionalValue(id) {
+    if (!confirm('Deseja remover este valor adicional?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/billing/additional-values/${id}?token=${token}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'ok') {
+            loadAdditionalValues();
+        } else {
+            alert('Erro ao remover valor adicional');
+        }
+    } catch (error) {
+        alert('Erro ao remover valor adicional: ' + error.message);
+    }
+}
+
+// ===== EXAMES MEDICOS TAB =====
+let examEmployees = [];
+let examCurrentPage = 1;
+let examFilterTimeout = null;
+
+function initExamsTab() {
+    const today = new Date().toISOString().split('T')[0];
+    const dataInput = document.getElementById('exam-data');
+    if (dataInput) dataInput.value = today;
+
+    document.querySelectorAll('.exam-value-input').forEach(input => {
+        input.addEventListener('input', updateExamTotal);
+    });
+
+    const listFilter = document.getElementById('exam-list-filter');
+    if (listFilter) {
+        listFilter.addEventListener('input', function() {
+            clearTimeout(examFilterTimeout);
+            examFilterTimeout = setTimeout(() => {
+                examCurrentPage = 1;
+                loadExamList();
+            }, 400);
+        });
+    }
+
+    setupExamFuncFilter();
+    loadExamList();
+}
+
+async function loadExamEmployees() {
+    if (examEmployees.length > 0) return;
+    try {
+        const response = await fetch('/integrations/senior/employees');
+        const data = await response.json();
+        if (data.status === 'ok' && data.data) {
+            examEmployees = data.data;
+        }
+    } catch (error) {
+        console.error('Erro ao carregar funcionarios:', error);
+    }
+}
+
+function setupExamFuncFilter() {
+    const filterInput = document.getElementById('exam-func-filter');
+    const select = document.getElementById('exam-func-select');
+    if (!filterInput || !select) return;
+
+    filterInput.addEventListener('input', async function() {
+        const filter = this.value.toLowerCase().trim();
+        if (filter.length < 2) {
+            select.style.display = 'none';
+            return;
+        }
+
+        await loadExamEmployees();
+
+        const filtered = examEmployees.filter(emp => {
+            const name = (emp.NOMFUN || emp.nomfun || '').toLowerCase();
+            return name.includes(filter);
+        });
+
+        select.innerHTML = '';
+        filtered.slice(0, 50).forEach(emp => {
+            const option = document.createElement('option');
+            const name = emp.NOMFUN || emp.nomfun || '';
+            const numcad = emp.NUMCAD || emp.numcad || '';
+            option.value = name;
+            option.dataset.numcad = numcad;
+            option.textContent = `${numcad} - ${name}`;
+            select.appendChild(option);
+        });
+
+        select.style.display = filtered.length > 0 ? 'block' : 'none';
+    });
+
+    select.addEventListener('change', function() {
+        const selected = this.selectedOptions[0];
+        if (selected) {
+            filterInput.value = selected.value;
+            document.getElementById('exam-numcad').value = selected.dataset.numcad || '';
+            document.getElementById('exam-func-selected').textContent = selected.textContent;
+            select.style.display = 'none';
+        }
+    });
+
+    select.addEventListener('dblclick', function() {
+        const selected = this.selectedOptions[0];
+        if (selected) {
+            filterInput.value = selected.value;
+            document.getElementById('exam-numcad').value = selected.dataset.numcad || '';
+            document.getElementById('exam-func-selected').textContent = selected.textContent;
+            select.style.display = 'none';
+        }
+    });
+}
+
+function updateExamTotal() {
+    const fields = ['clinic','audio','acuid','hemo','lipidograma','rx_coluna','met_e_cet','acet_u','hg','retic','ac_trans','eeg','ecg','etanol','glice','gama_gt','tgp','rx_torax','espiro','rx_lomb','aval_psicossocial'];
+    let total = 0;
+    fields.forEach(f => {
+        const val = parseFloat(document.getElementById('exam-' + f).value) || 0;
+        total += val;
+    });
+    document.getElementById('exam-total-display').textContent = 'R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+}
+
+function toggleExamForm() {
+    const container = document.getElementById('exam-form-container');
+    if (container.style.display === 'none') {
+        container.style.display = 'block';
+        document.getElementById('btn-toggle-exam-form').textContent = 'Fechar';
+        resetExamForm();
+    } else {
+        container.style.display = 'none';
+        document.getElementById('btn-toggle-exam-form').textContent = 'Novo Exame';
+    }
+}
+
+function resetExamForm() {
+    document.getElementById('exam-edit-id').value = '';
+    document.getElementById('exam-func-filter').value = '';
+    document.getElementById('exam-func-selected').textContent = '';
+    document.getElementById('exam-numcad').value = '';
+    document.getElementById('exam-data').value = new Date().toISOString().split('T')[0];
+    document.getElementById('exam-func-select').style.display = 'none';
+    document.getElementById('exames-form-title').textContent = 'Cadastrar Exame Medico';
+
+    const fields = ['clinic','audio','acuid','hemo','lipidograma','rx_coluna','met_e_cet','acet_u','hg','retic','ac_trans','eeg','ecg','etanol','glice','gama_gt','tgp','rx_torax','espiro','rx_lomb','aval_psicossocial'];
+    fields.forEach(f => {
+        document.getElementById('exam-' + f).value = '0';
+    });
+    updateExamTotal();
+}
+
+function cancelExamEdit() {
+    document.getElementById('exam-form-container').style.display = 'none';
+    document.getElementById('btn-toggle-exam-form').textContent = 'Novo Exame';
+    resetExamForm();
+}
+
+function getExamFormData() {
+    const fields = ['clinic','audio','acuid','hemo','lipidograma','rx_coluna','met_e_cet','acet_u','hg','retic','ac_trans','eeg','ecg','etanol','glice','gama_gt','tgp','rx_torax','espiro','rx_lomb','aval_psicossocial'];
+    const data = {
+        nome_funcionario: document.getElementById('exam-func-filter').value.trim(),
+        numcad: parseInt(document.getElementById('exam-numcad').value) || null,
+        data_exame: document.getElementById('exam-data').value,
+    };
+
+    let total = 0;
+    fields.forEach(f => {
+        const val = parseFloat(document.getElementById('exam-' + f).value) || 0;
+        data[f] = val;
+        total += val;
+    });
+    data.total = Math.round(total * 100) / 100;
+    return data;
+}
+
+async function saveExam() {
+    const data = getExamFormData();
+
+    if (!data.nome_funcionario) {
+        alert('Selecione um funcionario');
+        return;
+    }
+    if (!data.data_exame) {
+        alert('Informe a data do exame');
+        return;
+    }
+
+    const loading = document.getElementById('exam-save-loading');
+    loading.classList.add('active');
+
+    const editId = document.getElementById('exam-edit-id').value;
+    const isEdit = editId !== '';
+
+    try {
+        const url = isEdit ? `/api/medical-exams/${editId}` : '/api/medical-exams';
+        const method = isEdit ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            alert(isEdit ? 'Exame atualizado com sucesso!' : 'Exame cadastrado com sucesso!');
+            cancelExamEdit();
+            loadExamList();
+        } else {
+            alert('Erro: ' + (result.message || 'Erro desconhecido'));
+        }
+    } catch (error) {
+        alert('Erro ao salvar exame: ' + error.message);
+    } finally {
+        loading.classList.remove('active');
+    }
+}
+
+async function loadExamList() {
+    const loading = document.getElementById('exam-list-loading');
+    loading.classList.add('active');
+
+    const filterName = document.getElementById('exam-list-filter').value.trim();
+
+    try {
+        let url = `/api/medical-exams?page=${examCurrentPage}&per_page=20`;
+        if (filterName) url += `&nome=${encodeURIComponent(filterName)}`;
+
+        const response = await fetch(url);
+        const result = await response.json();
+
+        if (result.status === 'ok') {
+            renderExamList(result.data);
+            renderExamPagination(result.page, result.total_pages, result.total);
+        }
+    } catch (error) {
+        console.error('Erro ao carregar exames:', error);
+    } finally {
+        loading.classList.remove('active');
+    }
+}
+
+function renderExamList(exams) {
+    const tbody = document.getElementById('exam-list-tbody');
+    tbody.innerHTML = '';
+
+    if (!exams.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--gray-400); padding: 2rem;">Nenhum exame encontrado</td></tr>';
+        return;
+    }
+
+    exams.forEach(exam => {
+        const tr = document.createElement('tr');
+        tr.style.cssText = 'border-bottom: 1px solid var(--gray-700);';
+
+        const dataFormatada = exam.data_exame ? new Date(exam.data_exame + 'T00:00:00').toLocaleDateString('pt-BR') : '-';
+        const totalFormatado = (exam.total || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+
+        tr.innerHTML = `
+            <td style="padding: 0.75rem 0.5rem; color: var(--gray-200); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;" title="${exam.nome_funcionario}">${exam.nome_funcionario}</td>
+            <td style="padding: 0.75rem 0.5rem; text-align: center; color: var(--gray-300); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">${dataFormatada}</td>
+            <td style="padding: 0.75rem 0.5rem; text-align: right; color: var(--gold); font-family: 'JetBrains Mono', monospace; font-weight: 600;">R$ ${totalFormatado}</td>
+            <td style="padding: 0.75rem 0.5rem; text-align: center; white-space: nowrap;">
+                <button onclick="editExam(${exam.id})" style="background: none; border: 1px solid var(--gold); color: var(--gold); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.7rem; font-family: 'Space Grotesk', sans-serif; margin-right: 0.25rem;">Editar</button>
+                <button onclick="deleteExam(${exam.id})" style="background: none; border: 1px solid var(--error); color: var(--error); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.7rem; font-family: 'Space Grotesk', sans-serif;">Excluir</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderExamPagination(currentPage, totalPages, total) {
+    const container = document.getElementById('exam-pagination');
+    const info = document.getElementById('exam-list-info');
+    container.innerHTML = '';
+
+    if (totalPages <= 1) {
+        info.textContent = total > 0 ? `${total} exame(s) encontrado(s)` : '';
+        return;
+    }
+
+    info.textContent = `Pagina ${currentPage} de ${totalPages} (${total} exames)`;
+
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'btn btn-outline';
+    prevBtn.style.cssText = 'font-size: 0.75rem; padding: 0.4rem 0.8rem;';
+    prevBtn.textContent = 'Anterior';
+    prevBtn.disabled = currentPage <= 1;
+    prevBtn.onclick = () => { examCurrentPage--; loadExamList(); };
+    container.appendChild(prevBtn);
+
+    const pageInfo = document.createElement('span');
+    pageInfo.style.cssText = 'color: var(--gold); font-family: "JetBrains Mono", monospace; font-size: 0.85rem;';
+    pageInfo.textContent = `${currentPage} / ${totalPages}`;
+    container.appendChild(pageInfo);
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'btn btn-outline';
+    nextBtn.style.cssText = 'font-size: 0.75rem; padding: 0.4rem 0.8rem;';
+    nextBtn.textContent = 'Proximo';
+    nextBtn.disabled = currentPage >= totalPages;
+    nextBtn.onclick = () => { examCurrentPage++; loadExamList(); };
+    container.appendChild(nextBtn);
+}
+
+async function editExam(id) {
+    try {
+        const response = await fetch(`/api/medical-exams/${id}`);
+        const result = await response.json();
+
+        if (result.status !== 'ok') {
+            alert('Erro ao carregar exame');
+            return;
+        }
+
+        const exam = result.data;
+
+        document.getElementById('exam-form-container').style.display = 'block';
+        document.getElementById('btn-toggle-exam-form').textContent = 'Fechar';
+        document.getElementById('exames-form-title').textContent = 'Editar Exame Medico';
+        document.getElementById('exam-edit-id').value = exam.id;
+        document.getElementById('exam-func-filter').value = exam.nome_funcionario;
+        document.getElementById('exam-func-selected').textContent = exam.nome_funcionario;
+        document.getElementById('exam-numcad').value = exam.numcad || '';
+        document.getElementById('exam-data').value = exam.data_exame || '';
+
+        const fields = ['clinic','audio','acuid','hemo','lipidograma','rx_coluna','met_e_cet','acet_u','hg','retic','ac_trans','eeg','ecg','etanol','glice','gama_gt','tgp','rx_torax','espiro','rx_lomb','aval_psicossocial'];
+        fields.forEach(f => {
+            document.getElementById('exam-' + f).value = exam[f] || 0;
+        });
+
+        updateExamTotal();
+
+        document.getElementById('exames-medicos').scrollIntoView({behavior: 'smooth'});
+    } catch (error) {
+        alert('Erro ao carregar exame: ' + error.message);
+    }
+}
+
+async function deleteExam(id) {
+    if (!confirm('Deseja realmente excluir este exame?')) return;
+
+    try {
+        const response = await fetch(`/api/medical-exams/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            loadExamList();
+        } else {
+            alert('Erro ao excluir exame');
+        }
+    } catch (error) {
+        alert('Erro ao excluir exame: ' + error.message);
+    }
+}
+
+// ===== EPI COMPRAS TAB =====
+let epiCurrentPage = 1;
+let epiItemCounter = 0;
+let epiPendingFiles = [];
+
+function toggleEpiForm() {
+    const container = document.getElementById('epi-form-container');
+    const btn = document.getElementById('btn-toggle-epi-form');
+    if (container.style.display === 'none') {
+        container.style.display = 'block';
+        btn.textContent = 'Fechar';
+        if (!document.getElementById('epi-edit-id').value) {
+            addEpiItem();
+        }
+    } else {
+        cancelEpiForm();
+    }
+}
+
+function initEpiAnoSelect() {
+    const sel = document.getElementById('epi-ano');
+    if (sel.options.length <= 1) {
+        const currentYear = new Date().getFullYear();
+        for (let y = currentYear + 1; y >= currentYear - 5; y--) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y;
+            sel.appendChild(opt);
+        }
+    }
+}
+initEpiAnoSelect();
+
+function cancelEpiForm() {
+    document.getElementById('epi-form-container').style.display = 'none';
+    document.getElementById('btn-toggle-epi-form').textContent = 'Nova Compra';
+    document.getElementById('epi-form-title').textContent = 'Cadastrar Compra de EPIs';
+    document.getElementById('epi-edit-id').value = '';
+    document.getElementById('epi-empresa').value = 'FEMSA';
+    document.getElementById('epi-mes').value = '';
+    document.getElementById('epi-ano').value = '';
+    document.getElementById('epi-observacao').value = '';
+    document.getElementById('epi-items-container').innerHTML = '';
+    document.getElementById('epi-total-geral').textContent = 'R$ 0,00';
+    document.getElementById('epi-file-input').value = '';
+    document.getElementById('epi-files-list').innerHTML = '';
+    document.getElementById('epi-files-empty').style.display = 'block';
+    epiItemCounter = 0;
+    epiPendingFiles = [];
+}
+
+function onEpiFilesSelected(input) {
+    for (const file of input.files) {
+        epiPendingFiles.push(file);
+    }
+    input.value = '';
+    renderEpiFilesList();
+}
+
+function renderEpiFilesList() {
+    const container = document.getElementById('epi-files-list');
+    const empty = document.getElementById('epi-files-empty');
+    container.innerHTML = '';
+
+    if (epiPendingFiles.length === 0) {
+        empty.style.display = 'block';
+        return;
+    }
+    empty.style.display = 'none';
+
+    epiPendingFiles.forEach((file, idx) => {
+        const div = document.createElement('div');
+        div.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; border-bottom: 1px solid var(--gray-600);';
+        div.innerHTML = `
+            <span style="flex: 1;">${file.name}</span>
+            <span style="color: var(--gray-500); font-size: 0.75rem;">${(file.size / 1024).toFixed(1)} KB</span>
+            <button type="button" onclick="removeEpiPendingFile(${idx})" style="background: none; border: none; color: #ff6b6b; cursor: pointer; font-size: 1rem;">&#10005;</button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function removeEpiPendingFile(idx) {
+    epiPendingFiles.splice(idx, 1);
+    renderEpiFilesList();
+}
+
+function addEpiItem(descricao = '', quantidade = 1, valorUnitario = 0, valorTotal = 0) {
+    epiItemCounter++;
+    const container = document.getElementById('epi-items-container');
+    const div = document.createElement('div');
+    div.className = 'epi-item-row';
+    div.dataset.idx = epiItemCounter;
+    div.style.cssText = 'display: grid; grid-template-columns: 2fr 0.7fr 1fr 1fr auto; gap: 0.5rem; align-items: end; margin-bottom: 0.5rem; padding: 0.5rem; background: var(--gray-800); border-radius: 4px;';
+    div.innerHTML = `
+        <div class="form-group" style="margin-bottom:0">
+            <label style="font-size:0.7rem">Descricao</label>
+            <input type="text" class="epi-descricao" value="${descricao}" placeholder="Ex: Calca protetora">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+            <label style="font-size:0.7rem">Qtd</label>
+            <input type="number" class="epi-quantidade" value="${quantidade}" min="1" oninput="calcEpiItemTotal(this)">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+            <label style="font-size:0.7rem">Valor Unit.</label>
+            <input type="number" class="epi-valor-unitario" value="${valorUnitario}" step="0.01" min="0" oninput="calcEpiItemTotal(this)">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+            <label style="font-size:0.7rem">Valor Total</label>
+            <input type="number" class="epi-valor-total" value="${valorTotal}" step="0.01" readonly style="background: var(--gray-700); color: var(--gold); font-weight: 600;">
+        </div>
+        <button type="button" onclick="removeEpiItem(this)" style="background: none; border: none; color: #ff6b6b; cursor: pointer; font-size: 1.2rem; padding: 0.3rem;">&#10005;</button>
+    `;
+    container.appendChild(div);
+    updateEpiTotalGeral();
+}
+
+function calcEpiItemTotal(input) {
+    const row = input.closest('.epi-item-row');
+    const qtd = parseFloat(row.querySelector('.epi-quantidade').value) || 0;
+    const unit = parseFloat(row.querySelector('.epi-valor-unitario').value) || 0;
+    row.querySelector('.epi-valor-total').value = (qtd * unit).toFixed(2);
+    updateEpiTotalGeral();
+}
+
+function removeEpiItem(btn) {
+    btn.closest('.epi-item-row').remove();
+    updateEpiTotalGeral();
+}
+
+function updateEpiTotalGeral() {
+    let total = 0;
+    document.querySelectorAll('.epi-valor-total').forEach(input => {
+        total += parseFloat(input.value) || 0;
+    });
+    document.getElementById('epi-total-geral').textContent = 'R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function getEpiItems() {
+    const items = [];
+    document.querySelectorAll('.epi-item-row').forEach(row => {
+        const descricao = row.querySelector('.epi-descricao').value.trim();
+        const quantidade = parseInt(row.querySelector('.epi-quantidade').value) || 1;
+        const valorUnitario = parseFloat(row.querySelector('.epi-valor-unitario').value) || 0;
+        const valorTotal = parseFloat(row.querySelector('.epi-valor-total').value) || 0;
+        if (descricao) {
+            items.push({ descricao, quantidade, valor_unitario: valorUnitario, valor_total: valorTotal });
+        }
+    });
+    return items;
+}
+
+async function saveEpiPackage() {
+    const empresa = document.getElementById('epi-empresa').value;
+    const mes = document.getElementById('epi-mes').value;
+    const ano = document.getElementById('epi-ano').value;
+    const observacao = document.getElementById('epi-observacao').value.trim();
+    const editId = document.getElementById('epi-edit-id').value;
+    const items = getEpiItems();
+
+    if (!mes || !ano) {
+        alert('Selecione o mes e o ano');
+        return;
+    }
+    const mesAno = `${ano}-${mes}`;
+    if (items.length === 0) {
+        alert('Adicione pelo menos um item');
+        return;
+    }
+
+    const body = {
+        empresa,
+        mes_ano: mesAno + '-01',
+        observacao: observacao || null,
+        items
+    };
+
+    try {
+        let url = '/api/epi-purchases';
+        let method = 'POST';
+        if (editId) {
+            url += '/' + editId;
+            method = 'PUT';
+        }
+
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            const packageId = result.data.id;
+            if (epiPendingFiles.length > 0) {
+                for (const file of epiPendingFiles) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    await fetch(`/api/epi-purchases/${packageId}/documents`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                }
+            }
+            cancelEpiForm();
+            loadEpiPackages();
+        } else {
+            alert('Erro: ' + (result.message || 'Erro ao salvar'));
+        }
+    } catch (error) {
+        alert('Erro ao salvar: ' + error.message);
+    }
+}
+
+async function loadEpiPackages(page = 1) {
+    epiCurrentPage = page;
+    const loading = document.getElementById('epi-loading');
+    loading.classList.add('active');
+
+    try {
+        const response = await fetch(`/api/epi-purchases?page=${page}&per_page=20`);
+        const result = await response.json();
+
+        if (result.status === 'ok') {
+            renderEpiTable(result.data);
+            renderEpiPagination(result.page, result.total_pages, result.total);
+        }
+    } catch (error) {
+        console.error('Erro ao carregar compras EPI:', error);
+    } finally {
+        loading.classList.remove('active');
+    }
+}
+
+function renderEpiTable(packages) {
+    const tbody = document.getElementById('epi-table-body');
+    tbody.innerHTML = '';
+
+    if (!packages || packages.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--gray-400);">Nenhuma compra cadastrada</td></tr>';
+        return;
+    }
+
+    const meses = ['', 'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+    packages.forEach(pkg => {
+        const mesAnoDate = pkg.mes_ano ? new Date(pkg.mes_ano + 'T12:00:00') : null;
+        const mesAnoStr = mesAnoDate ? `${meses[mesAnoDate.getMonth() + 1]}/${mesAnoDate.getFullYear()}` : '-';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${pkg.empresa || '-'}</td>
+            <td>${mesAnoStr}</td>
+            <td>${pkg.items ? pkg.items.length : 0}</td>
+            <td style="color: var(--gold); font-weight: 600;">R$ ${(pkg.total_geral || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+            <td>
+                <div style="display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap;">
+                    <span style="font-size: 0.8rem;">${pkg.documents ? pkg.documents.length : 0} arquivo(s)</span>
+                    <button class="btn btn-outline" style="font-size: 0.65rem; padding: 0.2rem 0.5rem;" onclick="openDocUpload(${pkg.id})">Anexar</button>
+                </div>
+            </td>
+            <td>
+                <div style="display: flex; gap: 0.3rem;">
+                    <button class="btn btn-outline" style="font-size: 0.65rem; padding: 0.2rem 0.5rem;" onclick="viewEpiPackage(${pkg.id})">Ver</button>
+                    <button class="btn btn-outline" style="font-size: 0.65rem; padding: 0.2rem 0.5rem;" onclick="editEpiPackage(${pkg.id})">Editar</button>
+                    <button class="btn btn-outline" style="font-size: 0.65rem; padding: 0.2rem 0.5rem; color: #ff6b6b;" onclick="deleteEpiPackage(${pkg.id})">Excluir</button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function renderEpiPagination(currentPage, totalPages, total) {
+    const container = document.getElementById('epi-pagination');
+    const info = document.getElementById('epi-list-info');
+    container.innerHTML = '';
+
+    if (totalPages <= 1) {
+        info.textContent = total > 0 ? `${total} compra(s)` : '';
+        return;
+    }
+
+    info.textContent = `Pagina ${currentPage} de ${totalPages} (${total} compras)`;
+
+    if (currentPage > 1) {
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'btn btn-outline';
+        prevBtn.style.cssText = 'font-size: 0.75rem; padding: 0.3rem 0.6rem;';
+        prevBtn.textContent = 'Anterior';
+        prevBtn.onclick = () => loadEpiPackages(currentPage - 1);
+        container.appendChild(prevBtn);
+    }
+    if (currentPage < totalPages) {
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'btn btn-outline';
+        nextBtn.style.cssText = 'font-size: 0.75rem; padding: 0.3rem 0.6rem;';
+        nextBtn.textContent = 'Proxima';
+        nextBtn.onclick = () => loadEpiPackages(currentPage + 1);
+        container.appendChild(nextBtn);
+    }
+}
+
+async function viewEpiPackage(id) {
+    try {
+        const response = await fetch(`/api/epi-purchases/${id}`);
+        const result = await response.json();
+        if (result.status !== 'ok') {
+            alert('Erro ao carregar pacote');
+            return;
+        }
+        const pkg = result.data;
+        const meses = ['', 'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+        const mesAnoDate = pkg.mes_ano ? new Date(pkg.mes_ano + 'T12:00:00') : null;
+        const mesAnoStr = mesAnoDate ? `${meses[mesAnoDate.getMonth() + 1]}/${mesAnoDate.getFullYear()}` : '-';
+
+        let html = `<h3 style="margin-bottom:0.5rem">Compra EPI - ${pkg.empresa} - ${mesAnoStr}</h3>`;
+        if (pkg.observacao) html += `<p style="color: var(--gray-400); margin-bottom: 0.5rem;">${pkg.observacao}</p>`;
+        html += `<table style="width:100%; border-collapse: collapse; margin-bottom: 1rem;">
+            <thead><tr style="border-bottom: 1px solid var(--gray-600);">
+                <th style="text-align:left; padding:0.3rem;">Descricao</th>
+                <th style="text-align:center; padding:0.3rem;">Qtd</th>
+                <th style="text-align:right; padding:0.3rem;">V. Unit.</th>
+                <th style="text-align:right; padding:0.3rem;">V. Total</th>
+            </tr></thead><tbody>`;
+        
+        (pkg.items || []).forEach(item => {
+            html += `<tr style="border-bottom: 1px solid var(--gray-700);">
+                <td style="padding:0.3rem;">${item.descricao}</td>
+                <td style="text-align:center; padding:0.3rem;">${item.quantidade}</td>
+                <td style="text-align:right; padding:0.3rem;">R$ ${(item.valor_unitario || 0).toFixed(2)}</td>
+                <td style="text-align:right; padding:0.3rem; color: var(--gold);">R$ ${(item.valor_total || 0).toFixed(2)}</td>
+            </tr>`;
+        });
+
+        html += `<tr style="border-top: 2px solid var(--gold);">
+            <td colspan="3" style="text-align:right; padding:0.5rem; font-weight: 700;">Total Geral:</td>
+            <td style="text-align:right; padding:0.5rem; color: var(--gold); font-weight: 700;">R$ ${(pkg.total_geral || 0).toFixed(2)}</td>
+        </tr></tbody></table>`;
+
+        if (pkg.documents && pkg.documents.length > 0) {
+            html += `<h4 style="margin-bottom:0.5rem;">Documentos Anexados</h4><ul style="list-style:none; padding:0;">`;
+            pkg.documents.forEach(doc => {
+                html += `<li style="margin-bottom:0.3rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <a href="/api/epi-purchases/${pkg.id}/documents/${doc.id}/download" target="_blank" style="color: var(--gold);">${doc.original_filename}</a>
+                    <button class="btn btn-outline" style="font-size:0.6rem; padding:0.15rem 0.4rem; color: #ff6b6b;" onclick="deleteEpiDoc(${pkg.id}, ${doc.id})">Remover</button>
+                </li>`;
+            });
+            html += `</ul>`;
+        }
+
+        showEpiModal(html);
+    } catch (error) {
+        alert('Erro: ' + error.message);
+    }
+}
+
+function showEpiModal(content) {
+    let modal = document.getElementById('epi-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'epi-modal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; z-index: 9999;';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `<div style="background: var(--gray-800); padding: 2rem; border-radius: 12px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto; border: 1px solid var(--gray-600);">
+        ${content}
+        <div style="text-align: right; margin-top: 1rem;">
+            <button class="btn btn-outline" onclick="closeEpiModal()">Fechar</button>
+        </div>
+    </div>`;
+    modal.style.display = 'flex';
+}
+
+function closeEpiModal() {
+    const modal = document.getElementById('epi-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function editEpiPackage(id) {
+    try {
+        const response = await fetch(`/api/epi-purchases/${id}`);
+        const result = await response.json();
+        if (result.status !== 'ok') {
+            alert('Erro ao carregar pacote');
+            return;
+        }
+        const pkg = result.data;
+
+        document.getElementById('epi-form-container').style.display = 'block';
+        document.getElementById('btn-toggle-epi-form').textContent = 'Fechar';
+        document.getElementById('epi-form-title').textContent = 'Editar Compra de EPIs';
+        document.getElementById('epi-edit-id').value = pkg.id;
+        document.getElementById('epi-empresa').value = pkg.empresa || 'FEMSA';
+
+        if (pkg.mes_ano) {
+            const d = new Date(pkg.mes_ano + 'T12:00:00');
+            const y = String(d.getFullYear());
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            document.getElementById('epi-mes').value = m;
+            document.getElementById('epi-ano').value = y;
+        }
+
+        document.getElementById('epi-observacao').value = pkg.observacao || '';
+
+        document.getElementById('epi-items-container').innerHTML = '';
+        epiItemCounter = 0;
+        (pkg.items || []).forEach(item => {
+            addEpiItem(item.descricao, item.quantidade, item.valor_unitario, item.valor_total);
+        });
+
+        document.getElementById('epi-compras').scrollIntoView({behavior: 'smooth'});
+    } catch (error) {
+        alert('Erro: ' + error.message);
+    }
+}
+
+async function deleteEpiPackage(id) {
+    if (!confirm('Deseja realmente excluir esta compra e todos os seus documentos?')) return;
+
+    try {
+        const response = await fetch(`/api/epi-purchases/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            loadEpiPackages(epiCurrentPage);
+        } else {
+            alert('Erro ao excluir: ' + (result.message || ''));
+        }
+    } catch (error) {
+        alert('Erro: ' + error.message);
+    }
+}
+
+function openDocUpload(packageId) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx';
+    input.multiple = true;
+    input.onchange = async () => {
+        for (const file of input.files) {
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const response = await fetch(`/api/epi-purchases/${packageId}/documents`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (result.status !== 'success') {
+                    alert('Erro ao enviar ' + file.name);
+                }
+            } catch (error) {
+                alert('Erro ao enviar arquivo: ' + error.message);
+            }
+        }
+        loadEpiPackages(epiCurrentPage);
+    };
+    input.click();
+}
+
+async function deleteEpiDoc(packageId, docId) {
+    if (!confirm('Remover este documento?')) return;
+
+    try {
+        const response = await fetch(`/api/epi-purchases/${packageId}/documents/${docId}`, { method: 'DELETE' });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            viewEpiPackage(packageId);
+            loadEpiPackages(epiCurrentPage);
+        } else {
+            alert('Erro ao remover documento');
+        }
+    } catch (error) {
+        alert('Erro: ' + error.message);
+    }
+}
+{% endblock %}

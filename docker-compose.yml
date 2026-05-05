@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: telos
+      POSTGRES_PASSWORD: telos@2026
+      POSTGRES_DB: telos_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./dump.sql:/docker-entrypoint-initdb.d/01-dump.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telos -d telos_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://telos:telos%402026@db:5432/telos_db
+      SESSION_SECRET: telos-secret-key-change-me
+      MSSQL_HOST: ${MSSQL_HOST:-}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_DB: ${MSSQL_DB:-}
+      MSSQL_USER: ${MSSQL_USER:-}
+      MSSQL_PASS: ${MSSQL_PASS:-}
+      MSSQL_DRIVER: ${MSSQL_DRIVER:-}
+      DOMAIN_API: ${DOMAIN_API:-}
+      API_KEY: ${API_KEY:-}
+      SENIOR_SOAP_URL: ${SENIOR_SOAP_URL:-https://webp33.seniorcloud.com.br:30721/g5-senior-services/rubi_Synccom_opus_fopag?wsdl}
+      SENIOR_SOAP_NEXTI_URL: ${SENIOR_SOAP_NEXTI_URL:-https://webp33.seniorcloud.com.br:30721/g5-senior-services/rubi_Synccom_opus_nexti}
+      SENIOR_SOAP_USER: ${SENIOR_SOAP_USER:-}
+      SENIOR_SOAP_PASSWORD: ${SENIOR_SOAP_PASSWORD:-}
+      SENIOR_SOAP_TOKEN: ${SENIOR_SOAP_TOKEN:-}
+      SENIOR_SOAP_ENCRYPTION: ${SENIOR_SOAP_ENCRYPTION:-0}
+    volumes:
+      - epi_documents:/app/epi_documents
+      - excel_templates:/app/app/excel_templates
+      - generated_reports:/app/app/generated_reports
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  epi_documents:
+  excel_templates:
+  generated_reports:

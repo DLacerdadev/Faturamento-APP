@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Telos Consultoria{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <span style="color: var(--gray-400); font-family: 'JetBrains Mono', monospace;">{{ user.full_name or user.email }}</span>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>Status</h3>
+        <div class="value">Online</div>
+        <div class="subtitle">Sistema operacional</div>
+    </div>
+    <div class="stat-card">
+        <h3>Email</h3>
+        <div class="value" style="font-size: 1.25rem;">{{ user.email }}</div>
+        <div class="subtitle">{{ user.full_name or '' }}</div>
+    </div>
+    <div class="stat-card">
+        <h3>Ultimo Acesso</h3>
+        <div class="value" style="font-size: 1.25rem;">
+            {% if user.last_login %}
+                {% if user.last_login is string %}
+                    {{ user.last_login[:10] }}
+                {% else %}
+                    {{ user.last_login.strftime('%d/%m/%Y') }}
+                {% endif %}
+            {% else %}
+                Primeiro acesso
+            {% endif %}
+        </div>
+        <div class="subtitle">
+            {% if user.last_login %}
+                {% if user.last_login is not string %}
+                    {{ user.last_login.strftime('%H:%M') }}
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Acoes Rapidas</h2>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <a href="/customers?token={{ token }}" class="btn btn-outline" style="text-align: center;">Clientes</a>
+        <a href="/billing?token={{ token }}" class="btn btn-outline" style="text-align: center;">Faturamento RH</a>
+        <a href="/reports?token={{ token }}" class="btn btn-outline" style="text-align: center;">Relatorios</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Informacoes do Usuario</h2>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 200px;">Campo</th>
+                <th>Valor</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="color: var(--gold);">Email</td>
+                <td>{{ user.email }}</td>
+            </tr>
+            <tr>
+                <td style="color: var(--gold);">Nome Completo</td>
+                <td>{{ user.full_name or '-' }}</td>
+            </tr>
+            <tr>
+                <td style="color: var(--gold);">Ultimo Login</td>
+                <td>
+                    {% if user.last_login %}
+                        {% if user.last_login is string %}
+                            {{ user.last_login }}
+                        {% else %}
+                            {{ user.last_login.strftime('%d/%m/%Y %H:%M') }}
+                        {% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

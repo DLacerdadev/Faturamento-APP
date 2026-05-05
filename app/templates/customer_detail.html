@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{{ customer.name }} - Sistema de Gestão{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="/customers?token={{ token }}" style="color: #667eea; text-decoration: none;">&larr; Voltar para lista</a>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 style="color: #2c3e50;">{{ customer.name }}</h2>
+    </div>
+    
+    <table>
+        <tr>
+            <th style="width: 150px;">ID</th>
+            <td>{{ customer.id }}</td>
+        </tr>
+        <tr>
+            <th>Nome</th>
+            <td>{{ customer.name }}</td>
+        </tr>
+        <tr>
+            <th>Descrição</th>
+            <td>{{ customer.description or '-' }}</td>
+        </tr>
+        <tr>
+            <th>Criado em</th>
+            <td>{{ customer.created_at[:19].replace('T', ' ') if customer.created_at else '-' }}</td>
+        </tr>
+    </table>
+</div>
+
+<div class="card" style="margin-top: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3 style="color: #2c3e50;">Templates Excel</h3>
+    </div>
+    
+    <div id="upload-message" class="alert" style="display: none;"></div>
+    
+    <form id="template-form" style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+            <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+                <label for="template-name">Nome do Template</label>
+                <input type="text" id="template-name" name="name" required placeholder="Ex: Relatório Mensal">
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+                <label for="template-file">Arquivo Excel (.xlsx, .xls)</label>
+                <input type="file" id="template-file" name="file" accept=".xlsx,.xls" required>
+            </div>
+            <button type="submit" class="btn btn-success" style="height: fit-content;">Upload Template</button>
+        </div>
+    </form>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Arquivo</th>
+                <th>Criado em</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody id="templates-table">
+            {% for template in templates %}
+            <tr id="template-row-{{ template.id }}">
+                <td>{{ template.id }}</td>
+                <td>{{ template.name }}</td>
+                <td>{{ template.file_path.split('/')[-1] }}</td>
+                <td>{{ template.created_at[:10] if template.created_at else '-' }}</td>
+                <td>
+                    <button onclick="deleteTemplate({{ template.id }})" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;">Excluir</button>
+                </td>
+            </tr>
+            {% else %}
+            <tr id="no-templates-row">
+                <td colspan="5" style="text-align: center; color: #666;">Nenhum template cadastrado</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+document.getElementById('template-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const messageDiv = document.getElementById('upload-message');
+    const formData = new FormData();
+    formData.append('name', document.getElementById('template-name').value);
+    formData.append('file', document.getElementById('template-file').files[0]);
+    
+    messageDiv.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/customers/{{ customer.id }}/templates?token=' + AUTH_TOKEN, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            messageDiv.className = 'alert alert-success';
+            messageDiv.textContent = 'Template enviado com sucesso!';
+            messageDiv.style.display = 'block';
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            const data = await response.json();
+            messageDiv.className = 'alert alert-error';
+            messageDiv.textContent = data.detail || 'Erro ao enviar template';
+            messageDiv.style.display = 'block';
+        }
+    } catch (e) {
+        messageDiv.className = 'alert alert-error';
+        messageDiv.textContent = 'Erro de conexão. Tente novamente.';
+        messageDiv.style.display = 'block';
+    }
+});
+
+async function deleteTemplate(id) {
+    if (!confirm('Tem certeza que deseja excluir este template?')) return;
+    
+    try {
+        const response = await fetch('/api/customers/templates/' + id + '?token=' + AUTH_TOKEN, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            document.getElementById('template-row-' + id).remove();
+        } else {
+            alert('Erro ao excluir template');
+        }
+    } catch (e) {
+        alert('Erro ao excluir template');
+    }
+}
+{% endblock %}
