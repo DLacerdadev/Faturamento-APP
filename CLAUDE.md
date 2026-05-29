@@ -37,10 +37,10 @@ Sistema de faturamento RH com integração Senior ERP.
 <!-- SPECKIT START -->
 ## Active Spec Feature
 
-- **001 — Fluxo de Compra de EPIs por Funcionário** — [specs/001-epi-purchase-flow/plan.md](specs/001-epi-purchase-flow/plan.md)
-  - [spec.md](specs/001-epi-purchase-flow/spec.md)
-  - [research.md](specs/001-epi-purchase-flow/research.md)
-  - [data-model.md](specs/001-epi-purchase-flow/data-model.md)
-  - [contracts/rest-endpoints.md](specs/001-epi-purchase-flow/contracts/rest-endpoints.md)
-  - [quickstart.md](specs/001-epi-purchase-flow/quickstart.md)
+- **001 — Fluxo de Compra de EPIs por Funcionário** — [specs/001-epi-purchase-flow/](specs/001-epi-purchase-flow/)
+  - Status: **implementação em disco completa, pendente validação E2E**
+  - Tela: `GET /epis` (link na nav)
+  - Backend: `POST/PUT /api/epi-purchases` aceitam `{codccu, employees[], items[]}` e geram cartesiano; revalidação server-side com `409` se algum funcionário deixou de estar ativo
+  - Migração SQL aplicada em `app.db` (3 colunas novas + 2 índices); detalhes em [RUNBOOK.md](RUNBOOK.md#migrações)
+  - Documentos: [spec](specs/001-epi-purchase-flow/spec.md) · [plan](specs/001-epi-purchase-flow/plan.md) · [research](specs/001-epi-purchase-flow/research.md) · [data-model](specs/001-epi-purchase-flow/data-model.md) · [contracts](specs/001-epi-purchase-flow/contracts/rest-endpoints.md) · [quickstart](specs/001-epi-purchase-flow/quickstart.md) · [tasks](specs/001-epi-purchase-flow/tasks.md)
 <!-- SPECKIT END -->
