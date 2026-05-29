@@ -9,10 +9,10 @@ wheels/
 # Virtual environments
 .venv
 
-# Banco de dados local (gerado em runtime)
-# *.db
-# *.sqlite
-# *.sqlite3
+# Banco de dados local (gerado em runtime) — contém PII de funcionários
+*.db
+*.sqlite
+*.sqlite3
 
 # Variáveis de ambiente com segredos
 .env
