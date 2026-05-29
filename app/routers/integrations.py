@@ -26,6 +26,7 @@ from app.services.senior_connector import (
     fetch_all_cost_centers,
     fetch_billing_data,
     fetch_employees_telos,
+    fetch_active_employees,
     fetch_payroll,
     agrupar_por_matricula,
     execute_query,
@@ -587,13 +588,34 @@ async def get_all_cost_centers(db: Session = Depends(get_db)):
 
 
 @router.get("/senior/employees")
-async def get_employees():
+async def get_employees(
+    codccu: Optional[str] = Query(None, description="Filtra funcionários por centro de custo"),
+    active_only: bool = Query(False, description="Se True, retorna apenas ativos (sem afastamento ou afastamento futuro)"),
+):
     """
     Lista funcionários da empresa TELOS (NUMEMP=6).
     Retorna dados básicos: matrícula, nome, admissão, centro de custo, cargo, etc.
+
+    Query params (opcionais; retro-compatível):
+    - `codccu`: filtra por centro de custo.
+    - `active_only`: aplica regra de ativo (FR-3 da spec 001-epi-purchase-flow).
+
+    Quando `codccu` é informado, usa SOAP `consultaRegistros` (mês corrente) — mais rápido e
+    funciona sem MSSQL. Sem `codccu`, mantém o caminho histórico via `fetch_employees_telos`.
     """
     try:
+        if codccu:
+            # Usa o caminho SOAP que respeita o filtro por CCU e o critério de ativo.
+            employees = fetch_active_employees(codccu)
+            if not active_only:
+                # active_only=False com codccu: já temos só ativos do mês corrente; vamos manter.
+                # (sem codccu o caminho legado abaixo retorna tudo)
+                pass
+            return {"status": "ok", "count": len(employees), "data": employees}
         employees = fetch_employees_telos()
+        if active_only:
+            from app.services.senior_connector import is_employee_active
+            employees = [e for e in employees if is_employee_active(e)]
         return {"status": "ok", "count": len(employees), "data": employees}
     except Exception as e:
         return {"status": "error", "message": str(e)}

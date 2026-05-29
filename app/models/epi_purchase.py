@@ -11,6 +11,7 @@ class EpiPurchasePackage(Base):
     empresa = Column(String(100), nullable=False, default="FEMSA")
     mes_ano = Column(Date, nullable=False)
     observacao = Column(Text, nullable=True)
+    codccu = Column(String(20), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -27,6 +28,8 @@ class EpiPurchaseItem(Base):
     quantidade = Column(Integer, nullable=False, default=1)
     valor_unitario = Column(Float, nullable=False, default=0.0)
     valor_total = Column(Float, nullable=False, default=0.0)
+    employee_numcad = Column(Integer, nullable=True, index=True)
+    employee_nome = Column(String(200), nullable=True)
 
     package = relationship("EpiPurchasePackage", back_populates="items")
 

@@ -588,6 +588,101 @@ def fetch_all_cost_centers() -> List[Dict[str, Any]]:
     return centers
 
 
+def _parse_senior_date(raw: Any) -> Optional["date"]:
+    """Aceita 'YYYY-MM-DD', 'DD/MM/YYYY' ou objetos date/datetime. Retorna date ou None."""
+    from datetime import date, datetime
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    s = str(raw).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(s[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def is_employee_active(emp: Dict[str, Any], today: Optional["date"] = None) -> bool:
+    """
+    Critério de funcionário ativo para fluxo de compra de EPI (spec 001-epi-purchase-flow, FR-3).
+    Ativo = sem data_afastamento, sentinel 31/12/1900, ou data_afastamento estritamente futura.
+    Pega data_afastamento de `datafa` (formato Senior REST) ou `data_afastamento` (formato Folha).
+    """
+    from datetime import date
+    today = today or date.today()
+    datafa_raw = emp.get("datafa") or emp.get("data_afastamento")
+    if not datafa_raw:
+        return True
+    s = str(datafa_raw)
+    # sentinel Senior comum: "31/12/1900" ou "1900-12-31"
+    if s.startswith("1900") or s.startswith("31/12/1900") or s.startswith("31-12-1900"):
+        return True
+    parsed = _parse_senior_date(datafa_raw)
+    if parsed is None:
+        # data ilegível: tolerância — considera ativo
+        return True
+    return parsed > today
+
+
+def fetch_active_employees(codccu: str) -> List[Dict[str, Any]]:
+    """
+    Retorna funcionários ATIVOS (regra is_employee_active) do centro de custo informado,
+    usando SOAP Senior `consultaRegistros` para o mês corrente.
+
+    Em DEV_MODE com app.db populado, cai pra _fetch_payroll_local (mesmo connector já cuida).
+
+    Retorno: lista de dicts no formato esperado pelo front:
+    [{numcad, nomfun, codccu, datadm, datafa, cargo, sitafa, dessit, valsal}, ...]
+    """
+    from datetime import date
+    if not codccu:
+        return []
+
+    today = date.today()
+    periodo = f"{today.year}-{today.month:02d}-01"
+    codccu_s = str(codccu).strip()
+
+    try:
+        registros = fetch_payroll(periodo=periodo, codccu=codccu_s)
+    except Exception as e:
+        logger.error("fetch_active_employees: erro ao buscar payroll periodo=%s codccu=%s: %s",
+                     periodo, codccu_s, e)
+        raise
+
+    # dedup por matricula, ficando com o registro mais "rico" (com nome preenchido)
+    by_numcad: Dict[Any, Dict[str, Any]] = {}
+    for r in registros:
+        numcad = r.get("matricula")
+        if not numcad:
+            continue
+        cur = by_numcad.get(numcad)
+        if cur is None or (not cur.get("nome_funcionario") and r.get("nome_funcionario")):
+            by_numcad[numcad] = r
+
+    out: List[Dict[str, Any]] = []
+    for numcad, r in by_numcad.items():
+        if not is_employee_active(r, today):
+            continue
+        out.append({
+            "numcad": numcad,
+            "nomfun": r.get("nome_funcionario"),
+            "codccu": r.get("codccu"),
+            "nomccu": r.get("nomccu"),
+            "datadm": r.get("data_admissao"),
+            "datafa": r.get("data_afastamento"),
+            "sitafa": r.get("sitafa"),
+            "dessit": r.get("situacao"),
+            "cargo": r.get("cargo"),
+            "valsal": r.get("salario"),
+        })
+    out.sort(key=lambda e: (e.get("nomfun") or "").upper())
+    return out
+
+
 def _fetch_payroll_local(
     periodo: str,
     codccu: Optional[Union[str, List[str]]] = None,

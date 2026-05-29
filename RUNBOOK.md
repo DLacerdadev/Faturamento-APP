@@ -218,6 +218,35 @@ rm app.db
 
 ---
 
+## Migrações
+
+### 001 — EPI por funcionário
+
+Spec: [specs/001-epi-purchase-flow/](specs/001-epi-purchase-flow/)
+
+Adiciona vínculo funcionário×item no fluxo de compra de EPIs. Colunas novas:
+- `epi_purchase_packages.codccu` — centro de custo da compra
+- `epi_purchase_items.employee_numcad` — matrícula Senior (snapshot)
+- `epi_purchase_items.employee_nome` — nome Senior (snapshot)
+
+Aplicar em dev (SQLite) e prod (PostgreSQL):
+
+```sql
+ALTER TABLE epi_purchase_packages ADD COLUMN codccu VARCHAR(20);
+ALTER TABLE epi_purchase_items   ADD COLUMN employee_numcad INTEGER;
+ALTER TABLE epi_purchase_items   ADD COLUMN employee_nome   VARCHAR(200);
+CREATE INDEX IF NOT EXISTS ix_epi_purchase_packages_codccu ON epi_purchase_packages(codccu);
+CREATE INDEX IF NOT EXISTS ix_epi_purchase_items_employee  ON epi_purchase_items(employee_numcad);
+```
+
+Linhas legadas (anteriores à migração) ficam com NULL nas novas colunas — a UI exibe rótulo "(legado)".
+
+Em primeira subida limpa (sem `app.db` / banco vazio), `init_db()` cria as colunas automaticamente — nenhum ALTER necessário.
+
+Conferência: `python -c "import sqlite3; print([r[1] for r in sqlite3.connect('app.db').execute('PRAGMA table_info(epi_purchase_items)')])"` deve incluir `employee_numcad` e `employee_nome`.
+
+---
+
 ## Checklist rápido
 
 ### Dev

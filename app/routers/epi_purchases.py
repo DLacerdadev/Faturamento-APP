@@ -1,15 +1,16 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session, joinedload
 from typing import Optional, List
 from datetime import date, datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 import uuid
 import shutil
 
 from app.db import get_db
 from app.models.epi_purchase import EpiPurchasePackage, EpiPurchaseItem, EpiPurchaseDocument
+from app.services.senior_connector import fetch_active_employees
 
 router = APIRouter(prefix="/api/epi-purchases", tags=["epi_purchases"])
 
@@ -17,43 +18,131 @@ EPI_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "epi_d
 os.makedirs(EPI_UPLOAD_DIR, exist_ok=True)
 
 
-class EpiItemData(BaseModel):
-    descricao: str
-    quantidade: int = 1
-    valor_unitario: float = 0.0
-    valor_total: float = 0.0
+class EmployeeSelection(BaseModel):
+    numcad: int
+    nome: str
 
 
-class EpiPackageCreate(BaseModel):
+class EpiItemInput(BaseModel):
+    descricao: str = Field(..., min_length=1)
+    quantidade: int = Field(..., ge=1)
+    valor_unitario: float = Field(..., gt=0)
+
+
+class EpiPackageCreateV2(BaseModel):
     empresa: str = "FEMSA"
     mes_ano: str
+    codccu: str = Field(..., min_length=1)
     observacao: Optional[str] = None
-    items: List[EpiItemData] = []
+    employees: List[EmployeeSelection] = Field(..., min_length=1)
+    items: List[EpiItemInput] = Field(..., min_length=1)
 
 
-class EpiPackageUpdate(BaseModel):
-    empresa: Optional[str] = None
-    mes_ano: Optional[str] = None
-    observacao: Optional[str] = None
-    items: Optional[List[EpiItemData]] = None
+def _expand_cartesian(pkg: EpiPurchasePackage, payload: EpiPackageCreateV2) -> None:
+    """Adiciona linhas |employees| × |items| ao pacote (sem commit)."""
+    for emp in payload.employees:
+        for item in payload.items:
+            pkg.items.append(EpiPurchaseItem(
+                descricao=item.descricao,
+                quantidade=item.quantidade,
+                valor_unitario=item.valor_unitario,
+                valor_total=item.quantidade * item.valor_unitario,
+                employee_numcad=emp.numcad,
+                employee_nome=emp.nome,
+            ))
+
+
+def _revalidate_active(payload: EpiPackageCreateV2) -> List[dict]:
+    """
+    Spec 001-epi-purchase-flow, FR-13: ao salvar, checa se cada `numcad` recebido
+    ainda está ativo no CCU. Retorna lista de inativos (vazia = tudo OK).
+    """
+    try:
+        active = fetch_active_employees(payload.codccu)
+    except Exception:
+        # Se a consulta Senior falhar, não bloqueia o save — apenas pula a revalidação.
+        # A alternativa (bloquear sempre) seria pior em incidente do Senior.
+        return []
+    active_numcads = {e.get("numcad") for e in active}
+    inactive = []
+    for emp in payload.employees:
+        if emp.numcad not in active_numcads:
+            inactive.append({
+                "numcad": emp.numcad,
+                "nome": emp.nome,
+                "motivo": "Não está mais ativo no CCU informado",
+            })
+    return inactive
+
+
+def _dict_distinct(seq, key):
+    seen = set()
+    out = []
+    for x in seq:
+        k = key(x)
+        if k not in seen:
+            seen.add(k)
+            out.append(x)
+    return out
 
 
 def package_to_dict(pkg: EpiPurchasePackage) -> dict:
+    items_list = list(pkg.items or [])
+
+    linhas_flat = [
+        {
+            "id": item.id,
+            "descricao": item.descricao,
+            "quantidade": item.quantidade,
+            "valor_unitario": item.valor_unitario,
+            "valor_total": item.valor_total,
+            "employee_numcad": item.employee_numcad,
+            "employee_nome": item.employee_nome,
+        }
+        for item in items_list
+    ]
+
+    funcionarios = _dict_distinct(
+        [
+            {"numcad": item.employee_numcad, "nome": item.employee_nome}
+            for item in items_list
+            if item.employee_numcad is not None
+        ],
+        key=lambda f: f["numcad"],
+    )
+
+    itens_distintos = _dict_distinct(
+        [
+            {
+                "descricao": item.descricao,
+                "quantidade": item.quantidade,
+                "valor_unitario": item.valor_unitario,
+            }
+            for item in items_list
+        ],
+        key=lambda i: (i["descricao"], i["quantidade"], i["valor_unitario"]),
+    )
+
     return {
         "id": pkg.id,
         "empresa": pkg.empresa,
         "mes_ano": pkg.mes_ano.isoformat() if pkg.mes_ano else None,
+        "codccu": pkg.codccu,
         "observacao": pkg.observacao,
-        "items": [
-            {
-                "id": item.id,
-                "descricao": item.descricao,
-                "quantidade": item.quantidade,
-                "valor_unitario": item.valor_unitario,
-                "valor_total": item.valor_total,
-            }
-            for item in (pkg.items or [])
-        ],
+        "linhas_flat": linhas_flat,
+        "agrupado": {
+            "funcionarios": funcionarios,
+            "itens": itens_distintos,
+        },
+        "totais": {
+            "funcionarios_distintos": len(funcionarios),
+            "itens_distintos": len(itens_distintos),
+            "total_linhas": len(items_list),
+            "valor_total_compra": sum(item.valor_total or 0 for item in items_list),
+        },
+        # legacy keys (retro-compat)
+        "items": linhas_flat,
+        "total_geral": sum(item.valor_total or 0 for item in items_list),
         "documents": [
             {
                 "id": doc.id,
@@ -62,33 +151,39 @@ def package_to_dict(pkg: EpiPurchasePackage) -> dict:
             }
             for doc in (pkg.documents or [])
         ],
-        "total_geral": sum(item.valor_total or 0 for item in (pkg.items or [])),
         "created_at": pkg.created_at.isoformat() if pkg.created_at else None,
         "updated_at": pkg.updated_at.isoformat() if pkg.updated_at else None,
     }
 
 
 @router.post("")
-async def create_package(data: EpiPackageCreate, db: Session = Depends(get_db)):
+async def create_package(data: EpiPackageCreateV2, db: Session = Depends(get_db)):
     try:
         mes_ano_date = datetime.strptime(data.mes_ano[:7], "%Y-%m").date()
     except ValueError:
-        return {"status": "error", "message": "Formato de mes_ano invalido. Use YYYY-MM"}
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": "Formato de mes_ano invalido. Use YYYY-MM"},
+        )
+
+    inactive = _revalidate_active(data)
+    if inactive:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "status": "stale",
+                "message": "Alguns funcionários selecionados já não estão ativos.",
+                "inactive": inactive,
+            },
+        )
 
     pkg = EpiPurchasePackage(
         empresa=data.empresa,
         mes_ano=mes_ano_date,
+        codccu=data.codccu,
         observacao=data.observacao,
     )
-
-    for item_data in data.items:
-        item = EpiPurchaseItem(
-            descricao=item_data.descricao,
-            quantidade=item_data.quantidade,
-            valor_unitario=item_data.valor_unitario,
-            valor_total=item_data.valor_total,
-        )
-        pkg.items.append(item)
+    _expand_cartesian(pkg, data)
 
     db.add(pkg)
     db.commit()
@@ -160,7 +255,7 @@ async def get_package(package_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{package_id}")
-async def update_package(package_id: int, data: EpiPackageUpdate, db: Session = Depends(get_db)):
+async def update_package(package_id: int, data: EpiPackageCreateV2, db: Session = Depends(get_db)):
     pkg = (
         db.query(EpiPurchasePackage)
         .options(joinedload(EpiPurchasePackage.items), joinedload(EpiPurchasePackage.documents))
@@ -168,32 +263,40 @@ async def update_package(package_id: int, data: EpiPackageUpdate, db: Session = 
         .first()
     )
     if not pkg:
-        return {"status": "error", "message": "Pacote nao encontrado"}
+        return JSONResponse(
+            status_code=404,
+            content={"status": "error", "message": "Pacote nao encontrado"},
+        )
 
-    if data.empresa is not None:
-        pkg.empresa = data.empresa
-    if data.mes_ano is not None:
-        try:
-            pkg.mes_ano = datetime.strptime(data.mes_ano[:7], "%Y-%m").date()
-        except ValueError:
-            return {"status": "error", "message": "Formato de mes_ano invalido"}
-    if data.observacao is not None:
-        pkg.observacao = data.observacao
+    try:
+        mes_ano_date = datetime.strptime(data.mes_ano[:7], "%Y-%m").date()
+    except ValueError:
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": "Formato de mes_ano invalido. Use YYYY-MM"},
+        )
 
-    if data.items is not None:
-        for old_item in pkg.items:
-            db.delete(old_item)
-        db.flush()
+    inactive = _revalidate_active(data)
+    if inactive:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "status": "stale",
+                "message": "Alguns funcionários selecionados já não estão ativos.",
+                "inactive": inactive,
+            },
+        )
 
-        for item_data in data.items:
-            item = EpiPurchaseItem(
-                package_id=pkg.id,
-                descricao=item_data.descricao,
-                quantidade=item_data.quantidade,
-                valor_unitario=item_data.valor_unitario,
-                valor_total=item_data.valor_total,
-            )
-            db.add(item)
+    pkg.empresa = data.empresa
+    pkg.mes_ano = mes_ano_date
+    pkg.codccu = data.codccu
+    pkg.observacao = data.observacao
+
+    for old_item in list(pkg.items):
+        db.delete(old_item)
+    db.flush()
+
+    _expand_cartesian(pkg, data)
 
     db.commit()
     db.refresh(pkg)
