@@ -221,6 +221,15 @@ async def billing_form_page(request: Request, db: Session = Depends(get_db)):
     user, token = result
     return templates.TemplateResponse("billing_form.html", {"request": request, "user": user, "token": token})
 
+@app.get("/epis", response_class=HTMLResponse)
+async def epis_page(request: Request, db: Session = Depends(get_db)):
+    """Tela de compras de EPIs (spec 001-epi-purchase-flow)."""
+    result = get_current_user_from_token(request, db)
+    if not result:
+        return RedirectResponse(url="/login", status_code=303)
+    user, token = result
+    return templates.TemplateResponse("epis.html", {"request": request, "user": user, "token": token})
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "message": "Sistema funcionando normalmente"}

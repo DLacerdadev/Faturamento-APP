@@ -674,6 +674,7 @@
                 <li><a href="/dashboard?token={{ token }}" class="{% if request.url.path == '/dashboard' %}active{% endif %}">Dashboard</a></li>
                 <li><a href="/customers?token={{ token }}" class="{% if '/customers' in request.url.path %}active{% endif %}">Clientes</a></li>
                 <!-- <li><a href="/billing/ui?token={{ token }}" class="{% if '/billing' in request.url.path %}active{% endif %}">Gerar Fatura</a></li> -->
+                <li><a href="/epis?token={{ token }}" class="{% if '/epis' in request.url.path %}active{% endif %}">EPIs</a></li>
                 <li><a href="/reports?token={{ token }}" class="{% if request.url.path == '/reports' %}active{% endif %}">Relatorios</a></li>
             </ul>
             {% if user %}

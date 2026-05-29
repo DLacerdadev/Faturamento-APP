@@ -1,0 +1,736 @@
+{% extends "base.html" %}
+
+{% block title %}Compras de EPIs - Telos Consultoria{% endblock %}
+
+{% block extra_css %}
+<style>
+    .epi-section {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .epi-section:last-child { border-bottom: none; padding-bottom: 0; }
+    .epi-section h3 {
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: var(--gold);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 1rem;
+    }
+    .employee-list {
+        max-height: 320px;
+        overflow-y: auto;
+        border: 2px solid var(--border-strong);
+        background: var(--input-bg);
+        padding: 0.5rem;
+    }
+    .employee-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border-color);
+    }
+    .employee-row:last-child { border-bottom: none; }
+    .employee-row:hover { background: var(--bg-hover); }
+    .employee-row input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--gold);
+        cursor: pointer;
+    }
+    .employee-row .matricula {
+        min-width: 70px;
+        color: var(--text-muted);
+    }
+    .employee-row .nome { flex: 1; }
+    .employee-row .cargo { color: var(--text-muted); font-size: 0.75rem; }
+    .employee-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 0.5rem;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .employee-meta button {
+        background: none;
+        border: 1px solid var(--border-strong);
+        color: var(--text-secondary);
+        padding: 0.25rem 0.75rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-family: 'Space Grotesk', sans-serif;
+    }
+    .employee-meta button:hover { border-color: var(--gold); color: var(--gold); }
+    .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 0.75rem;
+    }
+    .items-table th {
+        text-align: left;
+        font-size: 0.75rem;
+        color: var(--gold);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .items-table td {
+        padding: 0.5rem;
+        font-family: 'JetBrains Mono', monospace;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .items-table input {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-strong);
+        background: var(--input-bg);
+        color: var(--text-primary);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+    }
+    .items-table input:focus { border-color: var(--gold); outline: none; }
+    .items-table .col-qty { width: 90px; }
+    .items-table .col-money { width: 130px; }
+    .items-table .col-action { width: 50px; text-align: center; }
+    .icon-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--error);
+        font-size: 1.25rem;
+        line-height: 1;
+        padding: 0.25rem;
+    }
+    .summary-pill {
+        display: inline-block;
+        background: rgba(212, 168, 75, 0.08);
+        border: 1px solid var(--gold);
+        color: var(--gold);
+        padding: 0.5rem 1rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+        margin-right: 0.5rem;
+    }
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        flex-wrap: wrap;
+    }
+    .legacy-badge {
+        background: rgba(122, 122, 122, 0.2);
+        color: var(--text-muted);
+        border: 1px solid var(--border-strong);
+        padding: 0.125rem 0.5rem;
+        font-size: 0.625rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 600;
+    }
+    .toast {
+        position: fixed;
+        top: 1.5rem;
+        right: 1.5rem;
+        padding: 1rem 1.5rem;
+        z-index: 1000;
+        font-weight: 600;
+        border-left: 4px solid;
+        min-width: 280px;
+        max-width: 420px;
+        background: var(--bg-secondary);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        animation: slideIn 0.2s ease-out;
+    }
+    .toast.success { border-color: var(--success); color: var(--success); }
+    .toast.error { border-color: var(--error); color: var(--error); }
+    .toast.warning { border-color: var(--warning); color: var(--warning); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 900;
+        display: flex; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-box {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-top: 4px solid var(--gold);
+        padding: 2rem;
+        max-width: 520px;
+        width: 100%;
+    }
+    .modal-box h3 {
+        color: var(--gold);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 1rem;
+        font-size: 1rem;
+    }
+    .modal-box p { color: var(--text-secondary); margin-bottom: 1rem; }
+    .modal-box ul {
+        background: var(--bg-tertiary);
+        padding: 0.75rem 1rem 0.75rem 2rem;
+        margin-bottom: 1.5rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    .modal-box .modal-actions { display: flex; gap: 1rem; justify-content: flex-end; }
+    .search-input { margin-bottom: 0.5rem; }
+    .editing-banner {
+        background: rgba(212, 168, 75, 0.1);
+        border-left: 4px solid var(--gold);
+        padding: 0.75rem 1rem;
+        margin-bottom: 1.5rem;
+        color: var(--gold);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+    }
+    .totals-card-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 1rem;
+        margin: 1rem 0;
+    }
+    .mini-stat {
+        background: var(--bg-tertiary);
+        border-left: 3px solid var(--gold);
+        padding: 0.75rem 1rem;
+    }
+    .mini-stat .label {
+        font-size: 0.625rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .mini-stat .value {
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--gold);
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Compras de EPIs</h1>
+</div>
+
+<div id="editing-banner" class="editing-banner" style="display:none;">
+    Editando compra <span id="editing-id"></span> &mdash;
+    <a href="#" onclick="cancelEdit(); return false;" style="color:inherit; text-decoration: underline;">cancelar edição</a>
+</div>
+
+<!-- Form -->
+<div class="card">
+    <div class="card-header">
+        <h2 id="form-title">Nova Compra de EPI</h2>
+    </div>
+
+    <!-- 1. Centro de custo -->
+    <div class="epi-section">
+        <h3>1. Centro de Custo</h3>
+        <div class="form-group">
+            <label for="codccu">Selecione o centro de custo</label>
+            <select id="codccu" onchange="onCcuChange()">
+                <option value="">— Carregando centros de custo… —</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="mes_ano">Mês de referência</label>
+            <input type="month" id="mes_ano" required>
+        </div>
+    </div>
+
+    <!-- 2. Funcionários -->
+    <div class="epi-section">
+        <h3>2. Funcionários (ativos no CCU)</h3>
+        <input type="text" id="employee-search" class="search-input" placeholder="Filtrar por nome ou matrícula…" oninput="renderEmployees()">
+        <div id="employee-list" class="employee-list">
+            <div style="padding: 1rem; text-align: center; color: var(--text-muted); font-style: italic;">
+                Selecione um centro de custo para listar os funcionários ativos.
+            </div>
+        </div>
+        <div class="employee-meta">
+            <span id="employee-counter">0 selecionados</span>
+            <div>
+                <button type="button" onclick="selectAllVisible()">Selecionar visíveis</button>
+                <button type="button" onclick="clearEmployees()">Limpar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Itens -->
+    <div class="epi-section">
+        <h3>3. Itens da Compra</h3>
+        <table class="items-table" id="items-table">
+            <thead>
+                <tr>
+                    <th>Descrição</th>
+                    <th class="col-qty">Qtde</th>
+                    <th class="col-money">Valor unit. (R$)</th>
+                    <th class="col-money">Valor total (R$)</th>
+                    <th class="col-action"></th>
+                </tr>
+            </thead>
+            <tbody id="items-body"></tbody>
+        </table>
+        <button type="button" class="btn btn-outline" onclick="addItem()" style="font-size: 0.75rem; padding: 0.5rem 1rem;">+ Adicionar item</button>
+    </div>
+
+    <!-- 4. Observação -->
+    <div class="epi-section">
+        <h3>4. Observação (opcional)</h3>
+        <div class="form-group">
+            <textarea id="observacao" rows="3" placeholder="Notas livres sobre esta compra…"></textarea>
+        </div>
+    </div>
+
+    <!-- Sumário -->
+    <div class="totals-card-row">
+        <div class="mini-stat"><div class="label">Funcionários selec.</div><div class="value" id="sum-emp">0</div></div>
+        <div class="mini-stat"><div class="label">Itens</div><div class="value" id="sum-items">0</div></div>
+        <div class="mini-stat"><div class="label">Linhas (cartesiano)</div><div class="value" id="sum-rows">0</div></div>
+        <div class="mini-stat"><div class="label">Valor total</div><div class="value" id="sum-money">R$ 0,00</div></div>
+    </div>
+
+    <div class="form-actions">
+        <button type="button" class="btn" id="btn-submit" onclick="submitPurchase()">Salvar Compra</button>
+        <button type="button" class="btn btn-secondary" onclick="resetForm()">Limpar Form</button>
+    </div>
+</div>
+
+<!-- Listagem -->
+<div class="card">
+    <div class="card-header">
+        <h2>Compras Existentes</h2>
+    </div>
+    <div style="overflow-x: auto;">
+        <table id="packages-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Mês</th>
+                    <th>CCU</th>
+                    <th>Funcionários</th>
+                    <th>Itens</th>
+                    <th>Linhas</th>
+                    <th>Valor total</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="packages-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal 409 (US2 revalidação) -->
+<div id="stale-modal" style="display:none;">
+    <div class="modal-backdrop">
+        <div class="modal-box">
+            <h3>Funcionários não estão mais ativos</h3>
+            <p>Alguns funcionários selecionados deixaram de estar ativos no centro de custo entre a abertura do formulário e o salvamento:</p>
+            <ul id="stale-list"></ul>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeStaleModal()">Cancelar</button>
+                <button type="button" class="btn" onclick="dropStaleAndRetry()">Remover do save e tentar de novo</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const TOKEN = AUTH_TOKEN;
+const employees = { all: [], selected: new Set(), nomeByNumcad: {} };
+const purchaseState = { editingId: null };
+let lastStaleInactive = [];
+
+// ---- inicialização ----
+document.addEventListener('DOMContentLoaded', () => {
+    const now = new Date();
+    document.getElementById('mes_ano').value = now.toISOString().slice(0, 7);
+    loadCostCenters();
+    loadPackages();
+    addItem();
+});
+
+// ---- centros de custo ----
+async function loadCostCenters() {
+    const sel = document.getElementById('codccu');
+    try {
+        const r = await fetch('/integrations/senior/cost-centers');
+        const j = await r.json();
+        if (j.status !== 'ok' && j.status !== 'success') throw new Error(j.message || 'erro carregando CCUs');
+        const list = j.data || [];
+        sel.innerHTML = '<option value="">— Selecione um centro de custo —</option>' +
+            list.map(c => `<option value="${c.codccu}">${c.codccu} — ${c.nomccu || ''}</option>`).join('');
+    } catch (e) {
+        sel.innerHTML = '<option value="">Erro ao carregar centros de custo</option>';
+        toast('Falha ao carregar centros de custo: ' + e.message, 'error');
+    }
+}
+
+async function onCcuChange() {
+    const codccu = document.getElementById('codccu').value;
+    employees.selected.clear();
+    employees.all = [];
+    const list = document.getElementById('employee-list');
+    if (!codccu) {
+        list.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text-muted);font-style:italic;">Selecione um centro de custo para listar os funcionários ativos.</div>';
+        updateCounters();
+        return;
+    }
+    list.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text-muted);">Carregando funcionários ativos…</div>';
+    try {
+        const r = await fetch('/integrations/senior/employees?codccu=' + encodeURIComponent(codccu) + '&active_only=true');
+        const j = await r.json();
+        if (j.status !== 'ok') throw new Error(j.message || 'erro carregando funcionários');
+        employees.all = j.data || [];
+        employees.nomeByNumcad = {};
+        for (const e of employees.all) employees.nomeByNumcad[e.numcad] = e.nomfun;
+        if (employees.all.length === 0) {
+            list.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--warning);font-style:italic;">Nenhum funcionário ativo neste centro de custo.</div>';
+        } else {
+            renderEmployees();
+        }
+        updateCounters();
+    } catch (e) {
+        list.innerHTML = `<div style="padding:1rem;text-align:center;color:var(--error);">Erro: ${e.message}. <button onclick="onCcuChange()" style="background:none;border:1px solid var(--gold);color:var(--gold);padding:0.25rem 0.75rem;cursor:pointer;margin-left:0.5rem;">Tentar de novo</button></div>`;
+    }
+}
+
+function renderEmployees() {
+    const list = document.getElementById('employee-list');
+    const q = (document.getElementById('employee-search').value || '').toLowerCase().trim();
+    const visible = employees.all.filter(e => {
+        if (!q) return true;
+        return (e.nomfun || '').toLowerCase().includes(q) || String(e.numcad).includes(q);
+    });
+    if (visible.length === 0) {
+        list.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text-muted);font-style:italic;">Nenhum funcionário com esse filtro.</div>';
+        return;
+    }
+    list.innerHTML = visible.map(e => `
+        <label class="employee-row">
+            <input type="checkbox" value="${e.numcad}" ${employees.selected.has(e.numcad) ? 'checked' : ''} onchange="toggleEmployee(${e.numcad}, this.checked)">
+            <span class="matricula">${e.numcad}</span>
+            <span class="nome">${e.nomfun || '(sem nome)'}</span>
+            <span class="cargo">${e.cargo || ''}</span>
+        </label>
+    `).join('');
+}
+
+function toggleEmployee(numcad, checked) {
+    if (checked) employees.selected.add(numcad);
+    else employees.selected.delete(numcad);
+    updateCounters();
+}
+
+function selectAllVisible() {
+    const q = (document.getElementById('employee-search').value || '').toLowerCase().trim();
+    employees.all.forEach(e => {
+        const matches = !q || (e.nomfun || '').toLowerCase().includes(q) || String(e.numcad).includes(q);
+        if (matches) employees.selected.add(e.numcad);
+    });
+    renderEmployees();
+    updateCounters();
+}
+
+function clearEmployees() {
+    employees.selected.clear();
+    renderEmployees();
+    updateCounters();
+}
+
+// ---- itens ----
+function addItem(prefill) {
+    const tbody = document.getElementById('items-body');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="text" placeholder="Ex: Capacete classe B" value="${prefill?.descricao || ''}" oninput="updateRow(this)"></td>
+        <td><input type="number" min="1" step="1" value="${prefill?.quantidade || 1}" oninput="updateRow(this)"></td>
+        <td><input type="number" min="0.01" step="0.01" value="${prefill?.valor_unitario || ''}" placeholder="0,00" oninput="updateRow(this)"></td>
+        <td><input type="text" readonly value="0,00" class="item-total" style="background:var(--bg-tertiary);"></td>
+        <td><button type="button" class="icon-btn" title="Remover" onclick="removeItem(this)">×</button></td>
+    `;
+    tbody.appendChild(tr);
+    updateRow(tr.querySelector('input'));
+    updateCounters();
+}
+
+function updateRow(input) {
+    const tr = input.closest('tr');
+    const qty = parseFloat(tr.children[1].querySelector('input').value) || 0;
+    const unit = parseFloat(tr.children[2].querySelector('input').value) || 0;
+    const total = qty * unit;
+    tr.querySelector('.item-total').value = total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    updateCounters();
+}
+
+function removeItem(btn) {
+    btn.closest('tr').remove();
+    if (document.querySelectorAll('#items-body tr').length === 0) addItem();
+    updateCounters();
+}
+
+function collectItems() {
+    const rows = document.querySelectorAll('#items-body tr');
+    const out = [];
+    for (const tr of rows) {
+        const descricao = tr.children[0].querySelector('input').value.trim();
+        const quantidade = parseInt(tr.children[1].querySelector('input').value, 10);
+        const valor_unitario = parseFloat(tr.children[2].querySelector('input').value);
+        if (!descricao && !quantidade && !valor_unitario) continue;
+        out.push({ descricao, quantidade, valor_unitario });
+    }
+    return out;
+}
+
+function updateCounters() {
+    const empN = employees.selected.size;
+    const items = collectItems();
+    const itemN = items.length;
+    const rowsN = empN * itemN;
+    const money = items.reduce((acc, it) => acc + ((it.quantidade || 0) * (it.valor_unitario || 0)), 0) * empN;
+    document.getElementById('sum-emp').textContent = empN;
+    document.getElementById('sum-items').textContent = itemN;
+    document.getElementById('sum-rows').textContent = rowsN;
+    document.getElementById('sum-money').textContent = 'R$ ' + money.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('employee-counter').textContent = empN + (empN === 1 ? ' selecionado' : ' selecionados');
+}
+
+// ---- submit ----
+function buildPayload() {
+    return {
+        empresa: 'FEMSA',
+        mes_ano: document.getElementById('mes_ano').value,
+        codccu: document.getElementById('codccu').value,
+        observacao: document.getElementById('observacao').value.trim() || null,
+        employees: Array.from(employees.selected).map(numcad => ({ numcad, nome: employees.nomeByNumcad[numcad] || '' })),
+        items: collectItems(),
+    };
+}
+
+function validatePayload(p) {
+    if (!p.codccu) return 'Selecione um centro de custo.';
+    if (!p.mes_ano) return 'Informe o mês de referência.';
+    if (!p.employees.length) return 'Selecione ao menos 1 funcionário.';
+    if (!p.items.length) return 'Adicione ao menos 1 item.';
+    for (const it of p.items) {
+        if (!it.descricao) return 'Cada item precisa de descrição.';
+        if (!Number.isFinite(it.quantidade) || it.quantidade < 1) return 'Quantidade do item deve ser >= 1.';
+        if (!Number.isFinite(it.valor_unitario) || it.valor_unitario <= 0) return 'Valor unitário do item deve ser > 0.';
+    }
+    return null;
+}
+
+async function submitPurchase() {
+    const payload = buildPayload();
+    const err = validatePayload(payload);
+    if (err) { toast(err, 'error'); return; }
+
+    const btn = document.getElementById('btn-submit');
+    btn.disabled = true;
+    btn.textContent = 'Salvando…';
+
+    try {
+        const url = purchaseState.editingId
+            ? `/api/epi-purchases/${purchaseState.editingId}`
+            : '/api/epi-purchases';
+        const method = purchaseState.editingId ? 'PUT' : 'POST';
+        const r = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (r.status === 409) {
+            const j = await r.json();
+            lastStaleInactive = j.inactive || [];
+            openStaleModal(lastStaleInactive);
+            return;
+        }
+        const j = await r.json();
+        if (j.status !== 'success') {
+            toast(j.message || 'Falha ao salvar compra', 'error');
+            return;
+        }
+        toast(`Compra ${purchaseState.editingId ? 'atualizada' : 'criada'} com ${j.data.totais.total_linhas} linhas (R$ ${j.data.totais.valor_total_compra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`, 'success');
+        resetForm();
+        loadPackages();
+    } catch (e) {
+        toast('Erro de rede: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = purchaseState.editingId ? 'Atualizar Compra' : 'Salvar Compra';
+    }
+}
+
+// ---- modal 409 ----
+function openStaleModal(inactive) {
+    const ul = document.getElementById('stale-list');
+    ul.innerHTML = inactive.map(e => `<li>${e.numcad} — ${e.nome} (${e.motivo || 'não mais ativo'})</li>`).join('');
+    document.getElementById('stale-modal').style.display = 'block';
+}
+function closeStaleModal() {
+    document.getElementById('stale-modal').style.display = 'none';
+}
+async function dropStaleAndRetry() {
+    for (const e of lastStaleInactive) employees.selected.delete(e.numcad);
+    renderEmployees();
+    updateCounters();
+    closeStaleModal();
+    await submitPurchase();
+}
+
+// ---- listagem ----
+async function loadPackages() {
+    try {
+        const r = await fetch('/api/epi-purchases?page=1&per_page=20');
+        const j = await r.json();
+        if (j.status !== 'ok') throw new Error(j.message || 'erro');
+        renderPackages(j.data || []);
+    } catch (e) {
+        document.getElementById('packages-body').innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--error);padding:1rem;">Erro: ${e.message}</td></tr>`;
+    }
+}
+
+function renderPackages(pkgs) {
+    const tbody = document.getElementById('packages-body');
+    if (!pkgs.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;font-style:italic;">Nenhuma compra registrada ainda.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = pkgs.map(p => {
+        const isLegacy = !p.codccu && (!p.linhas_flat || p.linhas_flat.every(l => !l.employee_numcad));
+        const t = p.totais || { funcionarios_distintos: 0, itens_distintos: 0, total_linhas: (p.linhas_flat||[]).length, valor_total_compra: p.total_geral || 0 };
+        return `
+            <tr>
+                <td>#${p.id}</td>
+                <td>${formatMonth(p.mes_ano)}</td>
+                <td>${p.codccu || '<span class="legacy-badge">legado</span>'}</td>
+                <td>${t.funcionarios_distintos}</td>
+                <td>${t.itens_distintos}</td>
+                <td>${t.total_linhas}</td>
+                <td>R$ ${(t.valor_total_compra || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td>
+                    <button class="btn btn-outline" style="padding:0.4rem 0.85rem;font-size:0.7rem;" ${isLegacy ? '' : ''} onclick="openPackage(${p.id})">Editar</button>
+                    <button class="btn btn-danger" style="padding:0.4rem 0.85rem;font-size:0.7rem;" onclick="deletePackage(${p.id})">Excluir</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function formatMonth(s) {
+    if (!s) return '—';
+    const dt = new Date(s);
+    if (Number.isNaN(dt.getTime())) return s;
+    return dt.toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
+}
+
+async function openPackage(id) {
+    try {
+        const r = await fetch(`/api/epi-purchases/${id}`);
+        const j = await r.json();
+        if (j.status !== 'ok') throw new Error(j.message || 'erro');
+        const p = j.data;
+        if (!p.codccu) {
+            toast('Esta compra é legada (sem centro de custo). Edição precisa de CCU para continuar.', 'warning');
+        }
+        // CCU
+        const ccuSel = document.getElementById('codccu');
+        if (p.codccu && !Array.from(ccuSel.options).some(o => o.value === p.codccu)) {
+            const opt = document.createElement('option');
+            opt.value = p.codccu;
+            opt.textContent = p.codccu;
+            ccuSel.appendChild(opt);
+        }
+        ccuSel.value = p.codccu || '';
+        document.getElementById('mes_ano').value = (p.mes_ano || '').slice(0, 7);
+        document.getElementById('observacao').value = p.observacao || '';
+        // Carregar funcionários ativos do CCU, e marcar os já salvos
+        if (p.codccu) {
+            await onCcuChange();
+            const saved = (p.agrupado?.funcionarios || []);
+            for (const f of saved) {
+                employees.nomeByNumcad[f.numcad] = f.nome;
+                employees.selected.add(f.numcad);
+                if (!employees.all.some(e => e.numcad === f.numcad)) {
+                    employees.all.push({ numcad: f.numcad, nomfun: f.nome, codccu: p.codccu, cargo: '' });
+                }
+            }
+            renderEmployees();
+            updateCounters();
+        }
+        // Itens
+        document.getElementById('items-body').innerHTML = '';
+        for (const it of (p.agrupado?.itens || [])) addItem(it);
+        // estado edição
+        purchaseState.editingId = p.id;
+        document.getElementById('editing-banner').style.display = 'block';
+        document.getElementById('editing-id').textContent = '#' + p.id;
+        document.getElementById('form-title').textContent = 'Editando Compra #' + p.id;
+        document.getElementById('btn-submit').textContent = 'Atualizar Compra';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {
+        toast('Erro ao abrir compra: ' + e.message, 'error');
+    }
+}
+
+async function deletePackage(id) {
+    if (!confirm(`Tem certeza que deseja excluir a compra #${id}? Esta ação não pode ser desfeita.`)) return;
+    try {
+        const r = await fetch(`/api/epi-purchases/${id}`, { method: 'DELETE' });
+        const j = await r.json();
+        if (j.status !== 'success') throw new Error(j.message || 'erro');
+        toast('Compra excluída.', 'success');
+        if (purchaseState.editingId === id) cancelEdit();
+        loadPackages();
+    } catch (e) {
+        toast('Erro ao excluir: ' + e.message, 'error');
+    }
+}
+
+function cancelEdit() {
+    purchaseState.editingId = null;
+    document.getElementById('editing-banner').style.display = 'none';
+    document.getElementById('form-title').textContent = 'Nova Compra de EPI';
+    document.getElementById('btn-submit').textContent = 'Salvar Compra';
+}
+
+function resetForm() {
+    cancelEdit();
+    document.getElementById('codccu').value = '';
+    document.getElementById('observacao').value = '';
+    document.getElementById('items-body').innerHTML = '';
+    addItem();
+    employees.selected.clear();
+    employees.all = [];
+    document.getElementById('employee-search').value = '';
+    document.getElementById('employee-list').innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text-muted);font-style:italic;">Selecione um centro de custo para listar os funcionários ativos.</div>';
+    const now = new Date();
+    document.getElementById('mes_ano').value = now.toISOString().slice(0, 7);
+    updateCounters();
+}
+
+// ---- toast ----
+function toast(msg, type = 'success') {
+    const div = document.createElement('div');
+    div.className = 'toast ' + type;
+    div.textContent = msg;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 4500);
+}
+{% endblock %}
