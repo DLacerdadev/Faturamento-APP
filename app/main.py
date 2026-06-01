@@ -15,6 +15,7 @@ from app.routers.data_upload import router as data_upload_router
 from app.routers.billing import router as billing_router
 from app.routers.medical_exams import router as medical_exams_router
 from app.routers.epi_purchases import router as epi_purchases_router
+from app.routers.epi_catalog import router as epi_catalog_router
 from app.config import TEMPLATES_DIR
 from app.models.user import User
 from app.session_manager import session_manager
@@ -117,6 +118,7 @@ app.include_router(data_upload_router)
 app.include_router(billing_router)
 app.include_router(medical_exams_router)
 app.include_router(epi_purchases_router)
+app.include_router(epi_catalog_router)
 
 @app.get("/proposta-comercial", response_class=HTMLResponse)
 async def proposta_comercial(request: Request):
@@ -229,6 +231,15 @@ async def epis_page(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/login", status_code=303)
     user, token = result
     return templates.TemplateResponse("epis.html", {"request": request, "user": user, "token": token})
+
+@app.get("/catalogo-epis", response_class=HTMLResponse)
+async def catalogo_epis_page(request: Request, db: Session = Depends(get_db)):
+    """Catálogo de EPIs (spec 002-epi-catalog-orders)."""
+    result = get_current_user_from_token(request, db)
+    if not result:
+        return RedirectResponse(url="/login", status_code=303)
+    user, token = result
+    return templates.TemplateResponse("catalogo_epis.html", {"request": request, "user": user, "token": token})
 
 @app.get("/health")
 async def health_check():

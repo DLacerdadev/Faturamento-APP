@@ -282,6 +282,7 @@ EVENT_TO_FEMSA_MAPPING = {
     850: None,
     851: None,
     1550: (None, "SALDO SALARIO DIA RESCISAO (Valor)"),
+    1701: (None, "SALDO NEGATIVO"),
     1950: (None, "ADICIONAL NOTURNO (Valor)"),
     1957: (None, "DESCONTO DE QUEBRA DE CAIXA"),
     1961: None,

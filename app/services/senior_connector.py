@@ -227,6 +227,59 @@ def _normalize_codccu_param(codccu: Optional[Union[str, List[str]]]) -> Optional
     return [codccu.strip()] if codccu.strip() else None
 
 
+def _post_soap_with_retry(
+    url: str,
+    envelope: str,
+    headers: Dict[str, str],
+    label: str = "SOAP",
+    timeout: int = 120,
+    max_attempts: int = 1,  # mantido na assinatura por compat; retry desativado
+) -> requests.Response:
+    """
+    POST SOAP — sem retry (desativado intencionalmente).
+
+    Razão: retries automáticos sob 503/timeout podem viver em loop quando o F5
+    ASM ou a Senior estão estressados, agravando o problema. Decisão: falhar
+    rápido e deixar o usuário decidir clicar de novo.
+
+    Feature 003: limita chamadas SOAP concorrentes via `_SOAP_SEMAPHORE`
+    (default 3). Aguardo > 100ms é logado para depurar gargalos.
+
+    Em caso de 503, ainda extrai o support ID do F5 e loga para abertura de chamado.
+    """
+    import re as _re
+    import time as _time
+    from app.services.senior_cache import _SOAP_SEMAPHORE
+
+    t0 = _time.time()
+    _SOAP_SEMAPHORE.acquire()
+    wait_ms = (_time.time() - t0) * 1000
+    if wait_ms > 100:
+        logger.info("%s wait_ms=%.0f (semáforo SOAP)", label, wait_ms)
+    try:
+        try:
+            resp = requests.post(url, data=envelope.encode("utf-8"), headers=headers, timeout=timeout, verify=True)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            logger.error("%s falha de rede: %s", label, e)
+            raise
+    finally:
+        _SOAP_SEMAPHORE.release()
+
+    if resp.status_code == 200:
+        return resp
+
+    if resp.status_code == 503:
+        support_id = ""
+        m = _re.search(r"support ID is ([a-f0-9-]+)", resp.text or "", _re.IGNORECASE)
+        if m:
+            support_id = m.group(1)
+        logger.error("%s: F5 503 (support=%s) body=%s", label, support_id, resp.text[:500])
+        raise Exception(f"Senior F5 bloqueando (HTTP 503). Tente novamente em alguns minutos. Support ID: {support_id}")
+
+    logger.error("%s HTTP %s: %s", label, resp.status_code, resp.text[:500])
+    raise Exception(f"Erro HTTP {resp.status_code} na chamada {label}: {resp.text[:300]}")
+
+
 def _call_soap_consulta_single(
     dat_ini: str,
     dat_fim: str,
@@ -258,11 +311,7 @@ def _call_soap_consulta_single(
     logger.info("SOAP Senior request: url=%s datIni=%s datFim=%s numEmp=%s codCcu=%s",
                 soap_url, dat_ini, dat_fim, num_emp, cod_ccu_list)
 
-    response = requests.post(soap_url, data=envelope.encode("utf-8"), headers=headers, timeout=120, verify=True)
-
-    if response.status_code != 200:
-        logger.error("SOAP Senior HTTP %s: %s", response.status_code, response.text[:500])
-        raise Exception(f"Erro HTTP {response.status_code} na chamada SOAP Senior: {response.text[:300]}")
+    response = _post_soap_with_retry(soap_url, envelope, headers, label="consultaRegistros")
 
     registros = _parse_soap_registros(response.content)
     logger.info("SOAP Senior retornou %d registros", len(registros))
@@ -577,14 +626,30 @@ def _call_soap_cost_centers(numemp: int = 6) -> List[Dict[str, Any]]:
 
 
 def fetch_cost_centers(numemp: int = 6) -> List[Dict[str, Any]]:
+    """Lista de CCUs com cache (feature 003). Key = numemp."""
+    from app.services.senior_cache import ccu_cache
+
+    cached = ccu_cache.get(numemp)
+    if cached is not None:
+        return cached
+
     centers = _call_soap_cost_centers(numemp)
     centers.sort(key=lambda c: c.get("codccu", ""))
+    ccu_cache.set(numemp, centers)
     return centers
 
 
 def fetch_all_cost_centers() -> List[Dict[str, Any]]:
+    """Idem fetch_cost_centers, fixo em TELOS_NUMEMP, com cache."""
+    from app.services.senior_cache import ccu_cache
+
+    cached = ccu_cache.get(TELOS_NUMEMP)
+    if cached is not None:
+        return cached
+
     centers = _call_soap_cost_centers(TELOS_NUMEMP)
     centers.sort(key=lambda c: c.get("codccu", ""))
+    ccu_cache.set(TELOS_NUMEMP, centers)
     return centers
 
 
@@ -634,24 +699,55 @@ def fetch_active_employees(codccu: str) -> List[Dict[str, Any]]:
     usando SOAP Senior `consultaRegistros` para o mês corrente.
 
     Em DEV_MODE com app.db populado, cai pra _fetch_payroll_local (mesmo connector já cuida).
+    Feature 003: usa employees_cache (TTL configurável, default 1h). Key = (codccu, mês corrente).
 
     Retorno: lista de dicts no formato esperado pelo front:
     [{numcad, nomfun, codccu, datadm, datafa, cargo, sitafa, dessit, valsal}, ...]
     """
     from datetime import date
+    from app.services.senior_cache import employees_cache, current_month_key
+
     if not codccu:
         return []
 
     today = date.today()
     periodo = f"{today.year}-{today.month:02d}-01"
     codccu_s = str(codccu).strip()
+    cache_key = (codccu_s, current_month_key())
+
+    cached = employees_cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     try:
         registros = fetch_payroll(periodo=periodo, codccu=codccu_s)
     except Exception as e:
-        logger.error("fetch_active_employees: erro ao buscar payroll periodo=%s codccu=%s: %s",
-                     periodo, codccu_s, e)
-        raise
+        # Em vez de propagar (=> erro 500 na tela), loga e segue pro fallback.
+        # Útil quando Senior corta conexão (ConnectionResetError 10054), timeout
+        # ou 503: o fallback mês anterior pode ter os mesmos funcionários ativos
+        # e a UX fica MUITO melhor do que tela quebrada.
+        logger.warning("fetch_active_employees: %s falhou (%s) — tentará fallback mês anterior",
+                       periodo, e)
+        registros = []
+
+    # Fallback: se mês corrente vier vazio (caso típico no começo do mês, antes
+    # do Senior processar a folha) ou se a chamada acima falhou por rede,
+    # tenta o mês anterior para não devolver tela vazia ao usuário.
+    if not registros:
+        if today.month == 1:
+            prev_year, prev_month = today.year - 1, 12
+        else:
+            prev_year, prev_month = today.year, today.month - 1
+        periodo_prev = f"{prev_year}-{prev_month:02d}-01"
+        logger.info(
+            "fetch_active_employees: %s vazio para codccu=%s, tentando fallback %s",
+            periodo, codccu_s, periodo_prev,
+        )
+        try:
+            registros = fetch_payroll(periodo=periodo_prev, codccu=codccu_s)
+        except Exception as e:
+            logger.error("fetch_active_employees: fallback %s falhou: %s", periodo_prev, e)
+            registros = []
 
     # dedup por matricula, ficando com o registro mais "rico" (com nome preenchido)
     by_numcad: Dict[Any, Dict[str, Any]] = {}
@@ -680,6 +776,7 @@ def fetch_active_employees(codccu: str) -> List[Dict[str, Any]]:
             "valsal": r.get("salario"),
         })
     out.sort(key=lambda e: (e.get("nomfun") or "").upper())
+    employees_cache.set(cache_key, out)
     return out
 
 

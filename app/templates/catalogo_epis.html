@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+
+{% block title %}Catálogo de EPIs - Telos Consultoria{% endblock %}
+
+{% block extra_css %}
+<style>
+    .sizes-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 0.75rem;
+    }
+    .sizes-table th {
+        text-align: left;
+        font-size: 0.75rem;
+        color: var(--gold);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .sizes-table td {
+        padding: 0.5rem;
+        font-family: 'JetBrains Mono', monospace;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .sizes-table input {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-strong);
+        background: var(--input-bg);
+        color: var(--text-primary);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+    }
+    .sizes-table input:focus { border-color: var(--gold); outline: none; }
+    .sizes-table .col-size { width: 200px; }
+    .sizes-table .col-money { width: 180px; }
+    .sizes-table .col-action { width: 50px; text-align: center; }
+    .icon-btn {
+        background: none; border: none; cursor: pointer;
+        color: var(--error); font-size: 1.25rem; line-height: 1; padding: 0.25rem;
+    }
+    .form-actions { display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap; }
+    .toast {
+        position: fixed; top: 1.5rem; right: 1.5rem; padding: 1rem 1.5rem;
+        z-index: 1000; font-weight: 600; border-left: 4px solid;
+        min-width: 280px; max-width: 420px; background: var(--bg-secondary);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+    .toast.success { border-color: var(--success); color: var(--success); }
+    .toast.error   { border-color: var(--error);   color: var(--error); }
+    .toast.warning { border-color: var(--warning); color: var(--warning); }
+    .editing-banner {
+        background: rgba(212, 168, 75, 0.1); border-left: 4px solid var(--gold);
+        padding: 0.75rem 1rem; margin-bottom: 1.5rem; color: var(--gold);
+        font-family: 'JetBrains Mono', monospace; font-size: 0.875rem;
+    }
+    .badge-inactive {
+        background: rgba(122, 122, 122, 0.25); color: var(--text-muted);
+        border: 1px solid var(--border-strong); padding: 0.125rem 0.5rem;
+        font-size: 0.625rem; text-transform: uppercase; letter-spacing: 1px;
+        font-weight: 600;
+    }
+    .badge-active {
+        background: rgba(74, 222, 128, 0.18); color: var(--success);
+        border: 1px solid var(--success); padding: 0.125rem 0.5rem;
+        font-size: 0.625rem; text-transform: uppercase; letter-spacing: 1px;
+        font-weight: 600;
+    }
+    .row-inactive td { opacity: 0.55; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Catálogo de EPIs</h1>
+</div>
+
+<div id="editing-banner" class="editing-banner" style="display:none;">
+    Editando EPI <span id="editing-id"></span> &mdash;
+    <a href="#" onclick="cancelEdit(); return false;" style="color:inherit; text-decoration: underline;">cancelar edição</a>
+</div>
+
+<!-- Form -->
+<div class="card">
+    <div class="card-header">
+        <h2 id="form-title">Novo EPI</h2>
+    </div>
+
+    <div class="form-group">
+        <label for="epi-nome">Nome do EPI</label>
+        <input type="text" id="epi-nome" placeholder="Ex: Capacete classe B" maxlength="200">
+    </div>
+
+    <h3 style="font-size:0.875rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin:1rem 0 0.5rem;">Tamanhos e Valores</h3>
+    <table class="sizes-table" id="sizes-table">
+        <thead>
+            <tr>
+                <th class="col-size">Tamanho</th>
+                <th class="col-money">Valor (R$)</th>
+                <th class="col-action"></th>
+            </tr>
+        </thead>
+        <tbody id="sizes-body"></tbody>
+    </table>
+    <button type="button" class="btn btn-outline" onclick="addSize()" style="font-size:0.75rem;padding:0.5rem 1rem;">+ Adicionar tamanho</button>
+
+    <div class="form-actions">
+        <button type="button" class="btn" id="btn-submit" onclick="submitEpi()">Salvar EPI</button>
+        <button type="button" class="btn btn-secondary" onclick="resetForm()">Limpar Form</button>
+    </div>
+</div>
+
+<!-- Listagem -->
+<div class="card">
+    <div class="card-header">
+        <h2>EPIs Cadastrados</h2>
+    </div>
+    <div class="form-group" style="display:flex;gap:1rem;align-items:center;margin-bottom:1rem;">
+        <input type="text" id="search-q" placeholder="Buscar por nome…" oninput="loadCatalog()" style="flex:1;">
+        <label style="display:flex;align-items:center;gap:0.5rem;color:var(--text-secondary);font-size:0.875rem;text-transform:none;letter-spacing:0;font-weight:400;">
+            <input type="checkbox" id="show-inactive" onchange="loadCatalog()"> Incluir desativados
+        </label>
+    </div>
+    <div style="overflow-x:auto;">
+        <table id="catalog-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>Tamanhos</th>
+                    <th>Status</th>
+                    <th>Em uso</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="catalog-body"></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const state = { editingId: null };
+
+let _catalogChannel = null;
+function broadcastCatalogUpdate(action) {
+    try {
+        if (_catalogChannel === null) {
+            _catalogChannel = (typeof BroadcastChannel !== 'undefined')
+                ? new BroadcastChannel('epi-catalog')
+                : false;
+        }
+        if (_catalogChannel) {
+            _catalogChannel.postMessage({ type: 'catalog-updated', action });
+        }
+    } catch (e) {
+        // browsers antigos: ignora
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    addSize();
+    loadCatalog();
+});
+
+function addSize(prefill) {
+    const tbody = document.getElementById('sizes-body');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="text" placeholder="Ex: M, G, Único" value="${prefill?.tamanho || ''}" maxlength="20"></td>
+        <td><input type="number" min="0.01" step="0.01" placeholder="0,00" value="${prefill?.valor || ''}"></td>
+        <td><button type="button" class="icon-btn" title="Remover" onclick="removeSize(this)">×</button></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function removeSize(btn) {
+    btn.closest('tr').remove();
+    if (document.querySelectorAll('#sizes-body tr').length === 0) addSize();
+}
+
+function collectSizes() {
+    const out = [];
+    document.querySelectorAll('#sizes-body tr').forEach(tr => {
+        const tamanho = tr.children[0].querySelector('input').value.trim();
+        const valor = parseFloat(tr.children[1].querySelector('input').value);
+        if (!tamanho && !valor) return;
+        out.push({ tamanho, valor });
+    });
+    return out;
+}
+
+function validatePayload(p) {
+    if (!p.nome) return 'Informe o nome do EPI.';
+    if (!p.sizes.length) return 'Adicione ao menos 1 tamanho.';
+    for (const s of p.sizes) {
+        if (!s.tamanho) return 'Cada tamanho precisa de identificador (ex: M, G, Único).';
+        if (!Number.isFinite(s.valor) || s.valor <= 0) return 'Cada tamanho precisa de valor maior que 0.';
+    }
+    return null;
+}
+
+async function submitEpi() {
+    const payload = {
+        nome: document.getElementById('epi-nome').value.trim(),
+        sizes: collectSizes(),
+    };
+    const err = validatePayload(payload);
+    if (err) { toast(err, 'error'); return; }
+
+    const btn = document.getElementById('btn-submit');
+    btn.disabled = true;
+    const oldLabel = btn.textContent;
+    btn.textContent = 'Salvando…';
+
+    try {
+        const url = state.editingId ? `/api/epi-catalog/${state.editingId}` : '/api/epi-catalog';
+        const method = state.editingId ? 'PUT' : 'POST';
+        const r = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const j = await r.json();
+        if (!r.ok || (j.status && j.status !== 'success' && j.status !== 'ok')) {
+            toast(j.message || `Erro ${r.status}`, 'error');
+            return;
+        }
+        toast(`EPI ${state.editingId ? 'atualizado' : 'cadastrado'}.`, 'success');
+        broadcastCatalogUpdate(state.editingId ? 'updated' : 'created');
+        resetForm();
+        loadCatalog();
+    } catch (e) {
+        toast('Erro de rede: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = oldLabel;
+    }
+}
+
+async function loadCatalog() {
+    const q = document.getElementById('search-q').value.trim();
+    const includeInactive = document.getElementById('show-inactive').checked;
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (includeInactive) params.set('include_inactive', 'true');
+    params.set('_', Date.now());
+    try {
+        const r = await fetch('/api/epi-catalog?' + params, { cache: 'no-store' });
+        const j = await r.json();
+        if (j.status !== 'ok') throw new Error(j.message || 'erro');
+        try {
+            renderCatalog(j.data || []);
+        } catch (renderErr) {
+            console.error('Falha ao renderizar catálogo', renderErr, j.data);
+            document.getElementById('catalog-body').innerHTML =
+                `<tr><td colspan="6" style="text-align:center;color:var(--error);padding:1rem;">Erro ao renderizar: ${renderErr.message}</td></tr>`;
+        }
+    } catch (e) {
+        document.getElementById('catalog-body').innerHTML =
+            `<tr><td colspan="6" style="text-align:center;color:var(--error);padding:1rem;">Erro: ${e.message}</td></tr>`;
+    }
+}
+
+function renderCatalog(list) {
+    const tbody = document.getElementById('catalog-body');
+    if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:2rem;font-style:italic;">Nenhum EPI cadastrado.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = list.map(e => {
+        const sizesStr = e.sizes.map(s => `${s.tamanho} (R$ ${s.valor.toFixed(2)})`).join(', ');
+        const statusBadge = e.ativo
+            ? '<span class="badge-active">Ativo</span>'
+            : '<span class="badge-inactive">Desativado</span>';
+        const actionBtn = e.ativo
+            ? `<button class="btn btn-danger" style="padding:0.4rem 0.85rem;font-size:0.7rem;" onclick="deactivate(${e.id}, ${e.in_use_count})">Desativar</button>`
+            : `<button class="btn btn-success" style="padding:0.4rem 0.85rem;font-size:0.7rem;" onclick="reactivate(${e.id})">Reativar</button>`;
+        return `
+            <tr class="${e.ativo ? '' : 'row-inactive'}">
+                <td>#${e.id}</td>
+                <td>${escapeHtml(e.nome)}</td>
+                <td>${escapeHtml(sizesStr)}</td>
+                <td>${statusBadge}</td>
+                <td>${e.in_use_count}</td>
+                <td>
+                    <button class="btn btn-outline" style="padding:0.4rem 0.85rem;font-size:0.7rem;" onclick="editEpi(${e.id})">Editar</button>
+                    ${actionBtn}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+async function editEpi(id) {
+    try {
+        const r = await fetch(`/api/epi-catalog/${id}`);
+        const j = await r.json();
+        if (j.status !== 'ok') throw new Error(j.message || 'erro');
+        const e = j.data;
+        document.getElementById('epi-nome').value = e.nome;
+        document.getElementById('sizes-body').innerHTML = '';
+        for (const s of e.sizes) addSize(s);
+        if (e.sizes.length === 0) addSize();
+        state.editingId = e.id;
+        document.getElementById('editing-banner').style.display = 'block';
+        document.getElementById('editing-id').textContent = '#' + e.id;
+        document.getElementById('form-title').textContent = 'Editando EPI #' + e.id;
+        document.getElementById('btn-submit').textContent = 'Atualizar EPI';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {
+        toast('Erro ao abrir EPI: ' + e.message, 'error');
+    }
+}
+
+async function deactivate(id, inUseCount) {
+    let msg = `Desativar o EPI #${id}?`;
+    if (inUseCount > 0) {
+        msg = `Este EPI tem ${inUseCount} linha(s) de pedido vinculadas. Ele continuará visível nesses pedidos, mas não aparecerá para novos pedidos. Confirma a desativação?`;
+    }
+    if (!confirm(msg)) return;
+    try {
+        const r = await fetch(`/api/epi-catalog/${id}`, { method: 'DELETE' });
+        const j = await r.json();
+        if (j.status !== 'success') throw new Error(j.message || 'erro');
+        toast(j.warning || 'EPI desativado.', j.warning ? 'warning' : 'success');
+        broadcastCatalogUpdate('deactivated');
+        if (state.editingId === id) cancelEdit();
+        loadCatalog();
+    } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+    }
+}
+
+async function reactivate(id) {
+    try {
+        const r = await fetch(`/api/epi-catalog/${id}/reactivate`, { method: 'POST' });
+        const j = await r.json();
+        if (!r.ok || j.status !== 'success') {
+            toast(j.message || `Erro ${r.status}`, 'error');
+            return;
+        }
+        toast('EPI reativado.', 'success');
+        broadcastCatalogUpdate('reactivated');
+        loadCatalog();
+    } catch (e) {
+        toast('Erro: ' + e.message, 'error');
+    }
+}
+
+function cancelEdit() {
+    state.editingId = null;
+    document.getElementById('editing-banner').style.display = 'none';
+    document.getElementById('form-title').textContent = 'Novo EPI';
+    document.getElementById('btn-submit').textContent = 'Salvar EPI';
+}
+
+function resetForm() {
+    cancelEdit();
+    document.getElementById('epi-nome').value = '';
+    document.getElementById('sizes-body').innerHTML = '';
+    addSize();
+}
+
+function toast(msg, type = 'success') {
+    const div = document.createElement('div');
+    div.className = 'toast ' + type;
+    div.textContent = msg;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 4500);
+}
+{% endblock %}

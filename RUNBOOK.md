@@ -245,6 +245,101 @@ Em primeira subida limpa (sem `app.db` / banco vazio), `init_db()` cria as colun
 
 Conferência: `python -c "import sqlite3; print([r[1] for r in sqlite3.connect('app.db').execute('PRAGMA table_info(epi_purchase_items)')])"` deve incluir `employee_numcad` e `employee_nome`.
 
+### 002 — Catálogo de EPIs e Solicitação
+
+Spec: [specs/002-epi-catalog-orders/](specs/002-epi-catalog-orders/)
+
+Introduz catálogo de EPIs e gera Excel de solicitação automaticamente ao salvar. Novas tabelas: `epi_catalog`, `epi_catalog_sizes`. Novas colunas em `epi_purchase_packages` (solicitante_nome, totais agregados, solicitacao_filename, solicitacao_generated_at) e `epi_purchase_items` (epi_id, tamanho, quantidade_por_funcionario, valor_unitario_catalogo).
+
+```sql
+CREATE TABLE IF NOT EXISTS epi_catalog (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome VARCHAR(200) NOT NULL,
+    ativo BOOLEAN NOT NULL DEFAULT 1,
+    created_at DATETIME,
+    updated_at DATETIME
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_epi_catalog_nome_upper
+    ON epi_catalog(UPPER(nome)) WHERE ativo = 1;
+
+CREATE TABLE IF NOT EXISTS epi_catalog_sizes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    epi_id INTEGER NOT NULL REFERENCES epi_catalog(id) ON DELETE CASCADE,
+    tamanho VARCHAR(20) NOT NULL,
+    valor FLOAT NOT NULL,
+    UNIQUE (epi_id, tamanho)
+);
+CREATE INDEX IF NOT EXISTS ix_epi_catalog_sizes_epi_id ON epi_catalog_sizes(epi_id);
+
+ALTER TABLE epi_purchase_packages ADD COLUMN solicitante_nome VARCHAR(200);
+ALTER TABLE epi_purchase_packages ADD COLUMN quantidade_total_geral INTEGER;
+ALTER TABLE epi_purchase_packages ADD COLUMN valor_total_compra_geral FLOAT;
+ALTER TABLE epi_purchase_packages ADD COLUMN solicitacao_filename VARCHAR(500);
+ALTER TABLE epi_purchase_packages ADD COLUMN solicitacao_generated_at DATETIME;
+
+ALTER TABLE epi_purchase_items ADD COLUMN epi_id INTEGER REFERENCES epi_catalog(id);
+ALTER TABLE epi_purchase_items ADD COLUMN tamanho VARCHAR(20);
+ALTER TABLE epi_purchase_items ADD COLUMN quantidade_por_funcionario INTEGER;
+ALTER TABLE epi_purchase_items ADD COLUMN valor_unitario_catalogo FLOAT;
+
+CREATE INDEX IF NOT EXISTS ix_epi_purchase_items_epi_id ON epi_purchase_items(epi_id);
+```
+
+Pacotes legados (sem `epi_id`) continuam carregando — UI marca como "Legado" e bloqueia geração de solicitação. Variáveis `.env` opcionais (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`, `EPI_PURCHASE_EMAIL`) habilitam envio por email; sem elas o sistema mantém apenas o download do Excel.
+
+---
+
+## Cache Senior e throttle (feature 003)
+
+Spec: [specs/003-senior-cache-throttle/](specs/003-senior-cache-throttle/)
+
+Cache em memória de processo para reduzir chamadas SOAP redundantes:
+- `ccu_cache` — lista de centros de custo (T018CCU). TTL default 6h.
+- `employees_cache` — funcionários ativos por CCU+mês corrente. TTL default 1h.
+- `_SOAP_SEMAPHORE` — máximo de chamadas SOAP simultâneas (default 3); excesso enfileira.
+
+### Variáveis `.env` (opcionais, todas com default razoável)
+
+```dotenv
+SENIOR_CACHE_CCU_TTL=21600         # 6h
+SENIOR_CACHE_EMPLOYEES_TTL=3600    # 1h
+SENIOR_SOAP_MAX_CONCURRENCY=3
+```
+
+### Endpoints admin (autenticados via sessão)
+
+**Limpar entradas do cache** (não busca dados novos):
+
+```bash
+curl -X POST "http://127.0.0.1:8000/integrations/senior/cache/invalidate?token=$TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"scope":"ccu"}'
+# Resposta: {"status":"ok","scope":"ccu","removed":{"ccu":1,"employees":0}}
+```
+
+Scopes aceitos: `"ccu"`, `"employees"`, `"all"`. `key` opcional (limpa só essa entrada).
+
+**Forçar revalidação** (limpa + busca + popula):
+
+```bash
+curl -X POST "http://127.0.0.1:8000/integrations/senior/cache/refresh?token=$TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"scope":"employees","key":"620039"}'
+```
+
+Para `scope=employees`, `key` é obrigatório (codccu). Para `scope=ccu`, key é opcional (default = TELOS_NUMEMP).
+
+**Inspecionar estado**:
+
+```bash
+curl "http://127.0.0.1:8000/integrations/senior/cache/stats?token=$TOKEN"
+# Mostra entradas atuais, age e ttl_left de cada chave.
+```
+
+### Retry desativado
+
+Por decisão arquitetural (evitar amplificar carga durante instabilidade da Senior/F5), retry automático foi removido. Em falha de SOAP (503, timeout, ConnectionError), a chamada falha imediatamente e propaga erro descritivo ao usuário (com support ID do F5 quando disponível). O usuário decide se tenta de novo.
+
 ---
 
 ## Checklist rápido

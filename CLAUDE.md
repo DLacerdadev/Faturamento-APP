@@ -37,10 +37,20 @@ Sistema de faturamento RH com integração Senior ERP.
 <!-- SPECKIT START -->
 ## Active Spec Feature
 
+- **003 — Cache e Throttle das Chamadas Senior** — [specs/003-senior-cache-throttle/](specs/003-senior-cache-throttle/)
+  - Status: **implementação em disco completa — pendente validação E2E**
+  - Backend: novo módulo [`app/services/senior_cache.py`](app/services/senior_cache.py) (TimedCache stdlib, 2 instâncias singleton, semáforo); refatorações em [`app/services/senior_connector.py`](app/services/senior_connector.py) (`fetch_cost_centers`, `fetch_all_cost_centers`, `fetch_active_employees`, `_post_soap_with_retry`); 3 endpoints admin em [`app/routers/integrations.py`](app/routers/integrations.py)
+  - TTL CCUs 6h, TTL funcionários 1h, max concorrência 3 SOAPs (configurável via `.env`); retry removido (falha rápida)
+  - Documentos: [spec](specs/003-senior-cache-throttle/spec.md) · [plan](specs/003-senior-cache-throttle/plan.md) · [research](specs/003-senior-cache-throttle/research.md) · [data-model](specs/003-senior-cache-throttle/data-model.md) · [contracts](specs/003-senior-cache-throttle/contracts/rest-endpoints.md) · [quickstart](specs/003-senior-cache-throttle/quickstart.md) · [tasks](specs/003-senior-cache-throttle/tasks.md)
+
+### Features concluídas
+
+- **002 — Catálogo de EPIs e Pedido de Compra com Solicitação** — [specs/002-epi-catalog-orders/](specs/002-epi-catalog-orders/) — `/catalogo-epis` + `/epis` v2 com cartesiano, Excel auto-gerado ao salvar, email se SMTP. Migração 002 aplicada.
+
+- **001 — Fluxo de Compra de EPIs por Funcionário** — [specs/001-epi-purchase-flow/](specs/001-epi-purchase-flow/) — `/epis` com multi-select de funcionários e produto cartesiano funcionário×item, revalidação server-side, migração 001 aplicada.
+
+### Features concluídas
+
 - **001 — Fluxo de Compra de EPIs por Funcionário** — [specs/001-epi-purchase-flow/](specs/001-epi-purchase-flow/)
-  - Status: **implementação em disco completa, pendente validação E2E**
-  - Tela: `GET /epis` (link na nav)
-  - Backend: `POST/PUT /api/epi-purchases` aceitam `{codccu, employees[], items[]}` e geram cartesiano; revalidação server-side com `409` se algum funcionário deixou de estar ativo
-  - Migração SQL aplicada em `app.db` (3 colunas novas + 2 índices); detalhes em [RUNBOOK.md](RUNBOOK.md#migrações)
-  - Documentos: [spec](specs/001-epi-purchase-flow/spec.md) · [plan](specs/001-epi-purchase-flow/plan.md) · [research](specs/001-epi-purchase-flow/research.md) · [data-model](specs/001-epi-purchase-flow/data-model.md) · [contracts](specs/001-epi-purchase-flow/contracts/rest-endpoints.md) · [quickstart](specs/001-epi-purchase-flow/quickstart.md) · [tasks](specs/001-epi-purchase-flow/tasks.md)
+  - Tela `/epis` com multi-select de funcionários e produto cartesiano funcionário×item, revalidação server-side ao salvar, migração 001 aplicada
 <!-- SPECKIT END -->

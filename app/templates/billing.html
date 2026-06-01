@@ -255,7 +255,7 @@
     <button class="tab-btn" onclick="showTab('exportar-faturamento')">Exportar Faturamento</button>
     <button class="tab-btn" onclick="showTab('folha-senior')">Folha Senior</button>
     <button class="tab-btn" onclick="showTab('exames-medicos')">Exames</button>
-    <button class="tab-btn" onclick="showTab('epi-compras')">EPIs</button>
+    <button class="tab-btn" onclick="window.location.href='/epis?token={{ token }}'">EPIs</button>
     <button class="tab-btn" onclick="showTab('valores-adicionais')">Valores Adicionais</button>
 </div>
 
@@ -361,10 +361,10 @@
         </div>
         
         <div style="display: flex; gap: 1rem;">
-            <button type="button" class="btn btn-outline" onclick="loadPayroll()" style="flex: 1;">
+            <button type="button" id="btn-load-payroll" class="btn btn-outline" onclick="loadPayroll()" style="flex: 1;">
                 Consultar Folha
             </button>
-            <button type="button" class="btn" onclick="downloadPayrollExcel()" style="flex: 1;">
+            <button type="button" id="btn-download-payroll" class="btn" onclick="downloadPayrollExcel()" style="flex: 1;">
                 Baixar Excel
             </button>
         </div>
@@ -566,7 +566,7 @@
         </div>
         -->
         
-        <button type="button" class="btn" onclick="downloadBillingExport()">
+        <button type="button" id="btn-download-billing-export" class="btn" onclick="downloadBillingExport()">
             Exportar Faturamento
         </button>
         
@@ -614,7 +614,7 @@
             <div id="senior-selected-count" style="color: var(--gold); font-size: 0.8rem; margin-top: 0.5rem; font-weight: 600;"></div>
         </div>
 
-        <button type="button" class="btn" onclick="downloadSeniorExport()">
+        <button type="button" id="btn-download-senior-export" class="btn" onclick="downloadSeniorExport()">
             Exportar Folha Senior
         </button>
 
@@ -844,116 +844,6 @@
     </div>
 </div>
 
-<div id="epi-compras" class="tab-content">
-    <div class="card">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <h2 id="epi-form-title">Cadastrar Compra de EPIs</h2>
-            <div>
-                <button type="button" class="btn btn-outline" id="btn-toggle-epi-form" onclick="toggleEpiForm()" style="font-size: 0.8rem; padding: 0.5rem 1rem;">Nova Compra</button>
-            </div>
-        </div>
-
-        <div id="epi-form-container" style="display: none;">
-            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-                <div class="form-group">
-                    <label for="epi-empresa">Empresa</label>
-                    <select id="epi-empresa">
-                        <option value="FEMSA" selected>FEMSA</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Mes/Ano</label>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <select id="epi-mes" style="flex: 1;" required>
-                            <option value="">Mes...</option>
-                            <option value="01">Janeiro</option>
-                            <option value="02">Fevereiro</option>
-                            <option value="03">Marco</option>
-                            <option value="04">Abril</option>
-                            <option value="05">Maio</option>
-                            <option value="06">Junho</option>
-                            <option value="07">Julho</option>
-                            <option value="08">Agosto</option>
-                            <option value="09">Setembro</option>
-                            <option value="10">Outubro</option>
-                            <option value="11">Novembro</option>
-                            <option value="12">Dezembro</option>
-                        </select>
-                        <select id="epi-ano" style="flex: 1;" required>
-                            <option value="">Ano...</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group" style="margin-bottom: 1rem;">
-                <label for="epi-observacao">Observacao (opcional)</label>
-                <input type="text" id="epi-observacao" placeholder="Ex: Compra trimestral, Reposicao, etc.">
-            </div>
-
-            <input type="hidden" id="epi-edit-id" value="">
-
-            <div style="background: var(--gray-700); padding: 1rem; margin-bottom: 1rem; border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <h3 style="color: var(--gold); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px;">Itens da Compra</h3>
-                    <button type="button" class="btn btn-outline" onclick="addEpiItem()" style="font-size: 0.75rem; padding: 0.3rem 0.8rem;">+ Adicionar Item</button>
-                </div>
-                <div id="epi-items-container">
-                </div>
-                <div style="text-align: right; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--gray-600);">
-                    <span style="color: var(--gray-400); font-size: 0.85rem;">Total Geral: </span>
-                    <span id="epi-total-geral" style="color: var(--gold); font-weight: 700; font-size: 1.1rem;">R$ 0,00</span>
-                </div>
-            </div>
-
-            <div style="background: var(--gray-700); padding: 1rem; margin-bottom: 1rem; border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                    <h3 style="color: var(--gold); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px;">Notas Fiscais / Documentos</h3>
-                    <button type="button" class="btn btn-outline" onclick="document.getElementById('epi-file-input').click()" style="font-size: 0.75rem; padding: 0.3rem 0.8rem;">+ Anexar Arquivo</button>
-                </div>
-                <input type="file" id="epi-file-input" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" style="display:none;" onchange="onEpiFilesSelected(this)">
-                <div id="epi-files-list" style="font-size: 0.85rem; color: var(--gray-300);"></div>
-                <p id="epi-files-empty" style="color: var(--gray-500); font-size: 0.8rem; margin: 0;">Nenhum arquivo selecionado</p>
-            </div>
-
-            <div style="display: flex; gap: 1rem;">
-                <button type="button" class="btn" onclick="saveEpiPackage()">Salvar Compra</button>
-                <button type="button" class="btn btn-outline" onclick="cancelEpiForm()">Cancelar</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="card" style="margin-top: 1.5rem;">
-        <div class="card-header">
-            <h2>Compras Cadastradas</h2>
-        </div>
-
-        <div id="epi-loading" class="loading-overlay">
-            <div class="loading-spinner"></div>
-            <p>Carregando...</p>
-        </div>
-
-        <div id="epi-list-container" style="overflow-x: auto;">
-            <table class="data-table" id="epi-table">
-                <thead>
-                    <tr>
-                        <th>Empresa</th>
-                        <th>Mes/Ano</th>
-                        <th>Qtd Itens</th>
-                        <th>Total (R$)</th>
-                        <th>Documentos</th>
-                        <th>Acoes</th>
-                    </tr>
-                </thead>
-                <tbody id="epi-table-body">
-                </tbody>
-            </table>
-        </div>
-
-        <div id="epi-list-info" style="text-align: center; color: var(--gray-400); font-size: 0.8rem; margin-top: 0.5rem;"></div>
-        <div id="epi-pagination" style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 1rem;"></div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -965,10 +855,7 @@ function showTab(tabId) {
     
     document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
     document.getElementById(tabId).classList.add('active');
-    
-    if (tabId === 'epi-compras') {
-        loadEpiPackages();
-    }
+
     if (tabId === 'valores-adicionais') {
         loadAdditionalValues();
     }
@@ -1328,22 +1215,24 @@ async function loadPayroll() {
         return;
     }
     
+    const btn = document.getElementById('btn-load-payroll');
+    if (btn) btn.disabled = true;
     document.getElementById('payroll-loading').classList.add('active');
     document.getElementById('payroll-summary').style.display = 'none';
     document.getElementById('payroll-container').style.display = 'none';
-    
+
     try {
         const ccuParams = selectedCcus.map(ccu => `codccu=${encodeURIComponent(ccu)}`).join('&');
         const url = `/integrations/senior/payroll?periodo=${periodo}&${ccuParams}`;
         const response = await fetch(url);
         const data = await response.json();
-        
+
         if (data.status === 'ok') {
             document.getElementById('payroll-total-func').textContent = data.total_funcionarios || 0;
             document.getElementById('payroll-total-eventos').textContent = data.total_eventos || 0;
             document.getElementById('payroll-ccu').textContent = selectedCcus.length > 1 ? `${selectedCcus.length} selecionados` : selectedCcus[0];
             document.getElementById('payroll-summary').style.display = 'block';
-            
+
             renderPayrollCards(data.funcionarios || []);
             document.getElementById('payroll-container').style.display = 'block';
         } else {
@@ -1353,6 +1242,7 @@ async function loadPayroll() {
         alert('Erro ao consultar folha: ' + error.message);
     } finally {
         document.getElementById('payroll-loading').classList.remove('active');
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -1419,8 +1309,15 @@ function downloadPayrollExcel() {
         return;
     }
     
+    const btn = document.getElementById('btn-download-payroll');
+    if (btn) btn.disabled = true;
+
     const ccuParams = selectedCcus.map(ccu => `codccu=${encodeURIComponent(ccu)}`).join('&');
     window.location.href = `/integrations/senior/payroll/export?periodo=${periodo}&${ccuParams}`;
+
+    setTimeout(() => {
+        if (btn) btn.disabled = false;
+    }, 3000);
 }
 
 // Initialize payroll tab on load
@@ -1500,13 +1397,16 @@ function downloadBillingExport() {
         return;
     }
     
+    const btn = document.getElementById('btn-download-billing-export');
+    if (btn) btn.disabled = true;
     document.getElementById('export-loading').classList.add('active');
-    
+
     const codccuParams = selectedOptions.map(c => `codccu=${encodeURIComponent(c)}`).join('&');
     window.location.href = `/integrations/senior/billing/export-${modelo}?periodo=${periodo}&${codccuParams}`;
-    
+
     setTimeout(() => {
         document.getElementById('export-loading').classList.remove('active');
+        if (btn) btn.disabled = false;
     }, 3000);
 }
 
@@ -1647,6 +1547,8 @@ function downloadSeniorExport() {
         return;
     }
 
+    const btn = document.getElementById('btn-download-senior-export');
+    if (btn) btn.disabled = true;
     const loading = document.getElementById('senior-loading');
     if (loading) loading.style.display = 'block';
 
@@ -1655,6 +1557,7 @@ function downloadSeniorExport() {
 
     setTimeout(() => {
         if (loading) loading.style.display = 'none';
+        if (btn) btn.disabled = false;
     }, 5000);
 }
 
@@ -2539,482 +2442,4 @@ async function deleteExam(id) {
     }
 }
 
-// ===== EPI COMPRAS TAB =====
-let epiCurrentPage = 1;
-let epiItemCounter = 0;
-let epiPendingFiles = [];
-
-function toggleEpiForm() {
-    const container = document.getElementById('epi-form-container');
-    const btn = document.getElementById('btn-toggle-epi-form');
-    if (container.style.display === 'none') {
-        container.style.display = 'block';
-        btn.textContent = 'Fechar';
-        if (!document.getElementById('epi-edit-id').value) {
-            addEpiItem();
-        }
-    } else {
-        cancelEpiForm();
-    }
-}
-
-function initEpiAnoSelect() {
-    const sel = document.getElementById('epi-ano');
-    if (sel.options.length <= 1) {
-        const currentYear = new Date().getFullYear();
-        for (let y = currentYear + 1; y >= currentYear - 5; y--) {
-            const opt = document.createElement('option');
-            opt.value = y;
-            opt.textContent = y;
-            sel.appendChild(opt);
-        }
-    }
-}
-initEpiAnoSelect();
-
-function cancelEpiForm() {
-    document.getElementById('epi-form-container').style.display = 'none';
-    document.getElementById('btn-toggle-epi-form').textContent = 'Nova Compra';
-    document.getElementById('epi-form-title').textContent = 'Cadastrar Compra de EPIs';
-    document.getElementById('epi-edit-id').value = '';
-    document.getElementById('epi-empresa').value = 'FEMSA';
-    document.getElementById('epi-mes').value = '';
-    document.getElementById('epi-ano').value = '';
-    document.getElementById('epi-observacao').value = '';
-    document.getElementById('epi-items-container').innerHTML = '';
-    document.getElementById('epi-total-geral').textContent = 'R$ 0,00';
-    document.getElementById('epi-file-input').value = '';
-    document.getElementById('epi-files-list').innerHTML = '';
-    document.getElementById('epi-files-empty').style.display = 'block';
-    epiItemCounter = 0;
-    epiPendingFiles = [];
-}
-
-function onEpiFilesSelected(input) {
-    for (const file of input.files) {
-        epiPendingFiles.push(file);
-    }
-    input.value = '';
-    renderEpiFilesList();
-}
-
-function renderEpiFilesList() {
-    const container = document.getElementById('epi-files-list');
-    const empty = document.getElementById('epi-files-empty');
-    container.innerHTML = '';
-
-    if (epiPendingFiles.length === 0) {
-        empty.style.display = 'block';
-        return;
-    }
-    empty.style.display = 'none';
-
-    epiPendingFiles.forEach((file, idx) => {
-        const div = document.createElement('div');
-        div.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; border-bottom: 1px solid var(--gray-600);';
-        div.innerHTML = `
-            <span style="flex: 1;">${file.name}</span>
-            <span style="color: var(--gray-500); font-size: 0.75rem;">${(file.size / 1024).toFixed(1)} KB</span>
-            <button type="button" onclick="removeEpiPendingFile(${idx})" style="background: none; border: none; color: #ff6b6b; cursor: pointer; font-size: 1rem;">&#10005;</button>
-        `;
-        container.appendChild(div);
-    });
-}
-
-function removeEpiPendingFile(idx) {
-    epiPendingFiles.splice(idx, 1);
-    renderEpiFilesList();
-}
-
-function addEpiItem(descricao = '', quantidade = 1, valorUnitario = 0, valorTotal = 0) {
-    epiItemCounter++;
-    const container = document.getElementById('epi-items-container');
-    const div = document.createElement('div');
-    div.className = 'epi-item-row';
-    div.dataset.idx = epiItemCounter;
-    div.style.cssText = 'display: grid; grid-template-columns: 2fr 0.7fr 1fr 1fr auto; gap: 0.5rem; align-items: end; margin-bottom: 0.5rem; padding: 0.5rem; background: var(--gray-800); border-radius: 4px;';
-    div.innerHTML = `
-        <div class="form-group" style="margin-bottom:0">
-            <label style="font-size:0.7rem">Descricao</label>
-            <input type="text" class="epi-descricao" value="${descricao}" placeholder="Ex: Calca protetora">
-        </div>
-        <div class="form-group" style="margin-bottom:0">
-            <label style="font-size:0.7rem">Qtd</label>
-            <input type="number" class="epi-quantidade" value="${quantidade}" min="1" oninput="calcEpiItemTotal(this)">
-        </div>
-        <div class="form-group" style="margin-bottom:0">
-            <label style="font-size:0.7rem">Valor Unit.</label>
-            <input type="number" class="epi-valor-unitario" value="${valorUnitario}" step="0.01" min="0" oninput="calcEpiItemTotal(this)">
-        </div>
-        <div class="form-group" style="margin-bottom:0">
-            <label style="font-size:0.7rem">Valor Total</label>
-            <input type="number" class="epi-valor-total" value="${valorTotal}" step="0.01" readonly style="background: var(--gray-700); color: var(--gold); font-weight: 600;">
-        </div>
-        <button type="button" onclick="removeEpiItem(this)" style="background: none; border: none; color: #ff6b6b; cursor: pointer; font-size: 1.2rem; padding: 0.3rem;">&#10005;</button>
-    `;
-    container.appendChild(div);
-    updateEpiTotalGeral();
-}
-
-function calcEpiItemTotal(input) {
-    const row = input.closest('.epi-item-row');
-    const qtd = parseFloat(row.querySelector('.epi-quantidade').value) || 0;
-    const unit = parseFloat(row.querySelector('.epi-valor-unitario').value) || 0;
-    row.querySelector('.epi-valor-total').value = (qtd * unit).toFixed(2);
-    updateEpiTotalGeral();
-}
-
-function removeEpiItem(btn) {
-    btn.closest('.epi-item-row').remove();
-    updateEpiTotalGeral();
-}
-
-function updateEpiTotalGeral() {
-    let total = 0;
-    document.querySelectorAll('.epi-valor-total').forEach(input => {
-        total += parseFloat(input.value) || 0;
-    });
-    document.getElementById('epi-total-geral').textContent = 'R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-}
-
-function getEpiItems() {
-    const items = [];
-    document.querySelectorAll('.epi-item-row').forEach(row => {
-        const descricao = row.querySelector('.epi-descricao').value.trim();
-        const quantidade = parseInt(row.querySelector('.epi-quantidade').value) || 1;
-        const valorUnitario = parseFloat(row.querySelector('.epi-valor-unitario').value) || 0;
-        const valorTotal = parseFloat(row.querySelector('.epi-valor-total').value) || 0;
-        if (descricao) {
-            items.push({ descricao, quantidade, valor_unitario: valorUnitario, valor_total: valorTotal });
-        }
-    });
-    return items;
-}
-
-async function saveEpiPackage() {
-    const empresa = document.getElementById('epi-empresa').value;
-    const mes = document.getElementById('epi-mes').value;
-    const ano = document.getElementById('epi-ano').value;
-    const observacao = document.getElementById('epi-observacao').value.trim();
-    const editId = document.getElementById('epi-edit-id').value;
-    const items = getEpiItems();
-
-    if (!mes || !ano) {
-        alert('Selecione o mes e o ano');
-        return;
-    }
-    const mesAno = `${ano}-${mes}`;
-    if (items.length === 0) {
-        alert('Adicione pelo menos um item');
-        return;
-    }
-
-    const body = {
-        empresa,
-        mes_ano: mesAno + '-01',
-        observacao: observacao || null,
-        items
-    };
-
-    try {
-        let url = '/api/epi-purchases';
-        let method = 'POST';
-        if (editId) {
-            url += '/' + editId;
-            method = 'PUT';
-        }
-
-        const response = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const result = await response.json();
-
-        if (result.status === 'success') {
-            const packageId = result.data.id;
-            if (epiPendingFiles.length > 0) {
-                for (const file of epiPendingFiles) {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    await fetch(`/api/epi-purchases/${packageId}/documents`, {
-                        method: 'POST',
-                        body: formData
-                    });
-                }
-            }
-            cancelEpiForm();
-            loadEpiPackages();
-        } else {
-            alert('Erro: ' + (result.message || 'Erro ao salvar'));
-        }
-    } catch (error) {
-        alert('Erro ao salvar: ' + error.message);
-    }
-}
-
-async function loadEpiPackages(page = 1) {
-    epiCurrentPage = page;
-    const loading = document.getElementById('epi-loading');
-    loading.classList.add('active');
-
-    try {
-        const response = await fetch(`/api/epi-purchases?page=${page}&per_page=20`);
-        const result = await response.json();
-
-        if (result.status === 'ok') {
-            renderEpiTable(result.data);
-            renderEpiPagination(result.page, result.total_pages, result.total);
-        }
-    } catch (error) {
-        console.error('Erro ao carregar compras EPI:', error);
-    } finally {
-        loading.classList.remove('active');
-    }
-}
-
-function renderEpiTable(packages) {
-    const tbody = document.getElementById('epi-table-body');
-    tbody.innerHTML = '';
-
-    if (!packages || packages.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--gray-400);">Nenhuma compra cadastrada</td></tr>';
-        return;
-    }
-
-    const meses = ['', 'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-
-    packages.forEach(pkg => {
-        const mesAnoDate = pkg.mes_ano ? new Date(pkg.mes_ano + 'T12:00:00') : null;
-        const mesAnoStr = mesAnoDate ? `${meses[mesAnoDate.getMonth() + 1]}/${mesAnoDate.getFullYear()}` : '-';
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${pkg.empresa || '-'}</td>
-            <td>${mesAnoStr}</td>
-            <td>${pkg.items ? pkg.items.length : 0}</td>
-            <td style="color: var(--gold); font-weight: 600;">R$ ${(pkg.total_geral || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-            <td>
-                <div style="display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap;">
-                    <span style="font-size: 0.8rem;">${pkg.documents ? pkg.documents.length : 0} arquivo(s)</span>
-                    <button class="btn btn-outline" style="font-size: 0.65rem; padding: 0.2rem 0.5rem;" onclick="openDocUpload(${pkg.id})">Anexar</button>
-                </div>
-            </td>
-            <td>
-                <div style="display: flex; gap: 0.3rem;">
-                    <button class="btn btn-outline" style="font-size: 0.65rem; padding: 0.2rem 0.5rem;" onclick="viewEpiPackage(${pkg.id})">Ver</button>
-                    <button class="btn btn-outline" style="font-size: 0.65rem; padding: 0.2rem 0.5rem;" onclick="editEpiPackage(${pkg.id})">Editar</button>
-                    <button class="btn btn-outline" style="font-size: 0.65rem; padding: 0.2rem 0.5rem; color: #ff6b6b;" onclick="deleteEpiPackage(${pkg.id})">Excluir</button>
-                </div>
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
-function renderEpiPagination(currentPage, totalPages, total) {
-    const container = document.getElementById('epi-pagination');
-    const info = document.getElementById('epi-list-info');
-    container.innerHTML = '';
-
-    if (totalPages <= 1) {
-        info.textContent = total > 0 ? `${total} compra(s)` : '';
-        return;
-    }
-
-    info.textContent = `Pagina ${currentPage} de ${totalPages} (${total} compras)`;
-
-    if (currentPage > 1) {
-        const prevBtn = document.createElement('button');
-        prevBtn.className = 'btn btn-outline';
-        prevBtn.style.cssText = 'font-size: 0.75rem; padding: 0.3rem 0.6rem;';
-        prevBtn.textContent = 'Anterior';
-        prevBtn.onclick = () => loadEpiPackages(currentPage - 1);
-        container.appendChild(prevBtn);
-    }
-    if (currentPage < totalPages) {
-        const nextBtn = document.createElement('button');
-        nextBtn.className = 'btn btn-outline';
-        nextBtn.style.cssText = 'font-size: 0.75rem; padding: 0.3rem 0.6rem;';
-        nextBtn.textContent = 'Proxima';
-        nextBtn.onclick = () => loadEpiPackages(currentPage + 1);
-        container.appendChild(nextBtn);
-    }
-}
-
-async function viewEpiPackage(id) {
-    try {
-        const response = await fetch(`/api/epi-purchases/${id}`);
-        const result = await response.json();
-        if (result.status !== 'ok') {
-            alert('Erro ao carregar pacote');
-            return;
-        }
-        const pkg = result.data;
-        const meses = ['', 'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-        const mesAnoDate = pkg.mes_ano ? new Date(pkg.mes_ano + 'T12:00:00') : null;
-        const mesAnoStr = mesAnoDate ? `${meses[mesAnoDate.getMonth() + 1]}/${mesAnoDate.getFullYear()}` : '-';
-
-        let html = `<h3 style="margin-bottom:0.5rem">Compra EPI - ${pkg.empresa} - ${mesAnoStr}</h3>`;
-        if (pkg.observacao) html += `<p style="color: var(--gray-400); margin-bottom: 0.5rem;">${pkg.observacao}</p>`;
-        html += `<table style="width:100%; border-collapse: collapse; margin-bottom: 1rem;">
-            <thead><tr style="border-bottom: 1px solid var(--gray-600);">
-                <th style="text-align:left; padding:0.3rem;">Descricao</th>
-                <th style="text-align:center; padding:0.3rem;">Qtd</th>
-                <th style="text-align:right; padding:0.3rem;">V. Unit.</th>
-                <th style="text-align:right; padding:0.3rem;">V. Total</th>
-            </tr></thead><tbody>`;
-        
-        (pkg.items || []).forEach(item => {
-            html += `<tr style="border-bottom: 1px solid var(--gray-700);">
-                <td style="padding:0.3rem;">${item.descricao}</td>
-                <td style="text-align:center; padding:0.3rem;">${item.quantidade}</td>
-                <td style="text-align:right; padding:0.3rem;">R$ ${(item.valor_unitario || 0).toFixed(2)}</td>
-                <td style="text-align:right; padding:0.3rem; color: var(--gold);">R$ ${(item.valor_total || 0).toFixed(2)}</td>
-            </tr>`;
-        });
-
-        html += `<tr style="border-top: 2px solid var(--gold);">
-            <td colspan="3" style="text-align:right; padding:0.5rem; font-weight: 700;">Total Geral:</td>
-            <td style="text-align:right; padding:0.5rem; color: var(--gold); font-weight: 700;">R$ ${(pkg.total_geral || 0).toFixed(2)}</td>
-        </tr></tbody></table>`;
-
-        if (pkg.documents && pkg.documents.length > 0) {
-            html += `<h4 style="margin-bottom:0.5rem;">Documentos Anexados</h4><ul style="list-style:none; padding:0;">`;
-            pkg.documents.forEach(doc => {
-                html += `<li style="margin-bottom:0.3rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <a href="/api/epi-purchases/${pkg.id}/documents/${doc.id}/download" target="_blank" style="color: var(--gold);">${doc.original_filename}</a>
-                    <button class="btn btn-outline" style="font-size:0.6rem; padding:0.15rem 0.4rem; color: #ff6b6b;" onclick="deleteEpiDoc(${pkg.id}, ${doc.id})">Remover</button>
-                </li>`;
-            });
-            html += `</ul>`;
-        }
-
-        showEpiModal(html);
-    } catch (error) {
-        alert('Erro: ' + error.message);
-    }
-}
-
-function showEpiModal(content) {
-    let modal = document.getElementById('epi-modal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'epi-modal';
-        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; z-index: 9999;';
-        document.body.appendChild(modal);
-    }
-    modal.innerHTML = `<div style="background: var(--gray-800); padding: 2rem; border-radius: 12px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto; border: 1px solid var(--gray-600);">
-        ${content}
-        <div style="text-align: right; margin-top: 1rem;">
-            <button class="btn btn-outline" onclick="closeEpiModal()">Fechar</button>
-        </div>
-    </div>`;
-    modal.style.display = 'flex';
-}
-
-function closeEpiModal() {
-    const modal = document.getElementById('epi-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-async function editEpiPackage(id) {
-    try {
-        const response = await fetch(`/api/epi-purchases/${id}`);
-        const result = await response.json();
-        if (result.status !== 'ok') {
-            alert('Erro ao carregar pacote');
-            return;
-        }
-        const pkg = result.data;
-
-        document.getElementById('epi-form-container').style.display = 'block';
-        document.getElementById('btn-toggle-epi-form').textContent = 'Fechar';
-        document.getElementById('epi-form-title').textContent = 'Editar Compra de EPIs';
-        document.getElementById('epi-edit-id').value = pkg.id;
-        document.getElementById('epi-empresa').value = pkg.empresa || 'FEMSA';
-
-        if (pkg.mes_ano) {
-            const d = new Date(pkg.mes_ano + 'T12:00:00');
-            const y = String(d.getFullYear());
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            document.getElementById('epi-mes').value = m;
-            document.getElementById('epi-ano').value = y;
-        }
-
-        document.getElementById('epi-observacao').value = pkg.observacao || '';
-
-        document.getElementById('epi-items-container').innerHTML = '';
-        epiItemCounter = 0;
-        (pkg.items || []).forEach(item => {
-            addEpiItem(item.descricao, item.quantidade, item.valor_unitario, item.valor_total);
-        });
-
-        document.getElementById('epi-compras').scrollIntoView({behavior: 'smooth'});
-    } catch (error) {
-        alert('Erro: ' + error.message);
-    }
-}
-
-async function deleteEpiPackage(id) {
-    if (!confirm('Deseja realmente excluir esta compra e todos os seus documentos?')) return;
-
-    try {
-        const response = await fetch(`/api/epi-purchases/${id}`, { method: 'DELETE' });
-        const result = await response.json();
-
-        if (result.status === 'success') {
-            loadEpiPackages(epiCurrentPage);
-        } else {
-            alert('Erro ao excluir: ' + (result.message || ''));
-        }
-    } catch (error) {
-        alert('Erro: ' + error.message);
-    }
-}
-
-function openDocUpload(packageId) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx';
-    input.multiple = true;
-    input.onchange = async () => {
-        for (const file of input.files) {
-            const formData = new FormData();
-            formData.append('file', file);
-            try {
-                const response = await fetch(`/api/epi-purchases/${packageId}/documents`, {
-                    method: 'POST',
-                    body: formData
-                });
-                const result = await response.json();
-                if (result.status !== 'success') {
-                    alert('Erro ao enviar ' + file.name);
-                }
-            } catch (error) {
-                alert('Erro ao enviar arquivo: ' + error.message);
-            }
-        }
-        loadEpiPackages(epiCurrentPage);
-    };
-    input.click();
-}
-
-async function deleteEpiDoc(packageId, docId) {
-    if (!confirm('Remover este documento?')) return;
-
-    try {
-        const response = await fetch(`/api/epi-purchases/${packageId}/documents/${docId}`, { method: 'DELETE' });
-        const result = await response.json();
-
-        if (result.status === 'success') {
-            viewEpiPackage(packageId);
-            loadEpiPackages(epiCurrentPage);
-        } else {
-            alert('Erro ao remover documento');
-        }
-    } catch (error) {
-        alert('Erro: ' + error.message);
-    }
-}
 {% endblock %}

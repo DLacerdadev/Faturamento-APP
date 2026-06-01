@@ -1050,3 +1050,105 @@ async def export_billing_skyrail(
     TODO: Implementar modelo Skyrail.
     """
     return {"status": "error", "message": "Modelo Skyrail ainda não implementado. Em breve!"}
+
+
+# ─── Feature 003: administração de cache Senior ──────────────────────────────
+
+from typing import Literal as _Literal
+from fastapi.responses import JSONResponse as _JSONResponse
+from app.services.senior_cache import (
+    ccu_cache as _ccu_cache,
+    employees_cache as _employees_cache,
+    current_month_key as _current_month_key,
+    soap_concurrency_snapshot as _soap_concurrency_snapshot,
+)
+from app.routers.auth import get_current_user as _get_current_user
+
+
+class CacheActionInput(BaseModel):
+    scope: _Literal["ccu", "employees", "all"] = "all"
+    key: Optional[str] = None
+
+
+def _employees_cache_key(raw_key: str):
+    """Compõe a chave do employees_cache. raw_key é o codccu como string."""
+    return (str(raw_key).strip(), _current_month_key())
+
+
+@router.post("/senior/cache/invalidate")
+async def invalidate_cache(data: CacheActionInput, user=Depends(_get_current_user)):
+    """Limpa entradas do cache sem buscar novos dados. Feature 003."""
+    if user is None:
+        return _JSONResponse(status_code=401, content={"status": "error", "message": "Não autenticado"})
+
+    removed = {"ccu": 0, "employees": 0}
+    if data.scope in ("ccu", "all"):
+        if data.key is not None:
+            try:
+                key_int = int(data.key)
+                removed["ccu"] = _ccu_cache.invalidate(key_int)
+            except ValueError:
+                return _JSONResponse(status_code=400, content={"status": "error", "message": "key inválida para scope=ccu (esperado inteiro = numEmp)"})
+        else:
+            removed["ccu"] = _ccu_cache.invalidate()
+    if data.scope in ("employees", "all"):
+        if data.key is not None:
+            removed["employees"] = _employees_cache.invalidate(_employees_cache_key(data.key))
+        else:
+            removed["employees"] = _employees_cache.invalidate()
+    return {"status": "ok", "scope": data.scope, "removed": removed}
+
+
+@router.post("/senior/cache/refresh")
+async def refresh_cache(data: CacheActionInput, user=Depends(_get_current_user)):
+    """Limpa e re-popula buscando dados frescos da Senior. Feature 003."""
+    if user is None:
+        return _JSONResponse(status_code=401, content={"status": "error", "message": "Não autenticado"})
+
+    refreshed = {"ccu": None, "employees": None}
+
+    try:
+        if data.scope in ("ccu", "all"):
+            if data.key is not None:
+                try:
+                    numemp = int(data.key)
+                except ValueError:
+                    return _JSONResponse(status_code=400, content={"status": "error", "message": "key inválida para scope=ccu (esperado inteiro)"})
+                _ccu_cache.invalidate(numemp)
+                centers = fetch_cost_centers(numemp)
+            else:
+                _ccu_cache.invalidate()
+                centers = fetch_all_cost_centers()
+            refreshed["ccu"] = {"count": len(centers), "sample": centers[:3]}
+
+        if data.scope == "employees":
+            if not data.key:
+                return _JSONResponse(
+                    status_code=400,
+                    content={"status": "error", "message": "scope=employees requer key=codccu (revalidar todos os CCUs é caro)"},
+                )
+            cache_key = _employees_cache_key(data.key)
+            _employees_cache.invalidate(cache_key)
+            from app.services.senior_connector import fetch_active_employees
+            emps = fetch_active_employees(data.key)
+            refreshed["employees"] = {"count": len(emps), "codccu": data.key, "sample": emps[:3]}
+    except Exception as e:
+        return _JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": f"Falha ao buscar Senior: {e}"},
+        )
+
+    return {"status": "ok", "scope": data.scope, "refreshed": refreshed}
+
+
+@router.get("/senior/cache/stats")
+async def cache_stats(user=Depends(_get_current_user)):
+    """Snapshot informativo dos caches. Feature 003."""
+    if user is None:
+        return _JSONResponse(status_code=401, content={"status": "error", "message": "Não autenticado"})
+    return {
+        "status": "ok",
+        "ccu": _ccu_cache.stats(),
+        "employees": _employees_cache.stats(),
+        "soap_concurrency": _soap_concurrency_snapshot(),
+    }
