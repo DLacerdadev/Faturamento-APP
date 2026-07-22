@@ -1,0 +1,738 @@
+{% extends "base.html" %}
+
+{% block title %}Modelos de Faturamento - Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .grid-2col { display: grid; grid-template-columns: 340px 1fr; gap: 1.5rem; align-items: start; }
+    @media (max-width: 900px) { .grid-2col { grid-template-columns: 1fr; } }
+    .model-list { list-style: none; padding: 0; margin: 0; }
+    .model-item { border: 1px solid var(--border-color); border-left: 4px solid var(--border-color); padding: 0.7rem 0.9rem; margin-bottom: 0.6rem; cursor: pointer; transition: border-color 0.2s ease, background-color 0.2s ease; }
+    .model-item:hover { background: var(--bg-tertiary); }
+    .model-item.active { border-left-color: var(--gold); background: var(--bg-tertiary); }
+    .model-item .nome { font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; }
+    .model-item .meta { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem; }
+    .tag-base { font-size: 0.6rem; padding: 0.05rem 0.4rem; border-radius: 2px; background: rgba(251,191,36,0.15); color: var(--warning); border: 1px solid var(--warning); text-transform: uppercase; font-weight: 700; }
+    .tag-off { font-size: 0.6rem; padding: 0.05rem 0.4rem; border-radius: 2px; background: rgba(248,113,113,0.12); color: var(--error); border: 1px solid var(--error); text-transform: uppercase; font-weight: 700; }
+    .tag-upload { font-size: 0.6rem; padding: 0.05rem 0.4rem; border-radius: 2px; background: rgba(96,165,250,0.12); color: #60a5fa; border: 1px solid #60a5fa; text-transform: uppercase; font-weight: 700; }
+    table.mapa { width: 100%; border-collapse: collapse; }
+    table.mapa th { background: var(--table-header-bg); color: var(--gold); text-transform: uppercase; font-size: 0.68rem; letter-spacing: 1px; padding: 0.5rem; text-align: left; position: sticky; top: 0; }
+    table.mapa td { border-bottom: 1px solid var(--border-color); padding: 0.4rem 0.5rem; font-size: 0.8rem; vertical-align: top; }
+    table.mapa td.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+    .tipo-pill { font-size: 0.62rem; padding: 0.05rem 0.4rem; border-radius: 2px; border: 1px solid var(--border-color); color: var(--text-secondary); text-transform: uppercase; font-weight: 700; }
+    .tipo-pill.campo { border-color: var(--success); color: var(--success); }
+    .tipo-pill.formula { border-color: #60a5fa; color: #60a5fa; }
+    .tipo-pill.constante { border-color: var(--warning); color: var(--warning); }
+    .cols-toolbar { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.8rem; }
+    .cols-toolbar .count { margin-left: auto; font-size: 0.8rem; color: var(--text-muted); }
+    .cols-box { max-height: 460px; overflow-y: auto; border: 1px solid var(--border-color); padding: 0.5rem 0.8rem; background: var(--bg-secondary); }
+    .col-check { display: flex; align-items: center; gap: 0.55rem; padding: 0.28rem 0.2rem; border-bottom: 1px solid var(--border-color); font-size: 0.82rem; }
+    .col-check:last-child { border-bottom: none; }
+    .col-check input { width: auto; margin: 0; }
+    .col-check label { margin: 0; text-transform: none; color: var(--text-secondary); cursor: pointer; flex: 1; }
+    .col-check.nova label { color: var(--gold); }
+    .col-check.nova::after { content: "NOVA"; font-size: 0.55rem; padding: 0.05rem 0.35rem; border: 1px solid var(--gold); color: var(--gold); border-radius: 2px; }
+    .msg { padding: 0.7rem 1rem; margin: 0.8rem 0; border-left: 4px solid; font-weight: 500; display: none; font-size: 0.85rem; white-space: pre-wrap; }
+    .msg.show { display: block; }
+    .msg.ok { background: rgba(74,222,128,0.1); color: var(--success); border-color: var(--success); }
+    .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
+    .hint { font-size: 0.8rem; color: var(--text-muted); }
+    /* Abas internas do editor (Colunas | Fórmulas) */
+    .editor-tabs { display: flex; gap: 0.4rem; border-bottom: 1px solid var(--border-color); margin: 1rem 0 0.9rem; }
+    .editor-tabs .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); padding: 0.45rem 0.9rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; cursor: pointer; transition: color 0.2s ease, border-color 0.2s ease; }
+    .editor-tabs .tab-btn:hover { color: var(--text-primary); }
+    .editor-tabs .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+    /* Grade estilo planilha da aba Fórmulas */
+    .campos-wrap { max-height: 460px; overflow: auto; border: 1px solid var(--border-color); background: var(--bg-secondary); }
+    table.campos { width: 100%; border-collapse: collapse; }
+    table.campos th { background: var(--table-header-bg); color: var(--gold); text-transform: uppercase; font-size: 0.66rem; letter-spacing: 1px; padding: 0.4rem 0.5rem; text-align: left; position: sticky; top: 0; z-index: 1; white-space: nowrap; }
+    table.campos td { border-bottom: 1px solid var(--border-color); padding: 0.3rem 0.45rem; font-size: 0.78rem; vertical-align: middle; }
+    table.campos td:first-child { border-left: 3px solid transparent; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+    table.campos tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+    table.campos tr.configurada td:first-child { border-left-color: var(--gold); }
+    table.campos input { width: 100%; padding: 0.25rem 0.4rem; font-size: 0.76rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); }
+    table.campos input.mono { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
+    table.campos input:disabled { opacity: 0.4; cursor: not-allowed; }
+    .campo-origem { color: var(--text-muted); font-size: 0.72rem; }
+    .campo-origem .mono-codes { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; margin-top: 0.1rem; }
+    .badge-calc { font-size: 0.58rem; padding: 0.05rem 0.35rem; border-radius: 2px; border: 1px solid var(--text-muted); color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-left: 0.4rem; white-space: nowrap; }
+    table.assoc th { background: var(--table-header-bg); color: var(--gold); text-transform: uppercase; font-size: 0.68rem; letter-spacing: 1px; padding: 0.5rem; text-align: left; }
+    table.assoc td { border-bottom: 1px solid var(--border-color); padding: 0.45rem 0.5rem; font-size: 0.82rem; }
+    table.assoc select { min-width: 200px; }
+    .cnpj { font-family: 'JetBrains Mono', monospace; color: var(--text-muted); font-size: 0.75rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header"><h1>Modelos de Faturamento</h1></div>
+<p class="hint" style="margin-bottom: 1.5rem;">
+    Cada modelo define quais colunas a planilha exportada terá (na ordem canônica). O modelo
+    <b>GERAL</b> é a base com todas as colunas conhecidas; o <b>FEMSA</b> mantém as 79 colunas de hoje.
+    Selecione as colunas partindo da lista do GERAL.
+</p>
+
+<div id="topmsg" class="msg"></div>
+
+<div class="grid-2col">
+    <!-- Coluna 1: lista de modelos + botão novo -->
+    <div class="card">
+        <div class="card-header"><h2>Modelos</h2></div>
+        <ul class="model-list" id="model-list"></ul>
+        <button class="btn btn-outline" style="width:100%; margin-top:0.5rem;" onclick="novoModelo()">+ Novo modelo</button>
+        <button class="btn btn-outline" style="width:100%; margin-top:0.5rem;" onclick="abrirUpload()">Adicionar por planilha</button>
+    </div>
+
+    <!-- Coluna 2: editor -->
+    <div class="card">
+        <div class="card-header"><h2 id="editor-title">Selecione um modelo</h2></div>
+        <div id="editor" style="display:none;">
+            <p class="hint" id="m-estrutura-info" style="display:none; color:var(--gold); margin-bottom:0.8rem;"></p>
+            <div class="form-group">
+                <label for="m-nome">Nome do modelo</label>
+                <input type="text" id="m-nome" placeholder="ex.: FEMSA, Cliente X...">
+            </div>
+            <div class="form-group">
+                <label for="m-desc">Descrição</label>
+                <input type="text" id="m-desc" placeholder="opcional">
+            </div>
+
+            <label style="display:block; margin-bottom:0.4rem;">Percentuais padrão do modelo</label>
+            <p class="hint" style="margin-bottom:0.5rem;">Opcionais. Quando definidos, preenchem os campos da exportação por padrão ao escolher este modelo (em branco = usa o padrão do contrato).</p>
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:0.6rem;">
+                <div class="form-group">
+                    <label for="m-encargos">Encargos sociais (%)</label>
+                    <input type="number" id="m-encargos" min="0" max="100" step="0.01" placeholder="ex.: 57.91 (opcional)">
+                </div>
+                <div class="form-group">
+                    <label for="m-taxa-adm">Taxa administrativa (%)</label>
+                    <input type="number" id="m-taxa-adm" min="0" max="100" step="0.01" placeholder="ex.: 15 (opcional)">
+                </div>
+                <div class="form-group">
+                    <label for="m-imposto">Imposto / alíquota (%)</label>
+                    <input type="number" id="m-imposto" min="0" max="100" step="0.01" placeholder="ex.: 8.5 (opcional)">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top:0.6rem;">
+                <label for="m-salario-formula">Fórmula do salário (opcional)</label>
+                <input type="text" id="m-salario-formula" maxlength="200" placeholder="ex.: salario / 29 * 30 — em branco = salário-base cadastral">
+                <p class="hint" style="margin-top:0.3rem;">Metodologia própria do cliente para o campo <b>Salário</b> da exportação. Variáveis: <code>salario</code> (base cadastral), <code>total_remuneracao</code>, <code>salario_dia_qtde</code> (dias do evento 200), <code>dias_mes</code> (30). Só aritmética: + − × ÷ e parênteses.</p>
+            </div>
+
+            <div class="form-group">
+                <label style="display:flex; align-items:center; gap:0.4rem; text-transform:none; color:var(--text-secondary);">
+                    <input type="checkbox" id="m-ativo" style="width:auto;" checked> Ativo
+                </label>
+            </div>
+
+            <div class="editor-tabs">
+                <button type="button" class="tab-btn active" id="tab-btn-colunas" onclick="mostrarAba('colunas')">Colunas</button>
+                <button type="button" class="tab-btn" id="tab-btn-formulas" onclick="mostrarAba('formulas')">Fórmulas</button>
+            </div>
+
+            <div id="aba-colunas">
+                <label style="display:block; margin-bottom:0.4rem;">Colunas do modelo</label>
+                <div class="cols-toolbar">
+                    <button type="button" class="btn btn-secondary" style="padding:0.3rem 0.7rem; font-size:0.75rem;" onclick="marcarTodas(true)">Marcar todas</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.3rem 0.7rem; font-size:0.75rem;" onclick="marcarTodas(false)">Limpar</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.3rem 0.7rem; font-size:0.75rem;" onclick="marcarFemsa()">Só as do FEMSA</button>
+                    <span class="count" id="col-count">0 colunas</span>
+                </div>
+                <div class="cols-box" id="cols-box"></div>
+            </div>
+
+            <div id="aba-formulas" style="display:none;">
+                <label style="display:block; margin-bottom:0.4rem;">Códigos e fórmulas por campo</label>
+                <p class="hint" style="margin-bottom:0.6rem;">
+                    <b>Vazio</b> = mapeamento padrão do sistema. <b>Código buscado</b> substitui a origem do campo
+                    (códigos de evento separados por vírgula, ex.: <code>257,259</code>). <b>Fórmula</b> transforma o
+                    valor — a variável <code>valor</code> é o valor-base do campo; também: <code>salario</code>,
+                    <code>total_remuneracao</code>, <code>salario_dia_qtde</code>, <code>dias_mes</code>.
+                    Um número puro vira valor fixo.
+                </p>
+                <div class="campos-wrap">
+                    <table class="campos">
+                        <thead><tr><th>Campo</th><th>Origem padrão</th><th>Código buscado</th><th>Nome do código</th><th>Fórmula</th></tr></thead>
+                        <tbody id="campos-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div style="margin-top:1rem; display:flex; gap:0.6rem;">
+                <button class="btn" onclick="salvarModelo()">Salvar</button>
+                <button class="btn btn-outline" onclick="limparEditor()">Cancelar</button>
+            </div>
+        </div>
+
+        <!-- Fluxo "Adicionar por planilha": escolher arquivo -> conferir mapeamento -> confirmar -->
+        <div id="upload-panel" style="display:none;">
+            <p class="hint" style="margin-bottom:0.8rem;">
+                Envie a planilha-modelo (.xlsx, até 10 MB). O sistema detecta o cabeçalho e classifica
+                cada coluna (campo do sistema, fórmula, constante ou vazio) para você conferir antes de salvar.
+                Fórmulas que apontam para linhas de totais/rodapé ficam literais — confira o resultado exportado.
+            </p>
+            <div class="form-group">
+                <label for="up-arquivo">Planilha-modelo (.xlsx)</label>
+                <input type="file" id="up-arquivo" accept=".xlsx">
+            </div>
+            <div style="display:flex; gap:0.6rem; margin-bottom:0.8rem;">
+                <button class="btn" onclick="analisarPlanilha()">Analisar planilha</button>
+                <button class="btn btn-outline" onclick="fecharUpload()">Cancelar</button>
+            </div>
+            <div id="up-msg" class="msg"></div>
+
+            <div id="up-resultado" style="display:none;">
+                <div id="up-problemas"></div>
+                <label style="display:block; margin:0.8rem 0 0.4rem;">Mapeamento das colunas <span class="hint" id="up-resumo"></span></label>
+                <div style="overflow:auto; max-height:340px; border:1px solid var(--border-color); margin-bottom:1rem;">
+                    <table class="mapa">
+                        <thead><tr><th>Col.</th><th>Cabeçalho</th><th>Tipo</th><th>Fonte / template / valor</th></tr></thead>
+                        <tbody id="up-mapa-body"></tbody>
+                    </table>
+                </div>
+
+                <div class="form-group">
+                    <label for="up-nome">Nome do modelo</label>
+                    <input type="text" id="up-nome" placeholder="ex.: Cliente X (planilha)">
+                </div>
+                <div class="form-group">
+                    <label for="up-desc">Descrição</label>
+                    <input type="text" id="up-desc" placeholder="opcional">
+                </div>
+                <label style="display:block; margin-bottom:0.4rem;">Percentuais padrão do modelo</label>
+                <p class="hint" style="margin-bottom:0.5rem;">Opcionais. Quando definidos, preenchem os campos da exportação por padrão ao escolher este modelo.</p>
+                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:0.6rem;">
+                    <div class="form-group">
+                        <label for="up-encargos">Encargos sociais (%)</label>
+                        <input type="number" id="up-encargos" min="0" max="100" step="0.01" placeholder="opcional">
+                    </div>
+                    <div class="form-group">
+                        <label for="up-taxa-adm">Taxa administrativa (%)</label>
+                        <input type="number" id="up-taxa-adm" min="0" max="100" step="0.01" placeholder="opcional">
+                    </div>
+                    <div class="form-group">
+                        <label for="up-imposto">Imposto / alíquota (%)</label>
+                        <input type="number" id="up-imposto" min="0" max="100" step="0.01" placeholder="opcional">
+                    </div>
+                </div>
+                <div style="display:flex; gap:0.6rem;">
+                    <button class="btn" id="up-confirmar" onclick="confirmarUpload()">Confirmar e criar modelo</button>
+                    <button class="btn btn-outline" onclick="fecharUpload()">Cancelar</button>
+                </div>
+            </div>
+        </div>
+
+        <p class="hint" id="editor-empty">Escolha um modelo na lista ao lado, ou crie um novo.</p>
+    </div>
+</div>
+
+<!-- Associação modelo <-> contrato -->
+<div class="card" style="margin-top:1.5rem;">
+    <div class="card-header"><h2>Associar modelo aos contratos</h2></div>
+    <p class="hint" style="margin-bottom:0.8rem;">Cada contrato (empresa) usa o modelo escolhido na exportação. Vazio = FEMSA padrão.</p>
+    <div id="assoc-msg" class="msg"></div>
+    <div style="overflow-x:auto;">
+        <table class="assoc">
+            <thead><tr><th>Contrato</th><th>CNPJ FEMSA</th><th>Modelo de faturamento</th></tr></thead>
+            <tbody id="assoc-body"></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const HEADERS = { "Authorization": "Bearer " + AUTH_TOKEN };
+const JSON_HEADERS = { ...HEADERS, "Content-Type": "application/json" };
+
+let ALL_COLUMNS = [];   // lista canônica (GERAL)
+let FEMSA_SET = new Set();
+let NOVAS_SET = new Set();
+let MODELS = [];
+let selectedId = null;  // id do modelo em edição, ou null (novo)
+let CAMPOS_ROWS = [];        // linhas do GET /campos do modelo em edição
+let camposCarregados = false; // true = grade de fórmulas carregada p/ selectedId (senão não envia campos_config)
+
+function esc(s) { return (s || "").replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showMsg(el, t, ok) {
+    const m = document.getElementById(el);
+    m.className = "msg show " + (ok ? "ok" : "err");
+    m.textContent = (typeof t === "string") ? t : JSON.stringify(t, null, 2);
+}
+function hideMsg(el) { document.getElementById(el).className = "msg"; }
+
+async function init() {
+    const rc = await fetch("/api/billing-models/columns", { headers: HEADERS, credentials: "same-origin" });
+    const jc = await rc.json();
+    ALL_COLUMNS = jc.colunas || [];
+    FEMSA_SET = new Set(jc.femsa || []);
+    NOVAS_SET = new Set(jc.novas || []);
+    renderColsBox([]);
+    await loadModels();
+    await loadCompanies();
+}
+
+async function loadModels() {
+    const r = await fetch("/api/billing-models", { headers: HEADERS, credentials: "same-origin" });
+    const j = await r.json();
+    MODELS = j.data || [];
+    renderModelList();
+}
+
+function pctResumo(m) {
+    // Monta o resumo dos percentuais padrão definidos no modelo (vazio se nenhum).
+    const partes = [];
+    if (m.encargos_pct != null) partes.push(`Encargos ${m.encargos_pct}%`);
+    if (m.taxa_adm_pct != null) partes.push(`Tx. adm ${m.taxa_adm_pct}%`);
+    if (m.imposto_pct != null) partes.push(`Imposto ${m.imposto_pct}%`);
+    return partes.join(" · ");
+}
+
+function renderModelList() {
+    const el = document.getElementById("model-list");
+    if (!MODELS.length) { el.innerHTML = '<li class="hint">Nenhum modelo cadastrado.</li>'; return; }
+    el.innerHTML = MODELS.map(m => {
+        const pct = pctResumo(m);
+        return `
+        <li class="model-item ${m.id === selectedId ? 'active' : ''}" onclick="editarModelo(${m.id})">
+            <div class="nome">
+                ${esc(m.nome)}
+                ${m.is_base ? '<span class="tag-base">base</span>' : ''}
+                ${m.tem_estrutura ? '<span class="tag-upload">por planilha</span>' : ''}
+                ${!m.ativo ? '<span class="tag-off">inativo</span>' : ''}
+            </div>
+            <div class="meta">${m.num_colunas} colunas${m.descricao ? ' — ' + esc(m.descricao) : ''}</div>
+            ${m.arquivo_origem ? `<div class="meta">planilha: ${esc(m.arquivo_origem)}</div>` : ''}
+            ${pct ? `<div class="meta" style="color:var(--gold);">${pct}</div>` : ''}
+        </li>`;
+    }).join("");
+}
+
+function renderColsBox(selected) {
+    const sel = new Set(selected || []);
+    const el = document.getElementById("cols-box");
+    el.innerHTML = ALL_COLUMNS.map((c, i) => `
+        <div class="col-check ${NOVAS_SET.has(c) ? 'nova' : ''}">
+            <input type="checkbox" id="col-${i}" value="${esc(c)}" ${sel.has(c) ? 'checked' : ''} onchange="updateCount()">
+            <label for="col-${i}">${esc(c)}</label>
+        </div>`).join("");
+    updateCount();
+}
+
+function getCheckedColumns() {
+    // Devolve na ordem canônica do GERAL (a API também sanitiza).
+    const checked = new Set();
+    document.querySelectorAll('#cols-box input[type=checkbox]:checked').forEach(cb => checked.add(cb.value));
+    return ALL_COLUMNS.filter(c => checked.has(c));
+}
+function updateCount() {
+    document.getElementById("col-count").textContent = getCheckedColumns().length + " colunas";
+}
+function marcarTodas(v) {
+    document.querySelectorAll('#cols-box input[type=checkbox]').forEach(cb => cb.checked = v);
+    updateCount();
+}
+function marcarFemsa() {
+    document.querySelectorAll('#cols-box input[type=checkbox]').forEach(cb => cb.checked = FEMSA_SET.has(cb.value));
+    updateCount();
+}
+
+// ── Aba "Fórmulas": grade de códigos/fórmulas por campo ────────────────────
+function mostrarAba(aba) {
+    document.getElementById("aba-colunas").style.display = aba === "colunas" ? "block" : "none";
+    document.getElementById("aba-formulas").style.display = aba === "formulas" ? "block" : "none";
+    document.getElementById("tab-btn-colunas").classList.toggle("active", aba === "colunas");
+    document.getElementById("tab-btn-formulas").classList.toggle("active", aba === "formulas");
+    // Carrega a grade sob demanda, na primeira abertura da aba.
+    if (aba === "formulas" && !camposCarregados) carregarCampos();
+}
+
+function campoInfoRow(texto) {
+    return `<tr><td colspan="5" class="hint" style="text-align:center; padding:0.9rem;">${esc(texto)}</td></tr>`;
+}
+
+function resetarCamposGrid() {
+    // Chamado ao trocar de modelo / criar novo: descarta a grade e volta pra aba Colunas.
+    camposCarregados = false;
+    CAMPOS_ROWS = [];
+    document.getElementById("campos-body").innerHTML =
+        campoInfoRow("Abra a aba Fórmulas para carregar os campos do modelo.");
+    mostrarAba("colunas");
+}
+
+async function carregarCampos() {
+    const body = document.getElementById("campos-body");
+    if (!selectedId) {
+        // Modelo novo ainda não existe no banco: salve primeiro, depois configure.
+        body.innerHTML = campoInfoRow("Salve o modelo primeiro; depois volte aqui para configurar códigos e fórmulas.");
+        return;
+    }
+    body.innerHTML = campoInfoRow("Carregando campos…");
+    let r, j;
+    try {
+        r = await fetch(`/api/billing-models/${selectedId}/campos`, { headers: HEADERS, credentials: "same-origin" });
+        j = await r.json();
+    } catch (e) {
+        body.innerHTML = campoInfoRow("Erro de comunicação ao carregar os campos.");
+        return;
+    }
+    if (!r.ok || !j.success) {
+        body.innerHTML = campoInfoRow(j.detail || "Erro ao carregar os campos do modelo.");
+        return;
+    }
+    CAMPOS_ROWS = j.data || [];
+    camposCarregados = true;
+    renderCamposGrid();
+}
+
+function origemHtml(row) {
+    const partes = [];
+    if (row.origem_padrao) partes.push(`<div>${esc(row.origem_padrao)}</div>`);
+    const cods = row.codigos_padrao || [];
+    if (cods.length) {
+        const nomes = row.codigos_padrao_nomes || [];
+        const txt = cods.map((c, k) => nomes[k] ? `${c} (${esc(nomes[k])})` : String(c)).join(", ");
+        partes.push(`<div class="mono-codes">eventos ${txt}</div>`);
+    }
+    return partes.join("") || "—";
+}
+
+function renderCamposGrid() {
+    const body = document.getElementById("campos-body");
+    if (!CAMPOS_ROWS.length) {
+        body.innerHTML = campoInfoRow("Nenhum campo encontrado para este modelo.");
+        return;
+    }
+    body.innerHTML = CAMPOS_ROWS.map((row, i) => {
+        const dis = row.calculado ? "disabled" : "";
+        const temConfig = !row.calculado && !!(row.codigo || row.codigo_nome || row.formula);
+        const phCod = (row.codigos_padrao || []).join(",") || "ex.: 257,259";
+        return `
+        <tr id="cf-row-${i}" class="${temConfig ? 'configurada' : ''}">
+            <td>${esc(row.campo)}${row.calculado ? '<span class="badge-calc">calculado</span>' : ''}</td>
+            <td class="campo-origem">${origemHtml(row)}</td>
+            <td><input type="text" class="mono" id="cf-cod-${i}" value="${esc(row.codigo || "")}" placeholder="${esc(phCod)}" ${dis} oninput="atualizarLinhaCampo(${i})"></td>
+            <td><input type="text" id="cf-nome-${i}" value="${esc(row.codigo_nome || "")}" placeholder="anotação (opcional)" ${dis} oninput="atualizarLinhaCampo(${i})"></td>
+            <td><input type="text" class="mono" id="cf-form-${i}" value="${esc(row.formula || "")}" placeholder="ex.: valor * 2 — só número = fixo" ${dis} oninput="atualizarLinhaCampo(${i})"></td>
+        </tr>`;
+    }).join("");
+}
+
+function atualizarLinhaCampo(i) {
+    // Destaque âmbar quando a linha difere do mapeamento padrão.
+    const tem = ["cf-cod-", "cf-nome-", "cf-form-"].some(p => document.getElementById(p + i).value.trim() !== "");
+    document.getElementById("cf-row-" + i).classList.toggle("configurada", tem);
+}
+
+function coletarCamposConfig() {
+    // Só as linhas onde o gestor preencheu código e/ou fórmula (vazio = padrão, não envia).
+    const out = [];
+    CAMPOS_ROWS.forEach((row, i) => {
+        if (row.calculado) return;
+        const codigo = document.getElementById(`cf-cod-${i}`).value.trim();
+        const codigo_nome = document.getElementById(`cf-nome-${i}`).value.trim();
+        const formula = document.getElementById(`cf-form-${i}`).value.trim();
+        if (!codigo && !formula) return;
+        out.push({
+            campo: row.campo,
+            codigo: codigo || null,
+            codigo_nome: codigo_nome || null,
+            formula: formula || null,
+        });
+    });
+    return out;
+}
+
+function abrirEditor() {
+    document.getElementById("upload-panel").style.display = "none";
+    document.getElementById("editor").style.display = "block";
+    document.getElementById("editor-empty").style.display = "none";
+}
+function limparEditor() {
+    selectedId = null;
+    document.getElementById("editor").style.display = "none";
+    document.getElementById("upload-panel").style.display = "none";
+    document.getElementById("editor-empty").style.display = "block";
+    document.getElementById("editor-title").textContent = "Selecione um modelo";
+    renderModelList();
+}
+
+function novoModelo() {
+    selectedId = null;
+    abrirEditor();
+    document.getElementById("editor-title").textContent = "Novo modelo";
+    document.getElementById("m-nome").value = "";
+    document.getElementById("m-desc").value = "";
+    document.getElementById("m-encargos").value = "";
+    document.getElementById("m-taxa-adm").value = "";
+    document.getElementById("m-imposto").value = "";
+    document.getElementById("m-salario-formula").value = "";
+    document.getElementById("m-ativo").checked = true;
+    document.getElementById("m-estrutura-info").style.display = "none";
+    // Parte da lista do GERAL (todas marcadas) como ponto de partida.
+    renderColsBox(ALL_COLUMNS);
+    resetarCamposGrid();
+    renderModelList();
+}
+
+async function editarModelo(id) {
+    const r = await fetch(`/api/billing-models/${id}`, { headers: HEADERS, credentials: "same-origin" });
+    const j = await r.json();
+    if (!j.success) { showMsg("topmsg", j.detail || "Erro ao abrir modelo.", false); return; }
+    const m = j.data;
+    selectedId = m.id;
+    abrirEditor();
+    document.getElementById("editor-title").textContent = "Editar: " + m.nome;
+    document.getElementById("m-nome").value = m.nome || "";
+    document.getElementById("m-desc").value = m.descricao || "";
+    document.getElementById("m-encargos").value = m.encargos_pct != null ? m.encargos_pct : "";
+    document.getElementById("m-taxa-adm").value = m.taxa_adm_pct != null ? m.taxa_adm_pct : "";
+    document.getElementById("m-imposto").value = m.imposto_pct != null ? m.imposto_pct : "";
+    document.getElementById("m-salario-formula").value = m.salario_formula || "";
+    document.getElementById("m-ativo").checked = !!m.ativo;
+    // Modelos criados por planilha: o layout da exportação segue a estrutura da
+    // planilha; as colunas abaixo foram derivadas dela (só informativo).
+    const info = document.getElementById("m-estrutura-info");
+    if (m.tem_estrutura) {
+        info.textContent = "Modelo criado por planilha" + (m.arquivo_origem ? ` (${m.arquivo_origem})` : "") +
+            " — a exportação segue o layout da planilha; as colunas abaixo foram derivadas dela.";
+        info.style.display = "block";
+    } else {
+        info.style.display = "none";
+    }
+    renderColsBox(m.colunas || []);
+    resetarCamposGrid();
+    renderModelList();
+}
+
+async function salvarModelo() {
+    hideMsg("topmsg");
+    const nome = document.getElementById("m-nome").value.trim();
+    const descricao = document.getElementById("m-desc").value.trim();
+    const ativo = document.getElementById("m-ativo").checked;
+    const colunas = getCheckedColumns();
+    if (!nome) { showMsg("topmsg", "Informe o nome do modelo.", false); return; }
+    if (!colunas.length) { showMsg("topmsg", "Selecione ao menos uma coluna.", false); return; }
+    // Percentuais padrão: vazio = null (limpa/sem padrão); valida faixa 0-100 no cliente.
+    const pct = (id) => { const v = document.getElementById(id).value; return v === "" ? null : parseFloat(v); };
+    const encargos_pct = pct("m-encargos"), taxa_adm_pct = pct("m-taxa-adm"), imposto_pct = pct("m-imposto");
+    for (const [rotulo, v] of [["Encargos sociais", encargos_pct], ["Taxa administrativa", taxa_adm_pct], ["Imposto", imposto_pct]]) {
+        if (v != null && (isNaN(v) || v < 0 || v > 100)) {
+            showMsg("topmsg", rotulo + " (%) deve estar entre 0 e 100.", false);
+            return;
+        }
+    }
+    // Fórmula do salário: vazio = null (limpa; volta ao salário-base cadastral).
+    const sf = document.getElementById("m-salario-formula").value.trim();
+    const salario_formula = sf === "" ? null : sf;
+    const payload = { nome, descricao, ativo, colunas, encargos_pct, taxa_adm_pct, imposto_pct, salario_formula };
+    // Config de códigos/fórmulas: só entra no body se a grade foi carregada nesta edição
+    // (senão não incluímos a chave, para não apagar config existente sem querer).
+    if (selectedId && camposCarregados) {
+        payload.campos_config = coletarCamposConfig();
+    }
+    const body = JSON.stringify(payload);
+    let r;
+    if (selectedId) {
+        r = await fetch(`/api/billing-models/${selectedId}`, { method: "PUT", headers: JSON_HEADERS, credentials: "same-origin", body });
+    } else {
+        r = await fetch("/api/billing-models", { method: "POST", headers: JSON_HEADERS, credentials: "same-origin", body });
+    }
+    const j = await r.json();
+    if (r.ok && j.success) {
+        showMsg("topmsg", "Modelo salvo.", true);
+        selectedId = j.data.id;
+        await loadModels();
+        await loadCompanies();
+        document.getElementById("editor-title").textContent = "Editar: " + j.data.nome;
+        // Recarrega a grade de fórmulas se ela já foi aberta (mostra a config como o backend salvou;
+        // e, num modelo recém-criado com a aba aberta, carrega os campos agora que existe id).
+        if (camposCarregados || document.getElementById("aba-formulas").style.display !== "none") {
+            camposCarregados = false;
+            await carregarCampos();
+        }
+    } else {
+        showMsg("topmsg", j.detail || "Erro ao salvar modelo.", false);
+    }
+}
+
+// ── Fluxo "Adicionar por planilha" ─────────────────────────────────────────
+const UPLOAD_MAX_BYTES = 10 * 1024 * 1024; // mesmo limite do backend (10 MB)
+let uploadPreview = null; // resposta do upload-preview (estrutura/colunas/problemas)
+
+function abrirUpload() {
+    selectedId = null;
+    document.getElementById("editor").style.display = "none";
+    document.getElementById("editor-empty").style.display = "none";
+    document.getElementById("upload-panel").style.display = "block";
+    document.getElementById("editor-title").textContent = "Adicionar modelo por planilha";
+    document.getElementById("up-resultado").style.display = "none";
+    document.getElementById("up-arquivo").value = "";
+    document.getElementById("up-nome").value = "";
+    document.getElementById("up-desc").value = "";
+    document.getElementById("up-encargos").value = "";
+    document.getElementById("up-taxa-adm").value = "";
+    document.getElementById("up-imposto").value = "";
+    uploadPreview = null;
+    hideMsg("up-msg");
+    renderModelList();
+}
+
+function fecharUpload() {
+    uploadPreview = null;
+    limparEditor();
+}
+
+function arquivoSelecionado() {
+    const inp = document.getElementById("up-arquivo");
+    const f = inp.files && inp.files[0];
+    if (!f) { showMsg("up-msg", "Escolha um arquivo .xlsx.", false); return null; }
+    if (!f.name.toLowerCase().endsWith(".xlsx")) {
+        showMsg("up-msg", "Envie um arquivo Excel no formato .xlsx.", false);
+        return null;
+    }
+    if (f.size > UPLOAD_MAX_BYTES) {
+        showMsg("up-msg", "Arquivo muito grande: o limite é 10 MB.", false);
+        return null;
+    }
+    return f;
+}
+
+async function analisarPlanilha() {
+    hideMsg("up-msg");
+    document.getElementById("up-resultado").style.display = "none";
+    uploadPreview = null;
+    const f = arquivoSelecionado();
+    if (!f) return;
+    const fd = new FormData();
+    fd.append("arquivo", f);
+    let r, j;
+    try {
+        r = await fetch("/api/billing-models/upload-preview", {
+            method: "POST", headers: HEADERS, credentials: "same-origin", body: fd,
+        });
+        j = await r.json();
+    } catch (e) {
+        showMsg("up-msg", "Erro de comunicação ao analisar a planilha.", false);
+        return;
+    }
+    if (!r.ok || !j.success) {
+        showMsg("up-msg", j.detail || "Erro ao analisar a planilha.", false);
+        return;
+    }
+    uploadPreview = j;
+    renderPreview(j);
+}
+
+function renderPreview(j) {
+    const est = j.estrutura || {};
+    const cols = est.colunas || [];
+    const problemas = j.problemas || [];
+
+    // Avisos de validação: qualquer problema BLOQUEIA a criação (o backend também recusa).
+    const pbox = document.getElementById("up-problemas");
+    if (problemas.length) {
+        pbox.innerHTML = `<div class="msg show err" style="margin:0;">A planilha tem problemas e não pode ser usada como modelo:\n- ${problemas.map(esc).join("\n- ")}</div>`;
+    } else {
+        pbox.innerHTML = '<div class="msg show ok" style="margin:0;">Planilha analisada com sucesso. Confira o mapeamento abaixo e confirme.</div>';
+    }
+    document.getElementById("up-confirmar").disabled = problemas.length > 0;
+
+    const nCampo = cols.filter(c => c.tipo === "campo").length;
+    document.getElementById("up-resumo").textContent =
+        `— aba "${est.aba || "?"}", dados a partir da linha ${est.data_row || "?"}, ${nCampo} coluna(s) preenchida(s) pelo sistema`;
+
+    const detalhe = (c) => {
+        if (c.tipo === "campo") return esc(c.fonte || "");
+        if (c.tipo === "formula") return `<span style="font-family:'JetBrains Mono',monospace;">${esc(c.template || "")}</span>`;
+        if (c.tipo === "constante") return esc(String(c.valor != null ? c.valor : ""));
+        return '<span class="hint">—</span>';
+    };
+    document.getElementById("up-mapa-body").innerHTML = cols.map(c => `
+        <tr>
+            <td class="mono">${esc(c.letra || "")}</td>
+            <td>${esc(c.header || "") || '<span class="hint">(sem cabeçalho)</span>'}</td>
+            <td><span class="tipo-pill ${esc(c.tipo || "")}">${esc(c.tipo || "?")}</span></td>
+            <td>${detalhe(c)}</td>
+        </tr>`).join("");
+    document.getElementById("up-resultado").style.display = "block";
+}
+
+async function confirmarUpload() {
+    hideMsg("up-msg");
+    if (!uploadPreview) { showMsg("up-msg", "Analise a planilha antes de confirmar.", false); return; }
+    const f = arquivoSelecionado();
+    if (!f) return;
+    const nome = document.getElementById("up-nome").value.trim();
+    if (!nome) { showMsg("up-msg", "Informe o nome do modelo.", false); return; }
+    const pct = (id) => { const v = document.getElementById(id).value; return v === "" ? null : parseFloat(v); };
+    const encargos = pct("up-encargos"), taxaAdm = pct("up-taxa-adm"), imposto = pct("up-imposto");
+    for (const [rotulo, v] of [["Encargos sociais", encargos], ["Taxa administrativa", taxaAdm], ["Imposto", imposto]]) {
+        if (v != null && (isNaN(v) || v < 0 || v > 100)) {
+            showMsg("up-msg", rotulo + " (%) deve estar entre 0 e 100.", false);
+            return;
+        }
+    }
+    // Reenvia o arquivo: o backend parseia de novo (não confia no preview do cliente).
+    const fd = new FormData();
+    fd.append("arquivo", f);
+    fd.append("nome", nome);
+    const desc = document.getElementById("up-desc").value.trim();
+    if (desc) fd.append("descricao", desc);
+    if (encargos != null) fd.append("encargos_pct", encargos);
+    if (taxaAdm != null) fd.append("taxa_adm_pct", taxaAdm);
+    if (imposto != null) fd.append("imposto_pct", imposto);
+    let r, j;
+    try {
+        r = await fetch("/api/billing-models/upload", {
+            method: "POST", headers: HEADERS, credentials: "same-origin", body: fd,
+        });
+        j = await r.json();
+    } catch (e) {
+        showMsg("up-msg", "Erro de comunicação ao criar o modelo.", false);
+        return;
+    }
+    if (r.ok && j.success) {
+        fecharUpload();
+        showMsg("topmsg", `Modelo "${j.data.nome}" criado a partir da planilha.`, true);
+        await loadModels();
+        await loadCompanies();
+    } else {
+        showMsg("up-msg", j.detail || "Erro ao criar o modelo.", false);
+    }
+}
+
+async function loadCompanies() {
+    const r = await fetch("/api/billing-companies", { headers: HEADERS, credentials: "same-origin" });
+    const j = await r.json();
+    const companies = j.data || [];
+    const body = document.getElementById("assoc-body");
+    if (!companies.length) {
+        body.innerHTML = '<tr><td colspan="3" style="text-align:center; padding:1.2rem; color:var(--text-muted)">Nenhum contrato cadastrado.</td></tr>';
+        return;
+    }
+    const opts = (sel) => '<option value="">FEMSA padrão</option>' +
+        MODELS.map(m => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${esc(m.nome)}</option>`).join("");
+    body.innerHTML = companies.map(c => `
+        <tr>
+            <td>${esc(c.name)}</td>
+            <td class="cnpj">${esc(c.cnpj_femsa)}</td>
+            <td><select onchange="setCompanyModel(${c.id}, this.value)">${opts(c.billing_model_id)}</select></td>
+        </tr>`).join("");
+}
+
+async function setCompanyModel(companyId, val) {
+    hideMsg("assoc-msg");
+    const billing_model_id = val === "" ? null : parseInt(val, 10);
+    const r = await fetch(`/api/billing-companies/${companyId}/model`, {
+        method: "POST", headers: JSON_HEADERS, credentials: "same-origin",
+        body: JSON.stringify({ billing_model_id }),
+    });
+    showMsg("assoc-msg", r.ok ? "Modelo do contrato atualizado." : "Erro ao atualizar contrato.", r.ok);
+}
+
+init();
+// Atalho do hub de Catálogos ("Novo Modelo por Planilha"): abre direto o painel de upload.
+if (new URLSearchParams(window.location.search).get("upload") === "1") {
+    abrirUpload();
+}
+{% endblock %}

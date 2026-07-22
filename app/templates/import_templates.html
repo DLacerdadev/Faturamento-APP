@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+    <title>Modelos de Importação - Sistema de Faturamento</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh; color: #fff;
+        }
+        .navbar {
+            background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+            padding: 1rem 2rem; display: flex; justify-content: space-between;
+            align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .navbar h1 { font-size: 1.4rem; color: #4facfe; }
+        .nav-links a { color: #fff; text-decoration: none; padding: 0.5rem 1rem; border-radius: 8px; }
+        .nav-links a:hover { background: rgba(255,255,255,0.1); }
+        .container { max-width: 1200px; margin: 1.5rem auto; padding: 0 1rem; }
+        .page-header { margin-bottom: 1.2rem; }
+        .page-header h2 { font-size: 1.7rem; margin-bottom: 0.3rem; }
+        .page-header p { color: rgba(255,255,255,0.65); font-size: 0.95rem; }
+        .grid { display: grid; grid-template-columns: 360px 1fr; gap: 1.2rem; }
+        .card {
+            background: rgba(255,255,255,0.05); border-radius: 14px; padding: 1.3rem;
+            border: 1px solid rgba(255,255,255,0.1); margin-bottom: 1.2rem;
+        }
+        .card h3 { color: #4facfe; margin-bottom: 1rem; font-size: 1.15rem; }
+        .tpl-item {
+            padding: 0.8rem; border-radius: 10px; background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08); margin-bottom: 0.6rem; cursor: pointer;
+        }
+        .tpl-item:hover { border-color: #4facfe; }
+        .tpl-item.active { border-color: #4facfe; background: rgba(79,172,254,0.12); }
+        .tpl-item .nm { font-weight: 600; }
+        .tpl-item .meta { font-size: 0.78rem; color: rgba(255,255,255,0.6); margin-top: 0.2rem; }
+        .badge { display:inline-block; font-size:0.7rem; padding:0.1rem 0.5rem; border-radius:6px; background:#2e75b6; margin-left:0.3rem;}
+        .badge.wide { background:#a06000; }
+        .badge.off { background:#7a2020; }
+        label { display: block; margin: 0.8rem 0 0.3rem; color: rgba(255,255,255,0.9); font-size: 0.85rem; font-weight: 500; }
+        input[type=text], input[type=number], select, textarea {
+            width: 100%; padding: 0.6rem 0.8rem; border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px; background: rgba(255,255,255,0.1); color: #fff; font-size: 0.9rem;
+        }
+        select option { background: #1a1a2e; }
+        .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+        .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.8rem; }
+        .btn {
+            padding: 0.6rem 1.1rem; border: none; border-radius: 8px; cursor: pointer;
+            font-size: 0.9rem; font-weight: 600; color: #fff; background: #4facfe;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn.secondary { background: rgba(255,255,255,0.15); }
+        .btn.danger { background: #c0392b; }
+        .btn.ghost { background: transparent; border: 1px solid rgba(255,255,255,0.25); }
+        .btn-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
+        .map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 1rem; }
+        .hint { font-size: 0.78rem; color: rgba(255,255,255,0.55); margin-top: 0.2rem; }
+        .result {
+            margin-top: 1rem; padding: 0.9rem; border-radius: 8px; font-size: 0.85rem;
+            background: rgba(0,0,0,0.25); white-space: pre-wrap; display: none;
+        }
+        .result.show { display: block; }
+        .result.ok { border-left: 4px solid #2ecc71; }
+        .result.err { border-left: 4px solid #e74c3c; }
+        table { width: 100%; border-collapse: collapse; margin-top: 0.6rem; font-size: 0.8rem; }
+        th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        th { color: #4facfe; }
+        .pill-ok { color: #2ecc71; } .pill-no { color: #e67e22; }
+        .hidden { display: none !important; }
+        .filebox { padding: 0.6rem; border: 1px dashed rgba(255,255,255,0.3); border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>🗂️ Modelos de Importação</h1>
+        <div class="nav-links">
+            <a href="/dashboard">Dashboard</a>
+            <a href="/billing">Faturamento</a>
+            <a href="/data-upload">Upload de Dados</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="page-header">
+            <h2>Modelos de Importação de Exames</h2>
+            <p>Cada fonte (clínica, fornecedor) tem um layout. Crie um modelo, mapeie as colunas a partir de uma amostra e importe sempre pelo mesmo fluxo — vinculando ao funcionário (CPF) e lançando na folha.</p>
+        </div>
+
+        <div class="grid">
+            <!-- LISTA -->
+            <div>
+                <div class="card">
+                    <h3>Modelos</h3>
+                    <div id="tpl-list"></div>
+                    <div class="btn-row">
+                        <button class="btn" onclick="newTemplate()">+ Novo modelo</button>
+                    </div>
+                </div>
+
+                <!-- IMPORTAR -->
+                <div class="card">
+                    <h3>Importar exames</h3>
+                    <label>Modelo</label>
+                    <select id="imp-template"></select>
+                    <label>Arquivo (.xlsx, .xls, .csv)</label>
+                    <div class="filebox"><input type="file" id="imp-file" accept=".xlsx,.xls,.csv"></div>
+                    <div class="btn-row">
+                        <button class="btn secondary" onclick="runPreview('imp')">Pré-visualizar</button>
+                        <button class="btn" onclick="runImport()">Importar e lançar na folha</button>
+                    </div>
+                    <div id="imp-result" class="result"></div>
+                </div>
+            </div>
+
+            <!-- EDITOR -->
+            <div class="card" id="editor">
+                <h3 id="editor-title">Editor de modelo</h3>
+
+                <label>Nome do modelo</label>
+                <input type="text" id="f-nome" placeholder="Ex.: Exames Clínica São Lucas">
+                <label>Descrição</label>
+                <input type="text" id="f-descricao" placeholder="Observações sobre a fonte / layout">
+
+                <div class="row3">
+                    <div>
+                        <label>Layout</label>
+                        <select id="f-layout" onchange="onLayoutChange()">
+                            <option value="long">1 linha = 1 exame (com valor)</option>
+                            <option value="wide">1 linha = 1 funcionário (soma colunas)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Chave de vínculo</label>
+                        <select id="f-match">
+                            <option value="cpf">CPF (recomendado)</option>
+                            <option value="nome">Nome (casa com existente)</option>
+                            <option value="matricula">Matrícula</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Ativo</label>
+                        <select id="f-ativo"><option value="true">Sim</option><option value="false">Não</option></select>
+                    </div>
+                </div>
+
+                <div class="row3">
+                    <div>
+                        <label>Aba (Excel)</label>
+                        <select id="f-sheetmode" onchange="syncSheetInputs()">
+                            <option value="index">Por índice</option>
+                            <option value="name">Por nome</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Índice / Nome da aba</label>
+                        <input type="number" id="f-sheetindex" value="0" min="0">
+                        <input type="text" id="f-sheetname" class="hidden" placeholder="Nome da aba">
+                    </div>
+                    <div>
+                        <label>Linha do cabeçalho (0 = 1ª linha)</label>
+                        <input type="number" id="f-header" value="0" min="0">
+                    </div>
+                </div>
+
+                <div class="row2">
+                    <div>
+                        <label>Separador decimal</label>
+                        <select id="f-dec"><option value=",">Vírgula (1.234,56)</option><option value=".">Ponto (1,234.56)</option></select>
+                    </div>
+                    <div>
+                        <label>Formatos de data (separados por vírgula)</label>
+                        <input type="text" id="f-dates" value="%d/%m/%Y, %Y-%m-%d">
+                    </div>
+                </div>
+
+                <hr style="border-color:rgba(255,255,255,0.1); margin:1.2rem 0;">
+
+                <h3 style="font-size:1rem;">Amostra → mapeamento</h3>
+                <p class="hint">Carregue um arquivo de exemplo dessa fonte para listar as colunas e ligá-las aos campos.</p>
+                <div class="filebox" style="margin-top:0.5rem;"><input type="file" id="sample-file" accept=".xlsx,.xls,.csv"></div>
+                <div class="btn-row">
+                    <button class="btn secondary" onclick="detectColumns()">Detectar colunas</button>
+                </div>
+                <div id="detect-info" class="hint"></div>
+
+                <div id="map-long">
+                    <label>Mapeamento de colunas</label>
+                    <div class="map-grid" id="map-fields-long"></div>
+                </div>
+
+                <div id="map-wide" class="hidden">
+                    <label>Coluna de Nome / CPF (vínculo)</label>
+                    <div class="map-grid" id="map-fields-wide"></div>
+                    <label>Colunas de valor a somar (Ctrl/Shift para várias)</label>
+                    <select id="f-valuecols" multiple size="6"></select>
+                </div>
+
+                <div class="btn-row">
+                    <button class="btn" onclick="saveTemplate()">Salvar modelo</button>
+                    <button class="btn secondary" onclick="runPreview('editor')">Testar (preview)</button>
+                    <button class="btn danger" id="btn-del" onclick="deleteTemplate()" style="display:none;">Excluir</button>
+                </div>
+                <div id="editor-result" class="result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const TOKEN = "{{ token }}";
+        const HEADERS = { "Authorization": "Bearer " + TOKEN };
+
+        const LONG_FIELDS = [
+            ["cpf", "CPF (chave de vínculo)"],
+            ["nome", "Nome do funcionário"],
+            ["matricula", "Matrícula"],
+            ["cnpj_unidade", "CNPJ da Unidade (centro de custo)"],
+            ["tipo", "Tipo de exame"],
+            ["exame", "Exame / descrição"],
+            ["data_pedido", "Data do pedido"],
+            ["data_exame", "Data do exame (define o mês)"],
+            ["data_inativacao", "Data de inativação"],
+            ["valor", "Valor a cobrar (R$)"],
+        ];
+        const WIDE_FIELDS = [
+            ["cpf", "CPF (se houver)"],
+            ["nome", "Nome do funcionário"],
+            ["matricula", "Matrícula"],
+            ["data_exame", "Data do exame (opcional)"],
+        ];
+
+        let templatesCache = [];
+        let editingId = null;
+        let availableColumns = [];
+
+        function showResult(el, data, ok) {
+            const box = document.getElementById(el);
+            box.className = "result show " + (ok ? "ok" : "err");
+            if (typeof data === "string") { box.textContent = data; return; }
+            box.textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function loadTemplates() {
+            const r = await fetch("/api/import-templates", { headers: HEADERS, credentials: "same-origin" });
+            const j = await r.json();
+            templatesCache = j.data || [];
+            renderList();
+            renderImportSelect();
+        }
+
+        function renderList() {
+            const c = document.getElementById("tpl-list");
+            if (!templatesCache.length) { c.innerHTML = "<p class='hint'>Nenhum modelo ainda.</p>"; return; }
+            c.innerHTML = templatesCache.map(t => `
+                <div class="tpl-item ${t.id === editingId ? "active" : ""}" onclick="editTemplate(${t.id})">
+                    <div class="nm">${t.nome}
+                        <span class="badge ${t.layout === "wide" ? "wide" : ""}">${t.layout}</span>
+                        ${t.ativo ? "" : "<span class='badge off'>inativo</span>"}
+                    </div>
+                    <div class="meta">${t.descricao || ""}</div>
+                </div>`).join("");
+        }
+
+        function renderImportSelect() {
+            const sel = document.getElementById("imp-template");
+            const ativos = templatesCache.filter(t => t.ativo);
+            sel.innerHTML = ativos.map(t => `<option value="${t.id}">${t.nome} (${t.layout})</option>`).join("");
+        }
+
+        function buildMapFields() {
+            const longBox = document.getElementById("map-fields-long");
+            const wideBox = document.getElementById("map-fields-wide");
+            const opts = ["<option value=''>(não usar)</option>"]
+                .concat(availableColumns.map(c => `<option value="${c}">${c}</option>`)).join("");
+            longBox.innerHTML = LONG_FIELDS.map(([k, lbl]) =>
+                `<div><label>${lbl}</label><select data-field="${k}" class="map-long">${opts}</select></div>`).join("");
+            wideBox.innerHTML = WIDE_FIELDS.map(([k, lbl]) =>
+                `<div><label>${lbl}</label><select data-field="${k}" class="map-wide">${opts}</select></div>`).join("");
+            const vc = document.getElementById("f-valuecols");
+            vc.innerHTML = availableColumns.map(c => `<option value="${c}">${c}</option>`).join("");
+        }
+
+        function applyMappingToFields(mapping, valueColumns) {
+            mapping = mapping || {};
+            document.querySelectorAll(".map-long, .map-wide").forEach(sel => {
+                const f = sel.getAttribute("data-field");
+                if (mapping[f] !== undefined && mapping[f] !== null) sel.value = mapping[f];
+            });
+            const vc = document.getElementById("f-valuecols");
+            const set = new Set((valueColumns || []).map(String));
+            Array.from(vc.options).forEach(o => { o.selected = set.has(o.value); });
+        }
+
+        function onLayoutChange() {
+            const wide = document.getElementById("f-layout").value === "wide";
+            document.getElementById("map-long").classList.toggle("hidden", wide);
+            document.getElementById("map-wide").classList.toggle("hidden", !wide);
+        }
+        function syncSheetInputs() {
+            const byName = document.getElementById("f-sheetmode").value === "name";
+            document.getElementById("f-sheetindex").classList.toggle("hidden", byName);
+            document.getElementById("f-sheetname").classList.toggle("hidden", !byName);
+        }
+
+        function fillForm(t) {
+            document.getElementById("f-nome").value = t.nome || "";
+            document.getElementById("f-descricao").value = t.descricao || "";
+            document.getElementById("f-layout").value = t.layout || "long";
+            document.getElementById("f-match").value = t.match_key || "cpf";
+            document.getElementById("f-ativo").value = t.ativo ? "true" : "false";
+            document.getElementById("f-sheetmode").value = t.sheet_mode || "index";
+            document.getElementById("f-sheetindex").value = t.sheet_index || 0;
+            document.getElementById("f-sheetname").value = t.sheet_name || "";
+            document.getElementById("f-header").value = t.header_row || 0;
+            document.getElementById("f-dec").value = t.decimal_separator || ",";
+            document.getElementById("f-dates").value = (t.date_formats || []).join(", ");
+            // colunas conhecidas = as do mapping + value_columns (até detectar uma amostra)
+            const known = new Set();
+            Object.values(t.mapping || {}).forEach(v => { if (v) known.add(String(v)); });
+            (t.value_columns || []).forEach(v => known.add(String(v)));
+            availableColumns = Array.from(known);
+            buildMapFields();
+            applyMappingToFields(t.mapping, t.value_columns);
+            onLayoutChange(); syncSheetInputs();
+        }
+
+        function newTemplate() {
+            editingId = null;
+            document.getElementById("editor-title").textContent = "Novo modelo";
+            document.getElementById("btn-del").style.display = "none";
+            fillForm({ layout: "long", match_key: "cpf", ativo: true, sheet_mode: "index",
+                       sheet_index: 0, header_row: 0, decimal_separator: ",",
+                       date_formats: ["%d/%m/%Y", "%Y-%m-%d"], mapping: {}, value_columns: [] });
+            renderList();
+        }
+
+        async function editTemplate(id) {
+            const r = await fetch(`/api/import-templates/${id}`, { headers: HEADERS, credentials: "same-origin" });
+            const j = await r.json();
+            editingId = id;
+            document.getElementById("editor-title").textContent = "Editando: " + j.data.nome;
+            document.getElementById("btn-del").style.display = "inline-block";
+            fillForm(j.data);
+            renderList();
+        }
+
+        function collectForm() {
+            const layout = document.getElementById("f-layout").value;
+            const mapping = {};
+            const cls = layout === "wide" ? ".map-wide" : ".map-long";
+            document.querySelectorAll(cls).forEach(sel => {
+                const f = sel.getAttribute("data-field");
+                if (sel.value) mapping[f] = sel.value;
+            });
+            let valueColumns = [];
+            if (layout === "wide") {
+                valueColumns = Array.from(document.getElementById("f-valuecols").selectedOptions).map(o => o.value);
+            }
+            return {
+                nome: document.getElementById("f-nome").value.trim(),
+                categoria: "exames",
+                descricao: document.getElementById("f-descricao").value.trim(),
+                ativo: document.getElementById("f-ativo").value === "true",
+                sheet_mode: document.getElementById("f-sheetmode").value,
+                sheet_index: parseInt(document.getElementById("f-sheetindex").value || "0"),
+                sheet_name: document.getElementById("f-sheetname").value.trim() || null,
+                header_row: parseInt(document.getElementById("f-header").value || "0"),
+                layout: layout,
+                match_key: document.getElementById("f-match").value,
+                decimal_separator: document.getElementById("f-dec").value,
+                date_formats: document.getElementById("f-dates").value.split(",").map(s => s.trim()).filter(Boolean),
+                mapping: mapping,
+                value_columns: valueColumns,
+            };
+        }
+
+        async function saveTemplate() {
+            const payload = collectForm();
+            if (!payload.nome) { showResult("editor-result", "Informe o nome do modelo.", false); return; }
+            const url = editingId ? `/api/import-templates/${editingId}` : "/api/import-templates";
+            const method = editingId ? "PUT" : "POST";
+            const r = await fetch(url, {
+                method, headers: { ...HEADERS, "Content-Type": "application/json" },
+                credentials: "same-origin", body: JSON.stringify(payload)
+            });
+            const j = await r.json();
+            if (r.ok) {
+                editingId = j.data.id;
+                showResult("editor-result", "Modelo salvo com sucesso.", true);
+                await loadTemplates();
+                document.getElementById("editor-title").textContent = "Editando: " + j.data.nome;
+                document.getElementById("btn-del").style.display = "inline-block";
+            } else {
+                showResult("editor-result", j.detail || "Erro ao salvar.", false);
+            }
+        }
+
+        async function deleteTemplate() {
+            if (!editingId || !confirm("Excluir este modelo?")) return;
+            const r = await fetch(`/api/import-templates/${editingId}`, { method: "DELETE", headers: HEADERS, credentials: "same-origin" });
+            if (r.ok) { newTemplate(); await loadTemplates(); }
+        }
+
+        async function detectColumns() {
+            const f = document.getElementById("sample-file").files[0];
+            if (!f) { showResult("editor-result", "Selecione um arquivo de amostra.", false); return; }
+            const fd = new FormData();
+            fd.append("file", f);
+            fd.append("sheet_mode", document.getElementById("f-sheetmode").value);
+            fd.append("sheet_index", document.getElementById("f-sheetindex").value || "0");
+            fd.append("sheet_name", document.getElementById("f-sheetname").value || "");
+            fd.append("header_row", document.getElementById("f-header").value || "0");
+            const r = await fetch("/api/import-templates/detect-columns", { method: "POST", headers: HEADERS, credentials: "same-origin", body: fd });
+            const j = await r.json();
+            if (!r.ok) { showResult("editor-result", j.detail || "Erro ao detectar.", false); return; }
+            const prev = collectForm();
+            availableColumns = j.columns || [];
+            buildMapFields();
+            applyMappingToFields(prev.mapping, prev.value_columns);
+            const sheetsTxt = (j.sheets && j.sheets.length) ? " | Abas: " + j.sheets.join(", ") : "";
+            document.getElementById("detect-info").textContent =
+                `${availableColumns.length} colunas, ${j.total_rows} linhas detectadas.${sheetsTxt}`;
+        }
+
+        async function runPreview(origin) {
+            let fileEl, resultEl, fd = new FormData();
+            if (origin === "imp") {
+                fileEl = document.getElementById("imp-file"); resultEl = "imp-result";
+                fd.append("template_id", document.getElementById("imp-template").value);
+            } else {
+                fileEl = document.getElementById("sample-file"); resultEl = "editor-result";
+                fd.append("template", JSON.stringify(collectForm()));
+            }
+            if (!fileEl.files[0]) { showResult(resultEl, "Selecione um arquivo.", false); return; }
+            fd.append("file", fileEl.files[0]);
+            const r = await fetch("/api/import-templates/preview", { method: "POST", headers: HEADERS, credentials: "same-origin", body: fd });
+            const j = await r.json();
+            if (!r.ok) { showResult(resultEl, j.detail || "Erro no preview.", false); return; }
+            renderPreview(resultEl, j);
+        }
+
+        function renderPreview(resultEl, j) {
+            const box = document.getElementById(resultEl);
+            box.className = "result show ok";
+            let html = `Layout: ${j.layout} | Linhas: ${j.total_rows} | Vinculam: ${j.matched} | Sem vínculo: ${j.unmatched} | Total R$ ${j.total_valor}\n`;
+            html += "<table><tr><th>Linha</th><th>CPF</th><th>Nome</th><th>Exame</th><th>Data</th><th>Valor</th><th>Vínculo</th></tr>";
+            (j.sample || []).forEach(s => {
+                const cls = s.vinculo === "ok" ? "pill-ok" : "pill-no";
+                html += `<tr><td>${s.linha}</td><td>${s.cpf || ""}</td><td>${s.nome || ""}</td><td>${s.exame || ""}</td><td>${s.data_exame || ""}</td><td>${s.valor}</td><td class="${cls}">${s.vinculo}</td></tr>`;
+            });
+            html += "</table>";
+            box.innerHTML = html;
+        }
+
+        async function runImport() {
+            const fileEl = document.getElementById("imp-file");
+            if (!fileEl.files[0]) { showResult("imp-result", "Selecione um arquivo.", false); return; }
+            if (!confirm("Importar e lançar estes exames na folha?")) return;
+            const fd = new FormData();
+            fd.append("file", fileEl.files[0]);
+            fd.append("template_id", document.getElementById("imp-template").value);
+            const r = await fetch("/api/import-templates/import", { method: "POST", headers: HEADERS, credentials: "same-origin", body: fd });
+            const j = await r.json();
+            showResult("imp-result", j, j.success !== false);
+        }
+
+        loadTemplates();
+        newTemplate();
+    </script>
+</body>
+</html>

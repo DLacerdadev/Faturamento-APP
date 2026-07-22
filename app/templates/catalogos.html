@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Catálogos - Telos Consultoria{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Catálogos</h1>
+</div>
+
+<p style="color: var(--text-muted); margin-bottom: 2rem;">Selecione o catálogo que deseja gerenciar.</p>
+
+<div class="grid-3">
+    <a href="/catalogo-epis" class="card catalog-choice" style="display:block; text-decoration:none; border-left:4px solid var(--gold);">
+        <div class="card-header">
+            <h2>EPIs</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Catálogo de EPIs, produtos e pacotes de compra.</p>
+        <span class="btn btn-outline">Abrir catálogo de EPIs →</span>
+    </a>
+
+    <a href="/catalogo-exames" class="card catalog-choice" style="display:block; text-decoration:none; border-left:4px solid var(--gold);">
+        <div class="card-header">
+            <h2>Exames</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Catálogo de exames e tabela de preço por modelo.</p>
+        <span class="btn btn-outline">Abrir catálogo de Exames →</span>
+    </a>
+
+    <a href="/beneficios" class="card catalog-choice" style="display:block; text-decoration:none; border-left:4px solid var(--gold);">
+        <div class="card-header">
+            <h2>Benefícios</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Eventos de benefício da Senior (VR, VT, bônus, seguro) → coluna do faturamento.</p>
+        <span class="btn btn-outline">Abrir benefícios →</span>
+    </a>
+
+    <a href="/catalogo-produtos" class="card catalog-choice" style="display:block; text-decoration:none; border-left:4px solid var(--gold);">
+        <div class="card-header">
+            <h2>Produtos (TOTVS)</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Uniformes, EPIs e equipamentos importados do TOTVS — com preço editável.</p>
+        <span class="btn btn-outline">Abrir produtos →</span>
+    </a>
+
+    <a href="/catalogo-treinamentos" class="card catalog-choice" style="display:block; text-decoration:none; border-left:4px solid var(--gold);">
+        <div class="card-header">
+            <h2>Treinamentos</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Catálogo de treinamentos (nome, valor, carga horária, validade) e lançamento por funcionário — manual ou por planilha — para o faturamento.</p>
+        <span class="btn btn-outline">Abrir treinamentos →</span>
+    </a>
+
+    <a href="/modelos-faturamento" class="card catalog-choice" style="display:block; text-decoration:none; border-left:4px solid var(--gold);">
+        <div class="card-header">
+            <h2>Modelos de Exportação</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Modelos da planilha de faturamento: crie a partir de uma <b>planilha Excel do cliente</b> (upload → conferência → salvar, com fórmulas e layout preservados — ex.: SKYRAIL), monte por colunas (GERAL/FEMSA) e defina os percentuais padrão de cada modelo.</p>
+        <span class="btn btn-outline">Abrir modelos →</span>
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .catalog-choice { transition: border-color 0.2s ease, transform 0.2s ease, background-color 0.3s ease; }
+    .catalog-choice:hover { transform: translateY(-3px); background-color: var(--bg-tertiary); }
+</style>
+{% endblock %}
