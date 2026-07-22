@@ -15,6 +15,7 @@ def _safe_salario_cell(val: Any) -> float:
 from io import BytesIO
 import pandas as pd
 import logging
+import re
 from datetime import datetime
 from openpyxl.styles import PatternFill, Font
 from app.services.billing_processor import calcular_totais_remuneracao
@@ -265,6 +266,26 @@ FEMSA_COLUMNS = [
     "TRIBUTOS (%)", "ENCARGOS (VALOR)", "ENCARGOS (%)", "Sub-Total", "Total Geral"
 ]
 
+# Colunas NOVAS (Frente 3 preenche os valores por funcionário). Só aparecem na
+# planilha quando o modelo de faturamento as inclui na sua lista de colunas.
+# Entram no Sub-Total (custo) via calcular_faturamento quando existirem no df.
+EXTRA_COST_COLUMNS = [
+    "UNIFORMES (Valor)",
+    "EPIS (Valor)",
+    "EQUIPAMENTOS (Valor)",
+    "TREINAMENTOS (Valor)",
+]
+
+# Conjunto de TODAS as colunas conhecidas (base para montar/editar modelos =
+# GERAL). FEMSA idêntico ao de hoje; as 4 colunas de itens entram logo APÓS
+# "SEGURO DE VIDA" (não no fim da planilha).
+_POS_APOS_SEGURO = FEMSA_COLUMNS.index("SEGURO DE VIDA") + 1
+GERAL_COLUMNS = (
+    FEMSA_COLUMNS[:_POS_APOS_SEGURO]
+    + EXTRA_COST_COLUMNS
+    + FEMSA_COLUMNS[_POS_APOS_SEGURO:]
+)
+
 EVENT_TO_FEMSA_MAPPING = {
     7: (None, "AUXILIO DOENÇA (Valor)"),
     13: (None, "LICENCA PATERNIDADE (Valor)"),
@@ -340,11 +361,79 @@ EVENT_TO_FEMSA_MAPPING = {
 }
 
 
+# Colunas com destaque no cabeçalho da exportação (compartilhadas entre o
+# caminho FEMSA atual e o renderizador por estrutura). Mesmo conteúdo de sempre.
+_HEADER_DARK_RED_COLS = [
+    "Nº Posicão", "CNPJ FEMSA", "Unidade - ",
+    "Centro de Custo - Femsa", "Cargo - Femsa", "Motivo - Femsa"
+]
+
+_HEADER_LIGHT_RED_COLS = [
+    "TAXA EXAMES MEDICOS(Valor)", "TAXA EXAMES MEDICOS(%)",
+    "TAXA EXAMES MEDICOS COMPLEMENTARES (Valor)", "TAXA EXAMES MEDICOS COMPLEMENTARES (%)",
+    "ENCARGOS DE FOLHA", "TAXA FATURAMENTO (VALOR)", "TAXA FATURAMENTO (%)",
+    "TAXA CONTRATO (VALOR)", "TAXA CONTRATO (%)", "TRIBUTOS (VALOR)",
+    "TRIBUTOS (%)", "ENCARGOS (VALOR)", "ENCARGOS (%)"
+]
+
+
 def normalize_name_for_match(name: str) -> str:
     """Normaliza nome para comparação (uppercase, sem espaços extras)."""
     if not name:
         return ""
     return " ".join(name.upper().strip().split())
+
+
+def calcular_faturamento(df, encargos_pct=None, taxa_adm_pct=None, imposto_pct=None):
+    """Conta final do faturamento por funcionário (parâmetros em %; gross-up):
+      Subtotal = Total Remuneração + Encargos Sociais + Exames + Benefícios (custos)
+      Taxa Adm (R$) = Subtotal × taxa_adm_pct%   -> coluna TAXA FATURAMENTO
+      Total Geral   = (Subtotal + Taxa Adm) ÷ (1 − imposto_pct%)
+      Tributos (R$) = Total Geral × imposto_pct% -> coluna TRIBUTOS
+    Parâmetros None = não recalcula aquele pedaço (mantém o que veio).
+    SUPOSIÇÕES DE MAPEAMENTO (a confirmar): taxa adm -> 'TAXA FATURAMENTO'; imposto -> 'TRIBUTOS'.
+    """
+    if df.empty or "Total Remuneração" not in df.columns:
+        return df
+
+    def col(c):
+        return pd.to_numeric(df[c], errors="coerce").fillna(0) if c in df.columns else 0
+
+    total_rem = col("Total Remuneração")
+    # Encargos sociais (campo %); se não informado, mantém o já calculado (57,91%)
+    if encargos_pct is not None:
+        df["Encargos Sociais"] = (total_rem * (float(encargos_pct) / 100.0)).round(2)
+        df["ENCARGOS (%)"] = encargos_pct
+    encargos = col("Encargos Sociais")
+
+    # Subtotal de custos do colaborador (gastos). Uniformes/EPIs/Equip/Treinamentos
+    # entram quando as colunas existirem no df (col() retorna 0 se não existir),
+    # para que os valores preenchidos pela Frente 3 fluam ao Sub-Total → taxa adm → gross-up.
+    custos = (total_rem + encargos
+              + col("(FAT) EXAMES MEDICOS")
+              + col("PAGTO. VALE-TRANSPORTE (Valor)") + col("PAGTO. VALE REFEICAO (Valor)")
+              + col("AJUDA CUSTO COMBUSTÍVEL / KM") + col("PREMIO/BONUS") + col("SEGURO DE VIDA")
+              + col("UNIFORMES (Valor)") + col("EPIS (Valor)")
+              + col("EQUIPAMENTOS (Valor)") + col("TREINAMENTOS (Valor)"))
+    df["Sub-Total"] = custos.round(2)
+
+    # Taxa administrativa (campo %) -> TAXA FATURAMENTO
+    if taxa_adm_pct is not None:
+        df["TAXA FATURAMENTO (%)"] = taxa_adm_pct
+        df["TAXA FATURAMENTO (VALOR)"] = (custos * (float(taxa_adm_pct) / 100.0)).round(2)
+    taxa_adm_val = col("TAXA FATURAMENTO (VALOR)")
+
+    base = custos + taxa_adm_val
+    # Valor total (gross-up pela alíquota de imposto) + impostos -> TRIBUTOS
+    if imposto_pct is not None and float(imposto_pct) < 100:
+        aliq = float(imposto_pct) / 100.0
+        total_geral = (base / (1 - aliq)).round(2)
+        df["Total Geral"] = total_geral
+        df["TRIBUTOS (%)"] = imposto_pct
+        df["TRIBUTOS (VALOR)"] = (total_geral * aliq).round(2)
+    else:
+        df["Total Geral"] = base.round(2)
+    return df
 
 
 def billing_to_femsa_excel(
@@ -354,20 +443,77 @@ def billing_to_femsa_excel(
     cnpj_unidade: str = "15.541.957/0001-12",
     exams_data: Dict[str, float] = None,
     exams_by_numcad: Dict[int, float] = None,
-    benefits_data: Dict[str, float] = None
+    exams_by_cpf: Dict[str, float] = None,
+    benefits_data: Dict[str, float] = None,
+    extra_event_map: Dict[int, str] = None,
+    encargos_pct: float = None,
+    taxa_adm_pct: float = None,
+    imposto_pct: float = None,
+    colunas: List[str] = None,
+    uniformes_by_numcad: Dict[int, float] = None,
+    epis_by_numcad: Dict[int, float] = None,
+    equipamentos_by_numcad: Dict[int, float] = None,
+    treinamentos_by_numcad: Dict[int, float] = None,
+    estrutura: Dict[str, Any] = None,
+    salario_formula: str = None,
+    campos_config: List[Dict[str, Any]] = None
 ) -> bytes:
     """
     Converte dados de faturamento para formato Excel FEMSA.
-    Se exams_by_numcad for fornecido, preenche (FAT) EXAMES MEDICOS por matricula.
-    Se exams_data for fornecido, inclui valores de exames médicos por nome.
+    Preenche (FAT) EXAMES MEDICOS casando por CPF (exams_by_cpf) com prioridade,
+    e por matrícula (exams_by_numcad) como fallback. exams_data inclui por nome.
     Se benefits_data for fornecido, inclui valores de benefícios (Sodexo).
+    extra_event_map: {codeve: coluna_femsa} de eventos de benefício ATIVOS
+    (cadastro configurável), mesclado ao EVENT_TO_FEMSA_MAPPING como (None, coluna).
+    colunas: lista ORDENADA de colunas do modelo de faturamento. Default =
+    FEMSA_COLUMNS (regressão ZERO para o FEMSA de hoje). Colunas extras conhecidas
+    (UNIFORMES/EPIS/EQUIPAMENTOS/TREINAMENTOS (Valor)) só aparecem se estiverem aqui.
+    uniformes_by_numcad/epis_by_numcad/equipamentos_by_numcad: {numcad: valor}
+    agregado dos pedidos CONFIRMADOS. Preenchem as colunas *(Valor) casando por
+    matrícula. Só têm efeito em modelos que incluam essas colunas (ex.: GERAL);
+    no FEMSA (sem essas colunas) não aparecem nem somam. TREINAMENTOS fica em 0.
     """
+    # DIRIGIDO POR ESTRUTURA: quando o modelo tem "estrutura" (upload de Excel),
+    # o df é calculado com as colunas "campo" da estrutura (fontes) e a escrita
+    # da planilha segue o layout original (ver _render_por_estrutura).
+    if estrutura and not colunas:
+        # Import local para evitar import circular (model_structure importa
+        # GERAL_COLUMNS deste módulo).
+        from app.services.model_structure import derive_colunas
+        colunas = derive_colunas(estrutura)
+    # DIRIGIDO POR COLUNAS: a montagem usa a lista do modelo; FEMSA é o default.
+    if not colunas:
+        colunas = FEMSA_COLUMNS
     if exams_data is None:
         exams_data = {}
     if exams_by_numcad is None:
         exams_by_numcad = {}
+    if exams_by_cpf is None:
+        exams_by_cpf = {}
+    if uniformes_by_numcad is None:
+        uniformes_by_numcad = {}
+    if epis_by_numcad is None:
+        epis_by_numcad = {}
+    if equipamentos_by_numcad is None:
+        equipamentos_by_numcad = {}
+    if treinamentos_by_numcad is None:
+        treinamentos_by_numcad = {}
+    # Mescla o mapeamento fixo com os eventos de benefício configuráveis (ativos).
+    event_map = dict(EVENT_TO_FEMSA_MAPPING)
+    if extra_event_map:
+        for _cod, _col in extra_event_map.items():
+            if _col:
+                event_map[int(_cod)] = (None, _col)
     if benefits_data is None:
         benefits_data = {}
+    # Grade "Fórmulas" (campos_config do modelo): campos com CÓDIGO próprio têm o
+    # valor substituído pela soma dos eventos configurados (entra nos totais);
+    # as FÓRMULAS são aplicadas depois, sobre o df (junto da fórmula de salário).
+    cfg_codigo_por_campo: Dict[str, list] = {}
+    for _cfg in (campos_config or []):
+        _cods = [int(x) for x in str(_cfg.get("codigo") or "").split(",") if str(x).strip().isdigit()]
+        if _cods and _cfg.get("campo"):
+            cfg_codigo_por_campo[_cfg["campo"]] = _cods
     def format_date_br(date_val):
         if not date_val:
             return None
@@ -392,7 +538,7 @@ def billing_to_femsa_excel(
     
     rows = []
     for emp in grouped_employees:
-        row = {col: None for col in FEMSA_COLUMNS}
+        row = {col: None for col in colunas}
         
         row["Empresa"] = "Telos Consultoria Ltda"
         row["Mês Referência"] = mes_ref
@@ -423,6 +569,7 @@ def billing_to_femsa_excel(
                 row["Dt Demissão"] = dt_afastamento
         
         total_proventos = 0.0
+        cfg_somas: Dict[str, float] = {}  # grade "Fórmulas": somas por campo configurado
         total_descontos = 0.0
         used_codes_per_col: dict = {}
         used_codes_total: set = set()
@@ -462,7 +609,12 @@ def billing_to_femsa_excel(
                     total_descontos += abs(val)
                 elif tipeve in (1, 2):
                     total_proventos += abs(val)
-            
+
+            # Grade "Fórmulas": acumula os códigos configurados por campo
+            for _campo_cfg, _cods_cfg in cfg_codigo_por_campo.items():
+                if cod in _cods_cfg:
+                    cfg_somas[_campo_cfg] = cfg_somas.get(_campo_cfg, 0.0) + val
+
             desc_evento = (ev.get("descricao_evento") or "").strip()
 
             if cod == 2470:
@@ -470,8 +622,8 @@ def billing_to_femsa_excel(
                 col_add("DESCONTO DE ADIANTAMENTO", cod, val)
                 continue
 
-            if cod in EVENT_TO_FEMSA_MAPPING:
-                mapping = EVENT_TO_FEMSA_MAPPING[cod]
+            if cod in event_map:
+                mapping = event_map[cod]
                 if mapping is None:
                     continue
                 qtde_col, valor_col = mapping
@@ -496,15 +648,50 @@ def billing_to_femsa_excel(
             elif cod > 0 and val != 0:
                 logger.info(f"Evento nao mapeado FEMSA: cod={cod}, desc={desc_evento}, tipeve={tipeve}, val={val}, func={emp.get('nome_funcionario','')}")
         
+        # Grade "Fórmulas": campo com código próprio SUBSTITUI o mapeamento padrão
+        for _campo_cfg in cfg_codigo_por_campo:
+            row[_campo_cfg] = round(cfg_somas.get(_campo_cfg, 0.0), 2)
+
         row["SALÁRIO BRUTO "] = round(total_proventos, 2)
         row["SALÁRIO LÍQUIDO"] = round(total_proventos - total_descontos, 2)
-        row["SEGURO DE VIDA"] = 5
+        # SEGURO DE VIDA: se um evento de benefício ativo (ex.: 2450) alimentou a
+        # coluna, o valor do EVENTO prevalece; sem evento, mantém o fixo R$ 5
+        # (comportamento contratual de sempre). Antes o 5 sobrescrevia o evento.
+        if not row.get("SEGURO DE VIDA"):
+            row["SEGURO DE VIDA"] = 5
         row["DESC. SALDO NEGATIVO"] = row.get("DESC. SALDO NEGATIVO") or 0
         
+        # (FAT) EXAMES MEDICOS: casa por CPF primeiro (unifica manual + upload),
+        # cai para matrícula se não houver CPF (exames legados). Evita dupla contagem.
         matricula = emp.get("matricula")
-        if matricula and int(matricula) in exams_by_numcad:
+        emp_cpf = re.sub(r"\D", "", str(emp.get("cpf") or ""))
+        if emp_cpf and emp_cpf in exams_by_cpf:
+            row["(FAT) EXAMES MEDICOS"] = exams_by_cpf[emp_cpf]
+        elif matricula and int(matricula) in exams_by_numcad:
             row["(FAT) EXAMES MEDICOS"] = exams_by_numcad[int(matricula)]
-        
+
+        # UNIFORMES/EPIS/EQUIPAMENTOS (Valor): valores dos pedidos CONFIRMADOS,
+        # casando por matrícula (numcad). Só grava quando a coluna existe no
+        # modelo (FEMSA não a tem → não aparece nem soma). TREINAMENTOS fica em 0
+        # (base ainda não existe). calcular_faturamento soma essas colunas no Sub-Total.
+        numcad_int = None
+        if matricula not in (None, ""):
+            try:
+                numcad_int = int(matricula)
+            except (ValueError, TypeError):
+                numcad_int = None
+        if numcad_int is not None:
+            if "UNIFORMES (Valor)" in row and numcad_int in uniformes_by_numcad:
+                row["UNIFORMES (Valor)"] = uniformes_by_numcad[numcad_int]
+            if "EPIS (Valor)" in row and numcad_int in epis_by_numcad:
+                row["EPIS (Valor)"] = epis_by_numcad[numcad_int]
+            if "EQUIPAMENTOS (Valor)" in row and numcad_int in equipamentos_by_numcad:
+                row["EQUIPAMENTOS (Valor)"] = equipamentos_by_numcad[numcad_int]
+            if "TREINAMENTOS (Valor)" in row and numcad_int in treinamentos_by_numcad:
+                row["TREINAMENTOS (Valor)"] = treinamentos_by_numcad[numcad_int]
+        if "TREINAMENTOS (Valor)" in row and row.get("TREINAMENTOS (Valor)") is None:
+            row["TREINAMENTOS (Valor)"] = 0
+
         nome_func = emp.get("nome_funcionario", "")
         nome_norm = normalize_name_for_match(nome_func)
         if nome_norm in exams_data:
@@ -521,23 +708,63 @@ def billing_to_femsa_excel(
     else:
         df = pd.DataFrame(rows)
         df = calcular_totais_remuneracao(df)
-        df = df[FEMSA_COLUMNS]
-    
+        # Fórmula de salário do MODELO (metodologia do cliente, ex.: Skyrail):
+        # substitui o campo "Salário" pelo valor calculado por funcionário.
+        # Fórmula inválida/erro => mantém o salário-base (avaliador nunca levanta).
+        if salario_formula:
+            from app.services.formula_salario import avaliar_formula as _avaliar_sal
+
+            def _sal_calc(r):
+                v = _avaliar_sal(salario_formula, {
+                    "salario": r.get("Salário"),
+                    "total_remuneracao": r.get("Total Remuneração"),
+                    "salario_dia_qtde": r.get("SALARIO DIA (Qtde)"),
+                    "dias_mes": 30,
+                })
+                return v if v is not None else r.get("Salário")
+            df["Salário"] = df.apply(_sal_calc, axis=1)
+        # Grade "Fórmulas": aplica as FÓRMULAS por campo (a variável `valor` é o
+        # valor-base do campo — soma dos códigos configurados, ou o padrão).
+        # Fórmula só-número = valor fixo. Erro na avaliação => mantém o valor-base.
+        if campos_config:
+            from app.services.formula_salario import avaliar_formula as _avaliar_cfg
+            for _cfg in campos_config:
+                _campo, _formula = _cfg.get("campo"), (_cfg.get("formula") or "").strip()
+                if not _campo or not _formula:
+                    continue
+                if _campo not in df.columns:
+                    df[_campo] = 0
+
+                def _calc_campo(r, _f=_formula, _c=_campo):
+                    v = _avaliar_cfg(_f, {
+                        "valor": r.get(_c),
+                        "salario": r.get("Salário"),
+                        "total_remuneracao": r.get("Total Remuneração"),
+                        "salario_dia_qtde": r.get("SALARIO DIA (Qtde)"),
+                        "dias_mes": 30,
+                    })
+                    return v if v is not None else r.get(_c)
+                df[_campo] = df.apply(_calc_campo, axis=1)
+        df = calcular_faturamento(df, encargos_pct, taxa_adm_pct, imposto_pct)
+        # Reindexa na ordem do modelo (garante todas as colunas do modelo, na ordem,
+        # e descarta qualquer coluna auxiliar que os cálculos tenham criado fora dele).
+        for _c in colunas:
+            if _c not in df.columns:
+                df[_c] = None
+        df = df[colunas]
+
+    # CAMINHO POR ESTRUTURA: mesmos dados/derivações do df acima, mas a escrita
+    # da planilha segue o layout da planilha-modelo (CONTRATO C1). Sem estrutura,
+    # o caminho atual (dirigido por colunas / FEMSA) segue INTOCADO abaixo.
+    if estrutura:
+        return _render_por_estrutura(df, estrutura, mes_ref)
+
     output = BytesIO()
     
-    dark_red_cols = [
-        "Nº Posicão", "CNPJ FEMSA", "Unidade - ", 
-        "Centro de Custo - Femsa", "Cargo - Femsa", "Motivo - Femsa"
-    ]
-    
-    light_red_cols = [
-        "TAXA EXAMES MEDICOS(Valor)", "TAXA EXAMES MEDICOS(%)",
-        "TAXA EXAMES MEDICOS COMPLEMENTARES (Valor)", "TAXA EXAMES MEDICOS COMPLEMENTARES (%)",
-        "ENCARGOS DE FOLHA", "TAXA FATURAMENTO (VALOR)", "TAXA FATURAMENTO (%)",
-        "TAXA CONTRATO (VALOR)", "TAXA CONTRATO (%)", "TRIBUTOS (VALOR)",
-        "TRIBUTOS (%)", "ENCARGOS (VALOR)", "ENCARGOS (%)"
-    ]
-    
+    dark_red_cols = _HEADER_DARK_RED_COLS
+
+    light_red_cols = _HEADER_LIGHT_RED_COLS
+
     dark_red_fill = PatternFill(start_color="8B0000", end_color="8B0000", fill_type="solid")
     light_red_fill = PatternFill(start_color="FF6B6B", end_color="FF6B6B", fill_type="solid")
     white_font = Font(color="FFFFFF", bold=True)
@@ -571,6 +798,145 @@ def billing_to_femsa_excel(
             ) + 2
             worksheet.column_dimensions[col_letter].width = min(max_length, 25)
     
+    output.seek(0)
+    return output.getvalue()
+
+
+def _valor_celula_estrutura(v: Any) -> Any:
+    """Converte valor do df (numpy/pandas) em escalar aceito pelo openpyxl."""
+    if v is None:
+        return None
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if hasattr(v, "item"):
+        try:
+            return v.item()
+        except (ValueError, AttributeError):
+            pass
+    return v
+
+
+def _formato_numero_coluna(col: Dict[str, Any]) -> Optional[str]:
+    """
+    Formato numérico básico da coluna, inferido pela fonte/cabeçalho (consistente
+    com as colunas conhecidas: (%) percentual, (Qtde) quantidade, valores em moeda).
+    Datas já chegam formatadas como texto dd/mm/aaaa e não precisam de formato.
+    """
+    ref = " ".join(
+        str(x) for x in [col.get("fonte") or "", col.get("header") or ""]
+    ).upper()
+    if not ref.strip():
+        return None
+    if "(%)" in ref:
+        return "0.00"
+    if "(QTDE)" in ref:
+        return "#,##0.00"
+    palavras_moeda = (
+        "(VALOR)", "SALARIO", "SALÁRIO", "TOTAL", "SUB-TOTAL", "ENCARGOS",
+        "TRIBUTOS", "TAXA", "SEGURO", "PREMIO", "BONUS", "PENSÃO", "PENSAO",
+        "EXAMES", "ADIANTAMENTO", "REEMB", "DESCONTO", "SALDO",
+    )
+    if any(p in ref for p in palavras_moeda):
+        return "#,##0.00"
+    return None
+
+
+def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref: str) -> bytes:
+    """
+    Escreve a planilha seguindo a "estrutura" do modelo (CONTRATO C1 em
+    app/services/model_structure.py):
+    - cabeçalhos nas células/linhas indicadas em headers/header_rows;
+    - dados a partir de data_row, uma linha por linha do df;
+    - coluna "campo" puxa a série do df pela "fonte"; "formula" escreve o
+      template com {row} substituído pela linha corrente; "constante" repete
+      o valor; "vazio" fica em branco.
+    """
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    aba = str(estrutura.get("aba") or "").strip() or f"Faturamento {mes_ref}"
+    ws.title = aba[:31]
+
+    headers = estrutura.get("headers") or {}
+    header_rows = [r for r in (estrutura.get("header_rows") or []) if isinstance(r, int)]
+    try:
+        data_row = int(estrutura.get("data_row"))
+    except (TypeError, ValueError):
+        data_row = (max(header_rows) + 1) if header_rows else 2
+    if data_row < 1:
+        data_row = 1
+    colunas_estrutura = [c for c in (estrutura.get("colunas") or []) if isinstance(c, dict)]
+
+    dark_red_fill = PatternFill(start_color="8B0000", end_color="8B0000", fill_type="solid")
+    light_red_fill = PatternFill(start_color="FF6B6B", end_color="FF6B6B", fill_type="solid")
+    white_font = Font(color="FFFFFF", bold=True)
+    dark_font = Font(color="000000", bold=True)
+    header_font = Font(bold=True)
+
+    # Cabeçalhos: escreve os textos nas células indicadas, em negrito, com os
+    # mesmos destaques do caminho atual quando o texto for de coluna destacada.
+    for letra, por_linha in headers.items():
+        if not isinstance(por_linha, dict):
+            continue
+        for linha, texto in por_linha.items():
+            try:
+                r = int(linha)
+            except (TypeError, ValueError):
+                continue
+            if r < 1 or r >= data_row:
+                continue
+            cell = ws[f"{letra}{r}"]
+            cell.value = texto
+            if texto in _HEADER_DARK_RED_COLS:
+                cell.fill = dark_red_fill
+                cell.font = white_font
+            elif texto in _HEADER_LIGHT_RED_COLS:
+                cell.fill = light_red_fill
+                cell.font = dark_font
+            else:
+                cell.font = header_font
+
+    # Dados: df "Mensagem" (nenhum funcionário) => só cabeçalhos, sem linhas.
+    n_linhas = 0 if "Mensagem" in df.columns else len(df)
+
+    for col in colunas_estrutura:
+        letra = col.get("letra")
+        tipo = col.get("tipo")
+        if not letra or not tipo:
+            continue
+        fonte = col.get("fonte")
+        serie = df[fonte] if (tipo == "campo" and fonte in df.columns) else None
+        template = str(col.get("template") or "") if tipo == "formula" else ""
+        num_fmt = _formato_numero_coluna(col)
+
+        for i in range(n_linhas):
+            r = data_row + i
+            cell = ws[f"{letra}{r}"]
+            if tipo == "campo":
+                if serie is not None:
+                    cell.value = _valor_celula_estrutura(serie.iloc[i])
+            elif tipo == "formula":
+                if template:
+                    cell.value = template.replace("{row}", str(r))
+            elif tipo == "constante":
+                cell.value = _valor_celula_estrutura(col.get("valor"))
+            else:
+                continue  # "vazio" (ou tipo desconhecido): célula em branco
+            if num_fmt and (tipo == "formula" or isinstance(cell.value, (int, float))):
+                cell.number_format = num_fmt
+
+        # Largura básica pela maior linha do cabeçalho da coluna.
+        textos_col = headers.get(letra) or {}
+        maior = max((len(str(t)) for t in textos_col.values()), default=0)
+        maior = max(maior, len(str(col.get("header") or "")))
+        ws.column_dimensions[letra].width = min(max(maior + 2, 12), 25)
+
+    output = BytesIO()
+    wb.save(output)
     output.seek(0)
     return output.getvalue()
 

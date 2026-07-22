@@ -525,7 +525,7 @@ def process_exams_upload(
                             if existing_unit:
                                 units_cache[unit_key] = existing_unit
                             else:
-                                default_company = db.query(Company).first()
+                                default_company = db.query(Company).order_by(Company.id).first()
                                 if not default_company:
                                     default_company = Company(cnpj_femsa="00000000000000", name="Empresa Padrão")
                                     db.add(default_company)
@@ -553,7 +553,7 @@ def process_exams_upload(
                 if unit:
                     company_id = unit.company_id
                 else:
-                    default_company = db.query(Company).first()
+                    default_company = db.query(Company).order_by(Company.id).first()
                     if not default_company:
                         default_company = Company(cnpj_femsa="00000000000000", name="Empresa Padrão")
                         db.add(default_company)

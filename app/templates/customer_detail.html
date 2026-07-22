@@ -4,7 +4,7 @@
 
 {% block content %}
 <div style="margin-bottom: 2rem;">
-    <a href="/customers?token={{ token }}" style="color: #667eea; text-decoration: none;">&larr; Voltar para lista</a>
+    <a href="/customers" style="color: #667eea; text-decoration: none;">&larr; Voltar para lista</a>
 </div>
 
 <div class="card">
@@ -97,9 +97,10 @@ document.getElementById('template-form').addEventListener('submit', async functi
     messageDiv.style.display = 'none';
     
     try {
-        const response = await fetch('/api/customers/{{ customer.id }}/templates?token=' + AUTH_TOKEN, {
+        const response = await fetch('/api/customers/{{ customer.id }}/templates', {
             method: 'POST',
-            body: formData
+            body: formData,
+            credentials: 'same-origin'
         });
         
         if (response.ok) {
@@ -124,8 +125,9 @@ async function deleteTemplate(id) {
     if (!confirm('Tem certeza que deseja excluir este template?')) return;
     
     try {
-        const response = await fetch('/api/customers/templates/' + id + '?token=' + AUTH_TOKEN, {
-            method: 'DELETE'
+        const response = await fetch('/api/customers/templates/' + id, {
+            method: 'DELETE',
+            credentials: 'same-origin'
         });
         
         if (response.ok) {

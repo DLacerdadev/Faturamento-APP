@@ -426,17 +426,22 @@ def ingest_exam_records(db: Session, customer_id: int, file_content: bytes, file
                 skipped += 1
                 continue
             
+            # NOTA: 'medico' e 'crm' foram REMOVIDOS — não existem como colunas em
+            # ExamRecord e quebravam toda linha (TypeError silencioso = "0 inseridos").
+            # Este fluxo é legado: prefira os Modelos de Importação (/import-templates),
+            # que vinculam o exame ao funcionário (CPF) e lançam na folha.
             exam_record = ExamRecord(
                 customer_id=customer_id,
                 employee_id=employee.id,
+                cpf=normalize_cpf(str(cpf_raw)) if cpf_raw else None,
+                matricula=str(matricula) if matricula else None,
+                nome_funcionario=employee.nome,
                 tipo_exame=str(tipo_exame),
                 data_exame=str(data_exame),
                 data_validade=str(get_value(row, column_map['data_validade'], '')),
                 status=str(get_value(row, column_map['status'], 'pendente')),
                 resultado=str(get_value(row, column_map['resultado'], '')),
                 clinica=str(get_value(row, column_map['clinica'], '')),
-                medico=str(get_value(row, column_map['medico'], '')),
-                crm=str(get_value(row, column_map['crm'], '')),
                 observacoes=str(get_value(row, column_map['observacoes'], '')),
             )
             db.add(exam_record)

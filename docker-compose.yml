@@ -26,7 +26,9 @@ services:
       - "5000:5000"
     environment:
       DATABASE_URL: postgresql://telos:telos%402026@db:5432/telos_db
-      SESSION_SECRET: telos-secret-key-change-me
+      # Segredo do token de sessão — DEVE vir do .env do servidor (nunca commitar).
+      # Gerar um forte: `openssl rand -hex 32`. Falha o start se não definido.
+      SESSION_SECRET: ${SESSION_SECRET:?defina SESSION_SECRET no .env do servidor}
       MSSQL_HOST: ${MSSQL_HOST:-}
       MSSQL_PORT: ${MSSQL_PORT:-1433}
       MSSQL_DB: ${MSSQL_DB:-}
@@ -41,6 +43,15 @@ services:
       SENIOR_SOAP_PASSWORD: ${SENIOR_SOAP_PASSWORD:-}
       SENIOR_SOAP_TOKEN: ${SENIOR_SOAP_TOKEN:-}
       SENIOR_SOAP_ENCRYPTION: ${SENIOR_SOAP_ENCRYPTION:-0}
+      APP_ENV: ${APP_ENV:-production}
+      SENIOR_SOAP_DELAY_BETWEEN_CCUS_MS: ${SENIOR_SOAP_DELAY_BETWEEN_CCUS_MS:-2000}
+      SENIOR_SOAP_DELAY_THRESHOLD_CCUS: ${SENIOR_SOAP_DELAY_THRESHOLD_CCUS:-10}
+      SENIOR_SOAP_MAX_CONCURRENCY: ${SENIOR_SOAP_MAX_CONCURRENCY:-3}
+      SENIOR_CACHE_CCU_TTL: ${SENIOR_CACHE_CCU_TTL:-21600}
+      SENIOR_CACHE_EMPLOYEES_TTL: ${SENIOR_CACHE_EMPLOYEES_TTL:-3600}
+      SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
+      MONITOR_PAGE_ENABLED: ${MONITOR_PAGE_ENABLED:-false}
+      EPI_PURCHASE_EMAIL: ${EPI_PURCHASE_EMAIL:-compras@grupoopus.com}
     volumes:
       - epi_documents:/app/epi_documents
       - excel_templates:/app/app/excel_templates

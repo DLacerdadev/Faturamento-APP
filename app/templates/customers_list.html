@@ -5,7 +5,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Clientes</h1>
-    <a href="/customers/new?token={{ token }}" class="btn">Novo Cliente</a>
+    <a href="/customers/new" class="btn">Novo Cliente</a>
 </div>
 
 <div class="card">
@@ -27,7 +27,7 @@
                 <td>{{ customer.description or '-' }}</td>
                 <td>{{ customer.created_at[:10] if customer.created_at else '-' }}</td>
                 <td>
-                    <a href="/customers/{{ customer.id }}?token={{ token }}" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.75rem;">Ver</a>
+                    <a href="/customers/{{ customer.id }}" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.75rem;">Ver</a>
                     <button onclick="deleteCustomer({{ customer.id }})" class="btn btn-danger" style="padding: 0.5rem 1rem; font-size: 0.75rem;">Excluir</button>
                 </td>
             </tr>

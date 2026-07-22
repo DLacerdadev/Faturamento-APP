@@ -12,11 +12,16 @@ from app.models.billing import (
     AdditionalValue
 )
 from app.models.medical_exam import MedicalExam
+from app.models.import_template import ImportTemplate
+from app.models.exam_catalog import ExamCatalog, PriceModel, PriceModelItem
+from app.models.benefit_event import BenefitEvent
+from app.models.product_catalog import ProductCatalog
 
 __all__ = [
     "Customer", "ReportTemplate", "Employee", "ExamRecord",
     "Integration", "Report", "User", "BenefitRecord", "TimeRecord",
-    "Company", "Unit", "BillingEmployee", "EmploymentContract", 
+    "Company", "Unit", "BillingEmployee", "EmploymentContract",
     "BillingPeriod", "PayrollItemType", "PayrollItem", "BillingExamRecord",
-    "AdditionalValue", "MedicalExam"
+    "AdditionalValue", "MedicalExam", "ImportTemplate",
+    "ExamCatalog", "PriceModel", "PriceModelItem", "BenefitEvent", "ProductCatalog"
 ]

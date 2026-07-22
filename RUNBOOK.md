@@ -287,6 +287,38 @@ CREATE INDEX IF NOT EXISTS ix_epi_purchase_items_epi_id ON epi_purchase_items(ep
 
 Pacotes legados (sem `epi_id`) continuam carregando — UI marca como "Legado" e bloqueia geração de solicitação. Variáveis `.env` opcionais (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`, `EPI_PURCHASE_EMAIL`) habilitam envio por email; sem elas o sistema mantém apenas o download do Excel.
 
+### 004 — Pedido de compra misto (categoria por item)
+
+Pedido único pode misturar EPI, uniforme e equipamento: a categoria passa a valer
+POR ITEM (`epi_purchase_items.categoria`; NULL = vale a categoria do pacote, que
+vira derivada — única categoria dos itens ou `'misto'`). Pedidos novos NÃO
+persistem mais `employee_nome`/`employee_cargo` (colunas mantidas pelo legado; o
+faturamento casa por `employee_numcad`). O Excel da solicitação passou a ser por
+ITEM (Item, Categoria, Tamanho, C.A, Qtde, Valor unit., Valor total + total do
+pedido), sem nomes de funcionários, e é gerado para QUALQUER categoria (antes: só EPI).
+
+```sql
+ALTER TABLE epi_purchase_items ADD COLUMN categoria VARCHAR(20);
+```
+
+Migração idempotente aplicada automaticamente no startup (`app/db.py`).
+
+### 005 — Trilha de auditoria (audit_logs)
+
+Tabela nova `audit_logs` (criada pelo `create_all` no startup — sem ALTER manual):
+registros IMUTÁVEIS de quem fez o quê (ts, user_id/username/role snapshot, acao
+`entidade.verbo`, entidade+id, detalhe JSON com antes/depois, ip, status
+ok|negado|erro). Helper `app/services/audit.py` (sessão própria, nunca levanta
+exceção, nunca grava senhas). ~57 pontos instrumentados: login/logout/falhas,
+usuários e papéis, regras administrativas (%), modelos de exportação (inclusive
+upload), pedidos de compra (inclusive exclusão física, com snapshot), preços de
+catálogo, exportações de folha/faturamento (modelo, período, CCU — inclusive
+jobs, com o DOWNLOAD do arquivo auditado à parte via `exportacao.download`;
+o ExportJob guarda user_id/username de quem enfileirou) e importações de dados
+(inclusive previews: `modelo.upload_preview`, `importacao.preview`). Consulta
+em `/auditoria` (somente admin), com filtros e paginação — sem endpoints de
+escrita/exclusão.
+
 ---
 
 ## Cache Senior e throttle (feature 003)

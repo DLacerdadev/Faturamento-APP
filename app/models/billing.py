@@ -19,10 +19,16 @@ class BillingStatus(enum.Enum):
 
 class Company(Base):
     __tablename__ = "billing_companies"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     cnpj_femsa = Column(String(20), unique=True, nullable=False, index=True)
+    # Parâmetros do contrato (campos para preencher) — usados na conta final do faturamento.
+    encargos_pct = Column(Float)      # % de encargos sociais (ex.: 57.91)
+    taxa_adm_pct = Column(Float)      # % de taxa administrativa
+    imposto_pct = Column(Float)       # alíquota de imposto (%)
+    # Modelo de faturamento (lista de colunas da planilha). Nullable = usa FEMSA padrão.
+    billing_model_id = Column(Integer, ForeignKey("billing_models.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     units = relationship("Unit", back_populates="company")

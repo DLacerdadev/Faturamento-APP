@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.db import get_db
 from app.session_manager import validate_token
+from app.routers.auth import get_token_from_request
 from app.services.billing_processor import (
     process_payroll_upload, 
     process_exams_upload,
@@ -22,17 +23,20 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/billing", response_class=HTMLResponse)
-async def billing_page(request: Request, token: str = None, db: Session = Depends(get_db)):
+async def billing_page(request: Request, db: Session = Depends(get_db)):
+    # Token agora vem do cookie httpOnly (ou Authorization header). Query string
+    # ?token= NÃO é mais aceita por segurança.
+    token = get_token_from_request(request)
     if not token:
-        return RedirectResponse(url="/", status_code=302)
-    
+        return RedirectResponse(url="/login", status_code=303)
+
     user = validate_token(token, db)
     if not user:
-        return RedirectResponse(url="/", status_code=302)
-    
+        return RedirectResponse(url="/login", status_code=303)
+
     companies = db.query(Company).all()
     periods = db.query(BillingPeriod).order_by(BillingPeriod.created_at.desc()).limit(20).all()
-    
+
     return templates.TemplateResponse(
         "billing.html",
         {
@@ -77,18 +81,18 @@ async def upload_exams(
 ):
     if not token:
         raise HTTPException(status_code=401, detail="Token não fornecido")
-    
+
     user = validate_token(token, db)
     if not user:
         raise HTTPException(status_code=401, detail="Token inválido")
-    
+
     if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
         raise HTTPException(status_code=400, detail="Formato de arquivo inválido. Use Excel ou CSV.")
-    
+
     content = await file.read()
-    
+
     result = process_exams_upload(db, content, file.filename)
-    
+
     return result
 
 

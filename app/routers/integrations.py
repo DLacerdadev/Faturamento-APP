@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Query, Request, UploadFile, File, Depends
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from typing import Optional, List, Dict
 from io import BytesIO
 import pandas as pd
 import zipfile
 import os
 import logging
+import threading
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -13,10 +14,12 @@ logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import extract
 from app.db import get_db
+from app.services import export_jobs
+from app.services.audit import audit
 from app.config import DEV_MODE
 from app.models.medical_exam import MedicalExam
 from app.models.epi_purchase import EpiPurchasePackage, EpiPurchaseDocument
-from app.models.billing import AdditionalValue, Unit
+from app.models.billing import AdditionalValue, Unit, Company
 from app.routers.epi_purchases import EPI_UPLOAD_DIR
 from app.services.senior_connector import (
     list_tables, 
@@ -53,7 +56,13 @@ from app.services.excel_export import (
     generate_senior_filename
 )
 
-router = APIRouter(prefix="/integrations", tags=["integrations"])
+from app.routers.auth import require_login
+from app.services.permissions import require_role
+
+# Todas as rotas exigem login (dependency no nível do router); endpoints
+# sensíveis (SQL cru, listagem de tabelas) elevam para admin no próprio handler.
+router = APIRouter(prefix="/integrations", tags=["integrations"],
+                   dependencies=[Depends(require_login)])
 
 # Armazenamento temporário de dados de exames (em memória)
 # Chave: nome do funcionário (normalizado), Valor: total de exames
@@ -185,19 +194,23 @@ def process_benefits_csv(file_bytes: bytes) -> Dict[str, float]:
 
 
 @router.post("/senior/benefits/upload")
-async def upload_benefits_data(file: UploadFile = File(...)):
+async def upload_benefits_data(request: Request = None, file: UploadFile = File(...),
+                               db: Session = Depends(get_db)):
     """
     Upload de CSV de benefícios (Sodexo).
     Processa e armazena em cache para uso no export FEMSA.
     """
     global benefits_data_cache
-    
+
     try:
         contents = await file.read()
         benefits_data_cache = process_benefits_csv(contents)
-        
+
         total_geral = sum(benefits_data_cache.values())
-        
+
+        audit(request, "importacao.dados", entidade="importacao",
+              detalhe={"tipo": "beneficios_cache", "arquivo": file.filename,
+                       "n_registros": len(benefits_data_cache)}, db=db)
         return {
             "status": "success",
             "message": f"CSV processado com sucesso",
@@ -205,6 +218,9 @@ async def upload_benefits_data(file: UploadFile = File(...)):
             "total_beneficios": round(total_geral, 2)
         }
     except Exception as e:
+        audit(request, "importacao.dados", entidade="importacao",
+              detalhe={"tipo": "beneficios_cache", "arquivo": file.filename,
+                       "erro": str(e)[:200]}, db=db, status="erro")
         return {
             "status": "error",
             "message": f"Erro ao processar CSV: {str(e)}"
@@ -286,19 +302,23 @@ def process_flash_csv(file_bytes: bytes) -> Dict[str, float]:
 
 
 @router.post("/senior/flash/upload")
-async def upload_flash_data(file: UploadFile = File(...)):
+async def upload_flash_data(request: Request = None, file: UploadFile = File(...),
+                            db: Session = Depends(get_db)):
     """
     Upload de CSV Flash.
     Processa e armazena em cache.
     """
     global flash_data_cache
-    
+
     try:
         contents = await file.read()
         flash_data_cache = process_flash_csv(contents)
-        
+
         total_geral = sum(flash_data_cache.values())
-        
+
+        audit(request, "importacao.dados", entidade="importacao",
+              detalhe={"tipo": "flash_cache", "arquivo": file.filename,
+                       "n_registros": len(flash_data_cache)}, db=db)
         return {
             "status": "success",
             "message": f"CSV Flash processado com sucesso",
@@ -306,6 +326,9 @@ async def upload_flash_data(file: UploadFile = File(...)):
             "total_flash": round(total_geral, 2)
         }
     except Exception as e:
+        audit(request, "importacao.dados", entidade="importacao",
+              detalhe={"tipo": "flash_cache", "arquivo": file.filename,
+                       "erro": str(e)[:200]}, db=db, status="erro")
         return {
             "status": "error",
             "message": f"Erro ao processar CSV: {str(e)}"
@@ -394,19 +417,23 @@ def process_ifood_csv(file_bytes: bytes) -> Dict[str, float]:
 
 
 @router.post("/senior/ifood/upload")
-async def upload_ifood_data(file: UploadFile = File(...)):
+async def upload_ifood_data(request: Request = None, file: UploadFile = File(...),
+                            db: Session = Depends(get_db)):
     """
     Upload de CSV iFood Benefícios.
     Processa e armazena em cache.
     """
     global ifood_data_cache
-    
+
     try:
         contents = await file.read()
         ifood_data_cache = process_ifood_csv(contents)
-        
+
         total_geral = sum(ifood_data_cache.values())
-        
+
+        audit(request, "importacao.dados", entidade="importacao",
+              detalhe={"tipo": "ifood_cache", "arquivo": file.filename,
+                       "n_registros": len(ifood_data_cache)}, db=db)
         return {
             "status": "success",
             "message": f"CSV iFood processado com sucesso",
@@ -414,6 +441,9 @@ async def upload_ifood_data(file: UploadFile = File(...)):
             "total_ifood": round(total_geral, 2)
         }
     except Exception as e:
+        audit(request, "importacao.dados", entidade="importacao",
+              detalhe={"tipo": "ifood_cache", "arquivo": file.filename,
+                       "erro": str(e)[:200]}, db=db, status="erro")
         return {
             "status": "error",
             "message": f"Erro ao processar CSV: {str(e)}"
@@ -440,19 +470,23 @@ async def clear_ifood_data():
 
 
 @router.post("/senior/exams/upload")
-async def upload_exams_data(file: UploadFile = File(...)):
+async def upload_exams_data(request: Request = None, file: UploadFile = File(...),
+                            db: Session = Depends(get_db)):
     """
     Upload de planilha de exames médicos.
     Processa e armazena em cache para uso no export FEMSA.
     """
     global exams_data_cache
-    
+
     try:
         contents = await file.read()
         exams_data_cache = process_exams_excel(contents)
-        
+
         total_geral = sum(exams_data_cache.values())
-        
+
+        audit(request, "importacao.dados", entidade="importacao",
+              detalhe={"tipo": "exames_cache", "arquivo": file.filename,
+                       "n_registros": len(exams_data_cache)}, db=db)
         return {
             "status": "success",
             "message": f"Planilha processada com sucesso",
@@ -460,6 +494,9 @@ async def upload_exams_data(file: UploadFile = File(...)):
             "total_exames": round(total_geral, 2)
         }
     except Exception as e:
+        audit(request, "importacao.dados", entidade="importacao",
+              detalhe={"tipo": "exames_cache", "arquivo": file.filename,
+                       "erro": str(e)[:200]}, db=db, status="erro")
         return {
             "status": "error",
             "message": f"Erro ao processar planilha: {str(e)}"
@@ -513,10 +550,12 @@ async def test_senior_connection():
 
 
 @router.get("/senior/tables")
-async def get_senior_tables():
+async def get_senior_tables(request: Request, db: Session = Depends(get_db)):
     """
     Lista todas as tabelas disponíveis no banco MSSQL via API Senior.
+    Restrito a ADMIN (expõe o schema do ERP).
     """
+    require_role(request, db, "admin")
     try:
         tables = list_tables()
         return {"status": "ok", "count": len(tables), "tables": tables}
@@ -671,13 +710,32 @@ from pydantic import BaseModel
 class SQLQuery(BaseModel):
     sql_text: str
 
+
+class ExportBatchInput(BaseModel):
+    """Payload para os endpoints POST de export quando há muitos CCUs.
+
+    Usado quando a query string GET ficaria grande demais (mais de algumas
+    dezenas de CCUs) e o navegador trunca/bloqueia silenciosamente.
+    """
+    periodo: str
+    codccu: List[str]
+    modelo: Optional[str] = None  # usado só pelo /billing/export-batch
+    # Override dos parâmetros do contrato na hora do faturamento (opcional)
+    encargos_pct: Optional[float] = None
+    taxa_adm_pct: Optional[float] = None
+    imposto_pct: Optional[float] = None
+
 @router.post("/senior/query")
-async def run_custom_query(query: SQLQuery):
+async def run_custom_query(query: SQLQuery, request: Request, db: Session = Depends(get_db)):
     """
     Executa uma query SQL personalizada via API Senior.
     Apenas comandos SELECT são permitidos.
+    Restrito a ADMIN e auditado (execução de SQL cru no ERP).
     Envie JSON: {"sql_text": "SELECT ..."}
     """
+    user = require_role(request, db, "admin")
+    audit(request, "senior.query", entidade="senior",
+          detalhe={"sql": (query.sql_text or "")[:500]}, user=user)
     result = execute_query(query.sql_text)
     return result
 
@@ -728,6 +786,22 @@ async def get_billing_breakdown_endpoint(
 
 
 NUMEMP_TELOS = 6
+
+
+def _codccu_detalhe(codccu):
+    """Resumo do(s) centro(s) de custo pro `detalhe` da auditoria (JSON pequeno).
+
+    String passa direto; lista pequena vai inteira; lista grande vira contagem
+    pra não inchar a coluna JSON de audit_logs.
+    """
+    if codccu is None:
+        return None
+    if isinstance(codccu, str):
+        return codccu
+    lista = list(codccu)
+    if len(lista) <= 20:
+        return lista
+    return f"{len(lista)} centros de custo"
 
 
 def deduplicate_codccu(codccu: List[str]) -> List[str]:
@@ -811,33 +885,38 @@ async def get_billing_invoice(
 
 @router.get("/senior/billing/export")
 async def export_billing_excel(
+    request: Request = None,
     periodo: str = Query(..., description="Data no formato YYYY-MM-DD para filtrar competência"),
     codccu: Optional[str] = Query(None, description="Código do centro de custo (opcional)"),
     codcal: Optional[int] = Query(None, description="Código do cálculo (opcional, ex: 362 para folha mensal)"),
     sitafa: Optional[int] = Query(None, description="Situação do funcionário (opcional, ex: 1=Trabalhando)"),
-    format: str = Query("detailed", description="Formato: 'detailed' (cada evento) ou 'aggregated' (por funcionário)")
+    format: str = Query("detailed", description="Formato: 'detailed' (cada evento) ou 'aggregated' (por funcionário)"),
+    db: Session = Depends(get_db)
 ):
     """
     Exporta faturamento para arquivo Excel.
     SEMPRE filtra por empresa TELOS (NUMEMP=6).
-    
+
     Formatos disponíveis:
     - detailed: Cada evento como linha separada (ideal para auditoria)
     - aggregated: Agrupado por funcionário com soma de valores
-    
+
     Retorna arquivo .xlsx para download.
     """
     try:
         billing_data = fetch_billing_data(periodo, NUMEMP_TELOS, codccu, codcal, sitafa)
-        
+
         if format == "aggregated":
             invoice_data = build_generic_invoice(billing_data)
         else:
             invoice_data = build_invoice_detailed(billing_data)
-        
+
         excel_bytes = invoice_to_excel_bytes(invoice_data)
         filename = generate_invoice_filename(periodo, codccu)
-        
+
+        audit(request, "exportacao.faturamento", entidade="exportacao",
+              detalhe={"modelo": f"generico_{format}", "periodo": periodo,
+                       "codccu": _codccu_detalhe(codccu), "job": False}, db=db)
         return StreamingResponse(
             BytesIO(excel_bytes),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -846,6 +925,10 @@ async def export_billing_excel(
             }
         )
     except Exception as e:
+        audit(request, "exportacao.faturamento", entidade="exportacao",
+              detalhe={"modelo": f"generico_{format}", "periodo": periodo,
+                       "codccu": _codccu_detalhe(codccu), "job": False,
+                       "erro": str(e)[:200]}, db=db, status="erro")
         return {"status": "error", "message": str(e)}
 
 
@@ -886,13 +969,15 @@ async def get_payroll(
 
 @router.get("/senior/payroll/export")
 async def export_payroll_excel(
+    request: Request = None,
     periodo: str = Query(..., description="Data no formato YYYY-MM-DD para filtrar competência"),
-    codccu: List[str] = Query(..., description="Código(s) do centro de custo (um ou mais)")
+    codccu: List[str] = Query(..., description="Código(s) do centro de custo (um ou mais)"),
+    db: Session = Depends(get_db)
 ):
     """
     Exporta folha de pagamento para arquivo Excel.
     SEMPRE filtra por empresa TELOS (NUMEMP=6).
-    
+
     Gera planilha com todos os eventos de cada funcionário.
     Retorna arquivo .xlsx para download.
     """
@@ -900,11 +985,14 @@ async def export_payroll_excel(
         codccu = deduplicate_codccu(codccu)
         payroll_data = fetch_payroll(periodo, NUMEMP_TELOS, codccu)
         all_grouped_data = agrupar_por_matricula(payroll_data)
-        
+
         codccu_label = "_".join(codccu) if len(codccu) <= 3 else f"{len(codccu)}_ccus"
         excel_bytes = payroll_to_excel_bytes(all_grouped_data, periodo, codccu_label)
         filename = generate_payroll_filename(periodo, codccu_label)
-        
+
+        audit(request, "exportacao.folha", entidade="exportacao",
+              detalhe={"modelo": "payroll", "periodo": periodo,
+                       "codccu": _codccu_detalhe(codccu), "job": False}, db=db)
         return StreamingResponse(
             BytesIO(excel_bytes),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -913,105 +1001,60 @@ async def export_payroll_excel(
             }
         )
     except Exception as e:
+        audit(request, "exportacao.folha", entidade="exportacao",
+              detalhe={"modelo": "payroll", "periodo": periodo,
+                       "codccu": _codccu_detalhe(codccu), "job": False,
+                       "erro": str(e)[:200]}, db=db, status="erro")
         return {"status": "error", "message": str(e)}
 
 
 @router.get("/senior/billing/export-femsa")
 async def export_billing_femsa(
+    request: Request = None,
     periodo: str = Query(..., description="Data no formato YYYY-MM-DD para filtrar competência"),
     codccu: List[str] = Query(..., description="Códigos dos centros de custo"),
+    encargos_pct: Optional[float] = None,
+    taxa_adm_pct: Optional[float] = None,
+    imposto_pct: Optional[float] = None,
     db: Session = Depends(get_db)
 ):
     """
     Exporta faturamento no formato FEMSA para arquivo Excel.
     SEMPRE filtra por empresa TELOS (NUMEMP=6).
-    
+
     Gera planilha com todas as colunas do modelo FEMSA incluindo eventos,
     taxas e encargos. Aceita múltiplos centros de custo.
     Busca exames médicos do banco de dados filtrando pelo mês/ano do período.
     """
     try:
-        codccu = deduplicate_codccu(codccu)
-        payroll_data = fetch_payroll(periodo, NUMEMP_TELOS, codccu)
-        all_grouped_data = agrupar_por_matricula(payroll_data)
-        
-        dt = datetime.strptime(periodo[:7], "%Y-%m")
-        ano = dt.year
-        mes = dt.month
-        exams = db.query(MedicalExam).filter(
-            extract('year', MedicalExam.data_exame) == ano,
-            extract('month', MedicalExam.data_exame) == mes
-        ).all()
-        
-        exams_by_numcad: Dict[int, float] = {}
-        for exam in exams:
-            if exam.numcad:
-                exams_by_numcad[exam.numcad] = exams_by_numcad.get(exam.numcad, 0) + (exam.total or 0.0)
-        
-        codccu_label = "_".join(codccu) if len(codccu) <= 3 else f"{len(codccu)}_ccus"
-        excel_bytes = billing_to_femsa_excel(
-            all_grouped_data, 
-            periodo, 
-            codccu_label,
-            exams_data=exams_data_cache,
-            exams_by_numcad=exams_by_numcad,
-            benefits_data=benefits_data_cache
+        # Override de percentuais: só gestor+ (operador usa modelo -> contrato).
+        encargos_pct, taxa_adm_pct, imposto_pct = _pct_se_gestor(
+            request, db, encargos_pct, taxa_adm_pct, imposto_pct)
+        content, filename, media_type = _build_billing_export(
+            db, "femsa", periodo, codccu,
+            encargos_pct=encargos_pct, taxa_adm_pct=taxa_adm_pct, imposto_pct=imposto_pct,
         )
-        filename = generate_femsa_filename(periodo, codccu_label)
-        
-        epi_packages = db.query(EpiPurchasePackage).options(
-            joinedload(EpiPurchasePackage.documents)
-        ).filter(
-            extract('year', EpiPurchasePackage.mes_ano) == ano,
-            extract('month', EpiPurchasePackage.mes_ano) == mes
-        ).all()
-        
-        epi_docs = []
-        for pkg in epi_packages:
-            for doc in (pkg.documents or []):
-                filepath = os.path.join(EPI_UPLOAD_DIR, doc.stored_filename)
-                if os.path.exists(filepath):
-                    epi_docs.append((doc.original_filename, filepath))
-        
-        if epi_docs:
-            zip_buffer = BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-                zf.writestr(filename, excel_bytes)
-                used_names = set()
-                for orig_name, fpath in epi_docs:
-                    arcname = f"EPIs/{orig_name}"
-                    if arcname in used_names:
-                        base, ext = os.path.splitext(orig_name)
-                        counter = 1
-                        while arcname in used_names:
-                            arcname = f"EPIs/{base}_{counter}{ext}"
-                            counter += 1
-                    used_names.add(arcname)
-                    zf.write(fpath, arcname)
-            zip_buffer.seek(0)
-            zip_filename = filename.replace('.xlsx', '_com_epis.zip')
-            return StreamingResponse(
-                zip_buffer,
-                media_type="application/zip",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{zip_filename}"'
-                }
-            )
-        
+        audit(request, "exportacao.faturamento", entidade="exportacao",
+              detalhe={"modelo": "femsa", "periodo": periodo,
+                       "codccu": _codccu_detalhe(codccu), "job": False}, db=db)
         return StreamingResponse(
-            BytesIO(excel_bytes),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"'
-            }
+            BytesIO(content),
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     except Exception as e:
+        audit(request, "exportacao.faturamento", entidade="exportacao",
+              detalhe={"modelo": "femsa", "periodo": periodo,
+                       "codccu": _codccu_detalhe(codccu), "job": False,
+                       "erro": str(e)[:200]}, db=db, status="erro")
         return {"status": "error", "message": str(e)}
 
 @router.get("/senior/payroll/export-senior")
 async def export_payroll_senior(
+    request: Request = None,
     periodo: str = Query(..., description="Data no formato YYYY-MM-DD para filtrar competência"),
     codccu: List[str] = Query(..., description="Códigos dos centros de custo"),
+    db: Session = Depends(get_db)
 ):
     """
     Exporta folha de pagamento no formato dinâmico Folha Senior.
@@ -1027,6 +1070,9 @@ async def export_payroll_senior(
         excel_bytes = payroll_to_senior_excel_bytes(all_grouped_data, periodo)
         filename = generate_senior_filename(periodo, codccu_label)
 
+        audit(request, "exportacao.folha", entidade="exportacao",
+              detalhe={"modelo": "senior", "periodo": periodo,
+                       "codccu": _codccu_detalhe(codccu), "job": False}, db=db)
         return StreamingResponse(
             BytesIO(excel_bytes),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1036,20 +1082,403 @@ async def export_payroll_senior(
         )
     except Exception as e:
         logger.error(f"Erro ao gerar Folha Senior: {e}")
+        audit(request, "exportacao.folha", entidade="exportacao",
+              detalhe={"modelo": "senior", "periodo": periodo,
+                       "codccu": _codccu_detalhe(codccu), "job": False,
+                       "erro": str(e)[:200]}, db=db, status="erro")
         return {"status": "error", "message": str(e)}
 
 
 @router.get("/senior/billing/export-skyrail")
 async def export_billing_skyrail(
+    request: Request = None,
     periodo: str = Query(..., description="Data no formato YYYY-MM-DD para filtrar competência"),
     codccu: List[str] = Query(..., description="Códigos dos centros de custo"),
     db: Session = Depends(get_db)
 ):
     """
-    Exporta faturamento no formato Skyrail para arquivo Excel.
-    TODO: Implementar modelo Skyrail.
+    Exporta faturamento no formato Skyrail (modelo configurável 'SKYRAIL',
+    importado por upload da planilha oficial — renderização por estrutura).
     """
-    return {"status": "error", "message": "Modelo Skyrail ainda não implementado. Em breve!"}
+    try:
+        content, filename, media_type = _build_billing_export(db, "skyrail", periodo, codccu)
+        audit(request, "exportacao.faturamento", entidade="exportacao",
+              detalhe={"modelo": "skyrail", "periodo": periodo,
+                       "codccu": _codccu_detalhe(codccu), "job": False}, db=db)
+        return StreamingResponse(
+            BytesIO(content),
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:
+        audit(request, "exportacao.faturamento", entidade="exportacao",
+              detalhe={"modelo": "skyrail", "periodo": periodo,
+                       "codccu": _codccu_detalhe(codccu), "job": False,
+                       "erro": str(e)[:200]}, db=db, status="erro")
+        return {"status": "error", "message": str(e)}
+
+
+# ─── Variantes POST (batch) — para muitos CCUs onde a query string GET ficaria
+# grande demais (~32KB limite prático do browser). Mesma lógica, só muda o
+# transporte de query string → JSON body.
+
+@router.post("/senior/payroll/export-batch")
+async def export_payroll_excel_batch(payload: ExportBatchInput, request: Request = None,
+                                     db: Session = Depends(get_db)):
+    """POST equivalente a GET /senior/payroll/export. JSON body: {periodo, codccu: [...]}"""
+    # request/db são repassados pro handler GET, onde a auditoria registra a exportação.
+    return await export_payroll_excel(request=request, periodo=payload.periodo,
+                                      codccu=payload.codccu, db=db)
+
+
+@router.post("/senior/payroll/export-senior-batch")
+async def export_payroll_senior_batch(payload: ExportBatchInput, request: Request = None,
+                                      db: Session = Depends(get_db)):
+    """POST equivalente a GET /senior/payroll/export-senior."""
+    return await export_payroll_senior(request=request, periodo=payload.periodo,
+                                       codccu=payload.codccu, db=db)
+
+
+@router.post("/senior/billing/export-batch")
+async def export_billing_batch(payload: ExportBatchInput, request: Request = None,
+                               db: Session = Depends(get_db)):
+    """POST equivalente aos GET /senior/billing/export-{modelo}.
+    Body deve incluir `modelo` (femsa | senior | skyrail)."""
+    modelo = (payload.modelo or "femsa").lower()
+    if modelo == "femsa":
+        return await export_billing_femsa(
+            request=request,
+            periodo=payload.periodo, codccu=payload.codccu,
+            encargos_pct=payload.encargos_pct, taxa_adm_pct=payload.taxa_adm_pct,
+            imposto_pct=payload.imposto_pct, db=db
+        )
+    if modelo == "senior":
+        return await export_payroll_senior(request=request, periodo=payload.periodo,
+                                           codccu=payload.codccu, db=db)
+    if modelo == "skyrail":
+        return await export_billing_skyrail(request=request, periodo=payload.periodo,
+                                            codccu=payload.codccu, db=db)
+    return JSONResponse(status_code=400, content={"status": "error", "message": f"modelo desconhecido: {modelo}"})
+
+
+# ─── Exportação em SEGUNDO PLANO (job) ───────────────────────────────────────
+# A exportação faz muitas chamadas SOAP sequenciais à Senior e pode passar de
+# 100s, estourando o timeout do proxy (Cloudflare 524). Aqui a requisição volta
+# na hora com um job_id; o front consulta o status e baixa quando pronto.
+
+def _pct_se_gestor(request, db, enc, adm, imp):
+    """Percentuais digitados na tela só valem para GESTOR ou acima. Para operador
+    (ou requisição sem usuário resolvível) o override é ignorado e vale a cadeia
+    modelo -> contrato — a fonte da verdade configurada pelo gestor."""
+    try:
+        from app.services.permissions import get_request_user, has_role
+        user = get_request_user(request, db) if (request is not None and db is not None) else None
+        if has_role(user, "gestor"):
+            return enc, adm, imp
+    except Exception:
+        pass
+    return None, None, None
+
+
+def _build_billing_export(db, modelo, periodo, codccu, encargos_pct=None,
+                          taxa_adm_pct=None, imposto_pct=None, progress_cb=None):
+    """Monta os bytes da exportação de faturamento. Retorna (content, filename,
+    media_type). Suporta modelos femsa (padrão) e senior. Levanta exceção em erro.
+    progress_cb(done, total) é repassado ao fetch_payroll para reportar progresso."""
+    import re as _re
+    from sqlalchemy import or_ as _or
+    from app.models.benefit_event import BenefitEvent
+
+    modelo = (modelo or "femsa").lower()
+    codccu = deduplicate_codccu(codccu)
+    payroll_data = fetch_payroll(periodo, NUMEMP_TELOS, codccu, progress_cb=progress_cb)
+    all_grouped_data = agrupar_por_matricula(payroll_data)
+    codccu_label = "_".join(codccu) if len(codccu) <= 3 else f"{len(codccu)}_ccus"
+    xlsx_mt = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    if modelo == "senior":
+        excel_bytes = payroll_to_senior_excel_bytes(all_grouped_data, periodo)
+        return excel_bytes, generate_senior_filename(periodo, codccu_label), xlsx_mt
+    if modelo == "payroll":
+        excel_bytes = payroll_to_excel_bytes(all_grouped_data, periodo, codccu_label)
+        return excel_bytes, generate_payroll_filename(periodo, codccu_label), xlsx_mt
+    # 'skyrail' e demais nomes caem no caminho dos modelos CONFIGURÁVEIS abaixo
+    # (resolvidos por nome em billing_models — o SKYRAIL foi importado por upload
+    # da planilha oficial e renderiza pela estrutura/fórmulas do layout).
+    # Demais modelos (femsa, geral, ou qualquer modelo configurável cadastrado em
+    # /modelos-faturamento) usam o formato FEMSA; o que muda são as COLUNAS, resolvidas
+    # pelo NOME do modelo escolhido no dropdown da tela (ver colunas_modelo abaixo).
+
+    # ── FEMSA ──
+    dt = datetime.strptime(periodo[:7], "%Y-%m")
+    ano, mes = dt.year, dt.month
+    # Somente exames CONFIRMADOS entram (rascunhos ficam de fora). status NULL = legado.
+    exams = db.query(MedicalExam).filter(
+        extract('year', MedicalExam.data_exame) == ano,
+        extract('month', MedicalExam.data_exame) == mes,
+        _or(MedicalExam.status != 'rascunho', MedicalExam.status.is_(None)),
+    ).all()
+
+    def _norm_cpf(v):
+        d = _re.sub(r"\D", "", str(v or ""))
+        return d.zfill(11) if 0 < len(d) <= 11 else d
+
+    exams_by_numcad, exams_by_cpf = {}, {}
+    for exam in exams:
+        if exam.numcad:
+            exams_by_numcad[exam.numcad] = exams_by_numcad.get(exam.numcad, 0) + (exam.total or 0.0)
+        if exam.cpf:
+            k = _norm_cpf(exam.cpf)
+            if k:
+                exams_by_cpf[k] = exams_by_cpf.get(k, 0) + (exam.total or 0.0)
+
+    extra_event_map = {
+        be.codeve: be.coluna_femsa
+        for be in db.query(BenefitEvent).filter(BenefitEvent.ativo.is_(True)).all()
+    }
+
+    # MODELO escolhido no dropdown "Modelo de Exportação" da tela, resolvido
+    # pelo NOME (femsa | geral | modelos configuráveis). O usuário decide o
+    # modelo na hora de exportar — NÃO depende de associação com o contrato.
+    from sqlalchemy import func as _func
+    from app.models.billing_model import BillingModel
+    _bm = (
+        db.query(BillingModel)
+        .filter(_func.lower(BillingModel.nome) == modelo, BillingModel.ativo.is_(True))
+        .first()
+    )
+
+    # Contrato = registro de parâmetros (percentuais). order_by(id) garante que
+    # sempre pegamos o MESMO contrato que a tela "Salvar padrão" grava, mesmo que
+    # exista mais de uma empresa no banco (evita ambiguidade do .first() sem ordem).
+    # Percentuais: cadeia de fallback payload -> modelo (padrões do BillingModel,
+    # quando não-null) -> contrato. Modelo sem padrão = comportamento de sempre.
+    contrato = db.query(Company).order_by(Company.id).first()
+
+    def _resolve_pct(valor_payload, valor_modelo, valor_contrato):
+        if valor_payload is not None:
+            return valor_payload
+        if valor_modelo is not None:
+            return valor_modelo
+        return valor_contrato
+
+    enc = _resolve_pct(encargos_pct, _bm.encargos_pct if _bm else None,
+                       contrato.encargos_pct if contrato else None)
+    adm = _resolve_pct(taxa_adm_pct, _bm.taxa_adm_pct if _bm else None,
+                       contrato.taxa_adm_pct if contrato else None)
+    imp = _resolve_pct(imposto_pct, _bm.imposto_pct if _bm else None,
+                       contrato.imposto_pct if contrato else None)
+
+    # Colunas do modelo: nome não encontrado (ou 'femsa') → colunas_modelo=None →
+    # billing_to_femsa_excel usa FEMSA_COLUMNS (regressão zero para o FEMSA de hoje).
+    import json as _json
+    colunas_modelo = None
+    if _bm and _bm.colunas:
+        colunas_modelo = _bm.colunas
+        if isinstance(colunas_modelo, str):
+            try:
+                colunas_modelo = _json.loads(colunas_modelo)
+            except Exception:
+                colunas_modelo = None
+
+    # ESTRUTURA do modelo (modelos criados por UPLOAD de planilha): quando o
+    # BillingModel tem 'estrutura' (contrato C1), billing_to_femsa_excel usa o
+    # renderizador por estrutura (cabeçalhos/fórmulas/constantes da planilha).
+    # estrutura NULL => fluxo dirigido por colunas de sempre (regressão zero).
+    estrutura_modelo = None
+    if _bm and _bm.estrutura:
+        estrutura_modelo = _bm.estrutura
+        if isinstance(estrutura_modelo, str):
+            try:
+                estrutura_modelo = _json.loads(estrutura_modelo)
+            except Exception:
+                estrutura_modelo = None
+        if not isinstance(estrutura_modelo, dict):
+            estrutura_modelo = None
+
+    # Itens CONFIRMADOS (uniformes/EPIs/equipamentos) do período viram custo por
+    # funcionário. Agrega valor_total por employee_numcad, separado por categoria.
+    # Só pacotes status='confirmado' entram no faturamento (rascunho/validado ficam de fora).
+    uniformes_by_numcad: Dict[int, float] = {}
+    epis_by_numcad: Dict[int, float] = {}
+    equipamentos_by_numcad: Dict[int, float] = {}
+    _mapa_por_categoria = {
+        "uniforme": uniformes_by_numcad,
+        "epi": epis_by_numcad,
+        "equipamento": equipamentos_by_numcad,
+    }
+    confirmed_pkgs = db.query(EpiPurchasePackage).options(
+        joinedload(EpiPurchasePackage.items)
+    ).filter(
+        EpiPurchasePackage.status == 'confirmado',
+        extract('year', EpiPurchasePackage.mes_ano) == ano,
+        extract('month', EpiPurchasePackage.mes_ano) == mes,
+    ).all()
+    for pkg in confirmed_pkgs:
+        for item in (pkg.items or []):
+            if item.employee_numcad is None:
+                continue
+            # Categoria POR ITEM (pedido misto); linhas antigas sem categoria
+            # caem na categoria do pacote.
+            cat = (item.categoria or pkg.categoria or "").strip().lower()
+            alvo = _mapa_por_categoria.get(cat)
+            if alvo is None:
+                continue
+            alvo[item.employee_numcad] = alvo.get(item.employee_numcad, 0.0) + (item.valor_total or 0.0)
+
+    # TREINAMENTOS (Valor): lançamentos de treinamento do período viram custo por
+    # funcionário (valor × quantidade), casando por matrícula (numcad). Período casa
+    # por data_treinamento quando existir; senão pela competência 'YYYY-MM'. Sem
+    # filtro de CC (igual às demais categorias — o casamento por numcad já restringe).
+    treinamentos_by_numcad: Dict[int, float] = {}
+    from app.models.training_record import TrainingRecord
+    _comp_str = f"{ano}-{mes:02d}"
+    for tr in db.query(TrainingRecord).all():
+        if tr.employee_numcad is None:
+            continue
+        if tr.data_treinamento is not None:
+            if tr.data_treinamento.year != ano or tr.data_treinamento.month != mes:
+                continue
+        elif (tr.competencia or "")[:7] != _comp_str:
+            continue
+        valor = (tr.valor or 0.0) * (tr.quantidade or 1)
+        treinamentos_by_numcad[tr.employee_numcad] = (
+            treinamentos_by_numcad.get(tr.employee_numcad, 0.0) + valor
+        )
+
+    excel_bytes = billing_to_femsa_excel(
+        all_grouped_data, periodo, codccu_label,
+        exams_data=exams_data_cache,
+        exams_by_numcad=exams_by_numcad, exams_by_cpf=exams_by_cpf,
+        benefits_data=benefits_data_cache, extra_event_map=extra_event_map,
+        encargos_pct=enc, taxa_adm_pct=adm, imposto_pct=imp,
+        uniformes_by_numcad=uniformes_by_numcad,
+        epis_by_numcad=epis_by_numcad,
+        equipamentos_by_numcad=equipamentos_by_numcad,
+        treinamentos_by_numcad=treinamentos_by_numcad,
+        colunas=colunas_modelo,
+        estrutura=estrutura_modelo,
+        salario_formula=(_bm.salario_formula if _bm else None),
+        campos_config=(_bm.campos_config if _bm else None),
+    )
+    filename = generate_femsa_filename(periodo, codccu_label)
+
+    epi_packages = db.query(EpiPurchasePackage).options(
+        joinedload(EpiPurchasePackage.documents)
+    ).filter(
+        extract('year', EpiPurchasePackage.mes_ano) == ano,
+        extract('month', EpiPurchasePackage.mes_ano) == mes,
+    ).all()
+    epi_docs = []
+    for pkg in epi_packages:
+        for doc in (pkg.documents or []):
+            filepath = os.path.join(EPI_UPLOAD_DIR, doc.stored_filename)
+            if os.path.exists(filepath):
+                epi_docs.append((doc.original_filename, filepath))
+
+    if epi_docs:
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(filename, excel_bytes)
+            used_names = set()
+            for orig_name, fpath in epi_docs:
+                arcname = f"EPIs/{orig_name}"
+                if arcname in used_names:
+                    base, ext = os.path.splitext(orig_name)
+                    counter = 1
+                    while arcname in used_names:
+                        arcname = f"EPIs/{base}_{counter}{ext}"
+                        counter += 1
+                used_names.add(arcname)
+                zf.write(fpath, arcname)
+        zip_buffer.seek(0)
+        return zip_buffer.getvalue(), filename.replace('.xlsx', '_com_epis.zip'), "application/zip"
+
+    return excel_bytes, filename, xlsx_mt
+
+
+def _run_billing_export_job(job_id, modelo, periodo, codccu, enc, adm, imp):
+    """Roda a exportação numa thread separada, com sua própria sessão de banco."""
+    from app.db import SessionLocal
+    export_jobs.set_running(job_id, "Buscando folha na Senior…")
+    db = SessionLocal()
+    try:
+        n = len(codccu or [])
+        export_jobs.set_progress(job_id, 0, n, f"Buscando folha na Senior (0/{n} centros de custo)…")
+
+        def _cb(done, total):
+            export_jobs.set_progress(
+                job_id, done, total,
+                f"Buscando folha na Senior ({done}/{total} centros de custo)…")
+
+        content, filename, media_type = _build_billing_export(
+            db, modelo, periodo, codccu, enc, adm, imp, progress_cb=_cb)
+        export_jobs.set_progress(job_id, n, n, "Gerando planilha…")
+        export_jobs.finish_ok(job_id, content, filename, media_type)
+    except Exception as e:
+        logger.exception("Erro no job de exportação %s", job_id)
+        export_jobs.finish_error(job_id, str(e))
+    finally:
+        db.close()
+
+
+@router.post("/senior/billing/export-async")
+async def export_billing_async(payload: ExportBatchInput, request: Request = None,
+                               db: Session = Depends(get_db)):
+    """Inicia a exportação em segundo plano e devolve um job_id na hora."""
+    modelo = (payload.modelo or "femsa").lower()
+    if not payload.codccu:
+        return JSONResponse(status_code=400, content={"success": False, "message": "Selecione pelo menos um centro de custo."})
+    # Snapshot de quem enfileirou fica no job — usado na auditoria do download.
+    from app.services.permissions import get_request_user as _get_req_user
+    _job_user = _get_req_user(request, db) if request is not None else None
+    job = export_jobs.create_job(
+        descricao=f"{modelo} {payload.periodo}",
+        user_id=getattr(_job_user, "id", None),
+        username=getattr(_job_user, "username", None) or getattr(_job_user, "email", None),
+    )
+    # Auditoria no ENFILEIRAMENTO (aqui ainda existem request e usuário; a thread
+    # do job roda sem contexto de request). Folha = modelos senior/payroll.
+    acao = "exportacao.folha" if modelo in ("senior", "payroll") else "exportacao.faturamento"
+    audit(request, acao, entidade="exportacao", entidade_id=job.id,
+          detalhe={"modelo": modelo, "periodo": payload.periodo,
+                   "codccu": _codccu_detalhe(payload.codccu), "job": True}, db=db)
+    # Override de percentuais: só gestor+ (operador usa modelo -> contrato).
+    _enc, _adm, _imp = _pct_se_gestor(request, db, payload.encargos_pct,
+                                      payload.taxa_adm_pct, payload.imposto_pct)
+    threading.Thread(
+        target=_run_billing_export_job,
+        args=(job.id, modelo, payload.periodo, payload.codccu, _enc, _adm, _imp),
+        daemon=True,
+    ).start()
+    return {"success": True, "job_id": job.id}
+
+
+@router.get("/senior/billing/export-status/{job_id}")
+async def export_billing_status(job_id: str):
+    job = export_jobs.get_job(job_id)
+    if not job:
+        return JSONResponse(status_code=404, content={"success": False, "message": "Job não encontrado (pode ter expirado)."})
+    return job.public()
+
+
+@router.get("/senior/billing/export-download/{job_id}")
+async def export_billing_download(job_id: str, request: Request = None,
+                                  db: Session = Depends(get_db)):
+    job = export_jobs.get_job(job_id)
+    if not job:
+        return JSONResponse(status_code=404, content={"success": False, "message": "Job não encontrado (pode ter expirado)."})
+    if job.status != "done" or job.content is None:
+        return JSONResponse(status_code=409, content={"success": False, "message": f"Exportação ainda não concluída (status={job.status}).", "error": job.error})
+    # Auditoria do DOWNLOAD em si (quem baixou pode não ser quem enfileirou).
+    audit(request, "exportacao.download", entidade="exportacao", entidade_id=job.id,
+          detalhe={"arquivo": job.filename, "descricao": job.descricao,
+                   "enfileirado_por": job.username}, db=db)
+    return StreamingResponse(
+        BytesIO(job.content),
+        media_type=job.media_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{job.filename}"'},
+    )
 
 
 # ─── Feature 003: administração de cache Senior ──────────────────────────────

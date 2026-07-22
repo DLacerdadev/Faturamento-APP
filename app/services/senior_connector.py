@@ -9,7 +9,8 @@ from app.config import (
     SENIOR_API_DOMAIN, SENIOR_API_KEY, MSSQL_DB,
     SENIOR_SOAP_URL, SENIOR_SOAP_NEXTI_URL, SENIOR_SOAP_USER,
     SENIOR_SOAP_PASSWORD, SENIOR_SOAP_TOKEN, SENIOR_SOAP_ENCRYPTION,
-    DEV_MODE,
+    DEV_MODE, SENIOR_SOAP_DELAY_BETWEEN_CCUS_MS,
+    SENIOR_SOAP_DELAY_THRESHOLD_CCUS,
 )
 from app.services.billing_processor import REMUNERACAO_BASE_COLUMNS, ENCARGOS_SOCIAIS_RATE
 
@@ -206,6 +207,8 @@ def _parse_soap_registros(xml_bytes: bytes) -> List[Dict[str, Any]]:
     if erro_nodes:
         erro_text = erro_nodes[0].text
         if erro_text and erro_text.strip():
+            if _is_credential_error(erro_text):
+                _trip_auth_block(erro_text)
             raise Exception(f"Erro na execução SOAP Senior: {erro_text.strip()}")
 
     results: List[Dict[str, Any]] = []
@@ -225,6 +228,55 @@ def _normalize_codccu_param(codccu: Optional[Union[str, List[str]]]) -> Optional
     if isinstance(codccu, list):
         return [c.strip() for c in codccu if c and c.strip()]
     return [codccu.strip()] if codccu.strip() else None
+
+
+# ── Circuit-breaker de credencial ────────────────────────────────────────────
+# Quando a Senior recusa por credencial inválida/expirada/desabilitada (ou
+# bloqueia "por recorrência"), suspendemos as chamadas SOAP por um tempo para
+# NÃO reenviar logins falhos e reforçar o bloqueio do F5. Reseta ao reiniciar.
+import time as _time_cb
+
+_AUTH_BLOCK = {"until": 0.0, "msg": ""}
+_AUTH_BLOCK_COOLDOWN_S = 600  # 10 min
+
+_CRED_ERROR_MARKERS = (
+    "credenciais inválidas", "credenciais invalidas",
+    "credencial inválida", "credencial invalida",
+    "desabilitad", "expirad",
+    "recorrência do erro", "recorrencia do erro",
+    "bloqueada devido", "invalid credentials", "unauthorized", "não autorizad",
+)
+
+
+def _is_credential_error(msg) -> bool:
+    """True se a mensagem indica credencial inválida/desabilitada/expirada ou
+    bloqueio por recorrência (erro de autenticação da Senior)."""
+    if not msg:
+        return False
+    m = str(msg).lower()
+    return any(k in m for k in _CRED_ERROR_MARKERS)
+
+
+def _trip_auth_block(msg: str) -> None:
+    """Ativa o circuit-breaker: suspende chamadas SOAP por _AUTH_BLOCK_COOLDOWN_S."""
+    _AUTH_BLOCK["until"] = _time_cb.time() + _AUTH_BLOCK_COOLDOWN_S
+    _AUTH_BLOCK["msg"] = str(msg)[:300]
+    logger.error(
+        "Circuit-breaker de credencial Senior ATIVADO por %ds (parando de reenviar logins). Motivo: %s",
+        _AUTH_BLOCK_COOLDOWN_S, _AUTH_BLOCK["msg"],
+    )
+
+
+def _auth_block_reason() -> Optional[str]:
+    """Se o circuit-breaker está ativo, retorna a mensagem a propagar; senão None."""
+    restante = _AUTH_BLOCK["until"] - _time_cb.time()
+    if restante > 0:
+        return (
+            f"Chamadas à Senior suspensas por ~{int(restante)}s para não reforçar o bloqueio "
+            f"da conta (erro de credencial detectado). Renove as credenciais no .env e reinicie "
+            f"o servidor. Detalhe: {_AUTH_BLOCK['msg']}"
+        )
+    return None
 
 
 def _post_soap_with_retry(
@@ -247,25 +299,38 @@ def _post_soap_with_retry(
 
     Em caso de 503, ainda extrai o support ID do F5 e loga para abertura de chamado.
     """
+    # Circuit-breaker: se um erro de credencial foi detectado recentemente, falha
+    # rápido SEM tocar na Senior (evita reenviar logins falhos e reforçar o bloqueio).
+    _blk = _auth_block_reason()
+    if _blk:
+        raise Exception(_blk)
     import re as _re
     import time as _time
     from app.services.senior_cache import _SOAP_SEMAPHORE
+    from app.services import monitor_buffer as _mon
 
     t0 = _time.time()
     _SOAP_SEMAPHORE.acquire()
     wait_ms = (_time.time() - t0) * 1000
     if wait_ms > 100:
         logger.info("%s wait_ms=%.0f (semáforo SOAP)", label, wait_ms)
+    t_req = _time.time()
+    _mon.record_start(label, "iniciando POST")
     try:
         try:
             resp = requests.post(url, data=envelope.encode("utf-8"), headers=headers, timeout=timeout, verify=True)
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            elapsed = _time.time() - t_req
             logger.error("%s falha de rede: %s", label, e)
+            _mon.record_error(label, str(e), elapsed_s=elapsed)
             raise
     finally:
         _SOAP_SEMAPHORE.release()
 
+    elapsed = _time.time() - t_req
+
     if resp.status_code == 200:
+        _mon.record_end(label, f"200 OK ({len(resp.content)} bytes)", elapsed_s=elapsed, ok=True)
         return resp
 
     if resp.status_code == 503:
@@ -274,9 +339,11 @@ def _post_soap_with_retry(
         if m:
             support_id = m.group(1)
         logger.error("%s: F5 503 (support=%s) body=%s", label, support_id, resp.text[:500])
+        _mon.record_error(label, f"503 F5 bloqueando (support={support_id or '—'})", elapsed_s=elapsed)
         raise Exception(f"Senior F5 bloqueando (HTTP 503). Tente novamente em alguns minutos. Support ID: {support_id}")
 
     logger.error("%s HTTP %s: %s", label, resp.status_code, resp.text[:500])
+    _mon.record_error(label, f"HTTP {resp.status_code}: {resp.text[:200]}", elapsed_s=elapsed)
     raise Exception(f"Erro HTTP {resp.status_code} na chamada {label}: {resp.text[:300]}")
 
 
@@ -323,26 +390,96 @@ def _call_soap_consulta(
     dat_fim: str,
     num_emp: str = "6",
     cod_ccu_list: Optional[List[str]] = None,
+    progress_cb=None,
 ) -> List[Dict[str, Any]]:
+    def _report(done, total):
+        if progress_cb:
+            try:
+                progress_cb(done, total)
+            except Exception:
+                pass
+
     if not cod_ccu_list or len(cod_ccu_list) <= 1:
-        return _call_soap_consulta_single(dat_ini, dat_fim, num_emp, cod_ccu_list)
+        r = _call_soap_consulta_single(dat_ini, dat_fim, num_emp, cod_ccu_list)
+        _report(1, 1)
+        return r
+
+    import time as _time
+    # Delay só entra em ação quando passa do threshold (default 10 CCUs).
+    n = len(cod_ccu_list)
+    if n > SENIOR_SOAP_DELAY_THRESHOLD_CCUS:
+        delay_s = SENIOR_SOAP_DELAY_BETWEEN_CCUS_MS / 1000.0
+    else:
+        delay_s = 0.0
+
+    def _run_pass(label: str, ccus: List[str], report: bool = False) -> tuple:
+        """Itera ccus, retorna (registros_acumulados, lista_falhos). Log INFO por
+        CCU (START + OK/FAIL com tempo) pra dar visibilidade real do progresso.
+        Com report=True, chama progress_cb(i+1, n) a cada CCU processado."""
+        regs: List[Dict[str, Any]] = []
+        falhos: List[str] = []
+        total = len(ccus)
+        for i, ccu in enumerate(ccus):
+            if i > 0 and delay_s > 0:
+                _time.sleep(delay_s)
+            t0 = _time.perf_counter()
+            logger.info("[%s] CCU %d/%d -> %s START", label, i + 1, total, ccu)
+            try:
+                r = _call_soap_consulta_single(dat_ini, dat_fim, num_emp, [ccu])
+                regs.extend(r)
+                elapsed = _time.perf_counter() - t0
+                logger.info(
+                    "[%s] CCU %d/%d -> %s OK %.2fs (+%d registros, acum=%d)",
+                    label, i + 1, total, ccu, elapsed, len(r), len(regs),
+                )
+            except Exception as e:
+                elapsed = _time.perf_counter() - t0
+                logger.warning(
+                    "[%s] CCU %d/%d -> %s FAIL %.2fs: %s",
+                    label, i + 1, total, ccu, elapsed, str(e)[:200],
+                )
+                if _is_credential_error(str(e)):
+                    # Erro de credencial: aborta TUDO (não tenta os demais CCUs
+                    # nem o passe de retry) para não reenviar N logins falhos.
+                    raise
+                falhos.append(ccu)
+            finally:
+                if report:
+                    _report(i + 1, n)
+        return regs, falhos
 
     all_registros: List[Dict[str, Any]] = []
-    failed_ccus: List[str] = []
-    logger.info("Buscando dados para %d centros de custo individualmente", len(cod_ccu_list))
-    for ccu in cod_ccu_list:
-        try:
-            registros = _call_soap_consulta_single(dat_ini, dat_fim, num_emp, [ccu])
-            all_registros.extend(registros)
-        except Exception as e:
-            logger.warning("Erro ao buscar CCU %s: %s", ccu, str(e))
-            failed_ccus.append(ccu)
-            continue
-    if failed_ccus:
-        logger.error("Falha ao buscar %d de %d CCUs: %s", len(failed_ccus), len(cod_ccu_list), failed_ccus)
-    if not all_registros and failed_ccus:
-        raise Exception(f"Falha ao buscar todos os centros de custo: {failed_ccus}")
-    logger.info("Total de registros após buscar todos os CCUs: %d (falhas: %d)", len(all_registros), len(failed_ccus))
+    logger.info(
+        "Buscando dados para %d centros de custo individualmente (delay=%.2fs entre chamadas%s)",
+        n, delay_s, "" if delay_s > 0 else f" — abaixo do threshold de {SENIOR_SOAP_DELAY_THRESHOLD_CCUS}",
+    )
+
+    # PASS 1: todos os CCUs sequencialmente
+    regs1, falhos = _run_pass("pass1", list(cod_ccu_list), report=True)
+    all_registros.extend(regs1)
+
+    # PASS 2 (RETRY): só os que falharam no pass1
+    if falhos:
+        logger.info(
+            "[retry] %d CCUs falharam no pass1 — retentando ao final: %s",
+            len(falhos), falhos[:20] + (["..."] if len(falhos) > 20 else []),
+        )
+        regs2, falhos_final = _run_pass("retry", list(falhos))
+        all_registros.extend(regs2)
+    else:
+        falhos_final = []
+
+    if falhos_final:
+        logger.error(
+            "Falha definitiva ao buscar %d de %d CCUs (mesmo após retry): %s",
+            len(falhos_final), n, falhos_final,
+        )
+    if not all_registros and falhos_final:
+        raise Exception(f"Falha ao buscar todos os centros de custo: {falhos_final}")
+    logger.info(
+        "Total de registros após buscar todos os CCUs: %d (falhas definitivas: %d/%d)",
+        len(all_registros), len(falhos_final), n,
+    )
     return all_registros
 
 
@@ -476,16 +613,27 @@ def test_connection() -> Dict[str, Any]:
     if not SENIOR_SOAP_USER:
         return {"status": "error", "message": "SENIOR_SOAP_USER não configurado"}
 
+    from app.services import monitor_buffer as _mon
+    import time as _time
     try:
         wsdl_url = SENIOR_SOAP_URL if SENIOR_SOAP_URL.endswith("?wsdl") else SENIOR_SOAP_URL + "?wsdl"
-        response = requests.get(wsdl_url, timeout=15, verify=True)
+        _t0 = _time.time()
+        _mon.record_start("WSDL", "GET healthcheck")
+        try:
+            response = requests.get(wsdl_url, timeout=15, verify=True)
+        except Exception as _e:
+            _mon.record_error("WSDL", str(_e), elapsed_s=_time.time() - _t0)
+            raise
+        _elapsed = _time.time() - _t0
         if response.status_code == 200:
+            _mon.record_end("WSDL", "200 OK", elapsed_s=_elapsed, ok=True)
             return {
                 "status": "ok",
                 "message": "WSDL Senior acessível",
                 "soap_url": SENIOR_SOAP_URL,
             }
         else:
+            _mon.record_error("WSDL", f"HTTP {response.status_code}", elapsed_s=_elapsed)
             return {
                 "status": "error",
                 "message": f"HTTP {response.status_code} ao acessar WSDL",
@@ -565,15 +713,35 @@ def _build_soap_t018ccu_envelope(numemp: int = 6) -> str:
     return envelope
 
 
+def _fetch_cost_centers_local() -> List[Dict[str, Any]]:
+    """DEV_MODE: deriva os centros de custo das unidades cadastradas no banco local
+    (Unit.centro_custo_femsa / nome_unidade). Espelha a MESMA fonte que
+    _fetch_payroll_local usa como codccu/nomccu, então os CCs listados aqui têm
+    funcionários correspondentes ao selecionar."""
+    from app.db import SessionLocal
+    from app.models.billing import Unit
+    db = SessionLocal()
+    try:
+        seen: Dict[str, str] = {}
+        for u in db.query(Unit).all():
+            cod = (u.centro_custo_femsa or "").strip()
+            if not cod or cod in seen:
+                continue
+            seen[cod] = (u.nome_unidade or cod).strip()
+        return [{"codccu": c, "nomccu": n} for c, n in seen.items()]
+    finally:
+        db.close()
+
+
 def _call_soap_cost_centers(numemp: int = 6) -> List[Dict[str, Any]]:
     if DEV_MODE:
-        logger.warning(
-            "[DEV_MODE] Credenciais Senior não configuradas. "
-            "Retornando lista vazia para T018CCU (numemp=%s). "
-            "Configure SENIOR_SOAP_USER e SENIOR_SOAP_PASSWORD no .env para usar dados reais.",
-            numemp,
+        local = _fetch_cost_centers_local()
+        logger.info(
+            "[DEV_MODE] T018CCU: retornando %d centros de custo do banco local "
+            "(numemp=%s). Popule via seed_test_data.py ou upload de folha.",
+            len(local), numemp,
         )
-        return []
+        return local
     if not SENIOR_SOAP_USER or not SENIOR_SOAP_PASSWORD:
         raise Exception("Credenciais SOAP Senior não configuradas (SENIOR_SOAP_USER / SENIOR_SOAP_PASSWORD)")
 
@@ -590,11 +758,24 @@ def _call_soap_cost_centers(numemp: int = 6) -> List[Dict[str, Any]]:
 
     logger.info("SOAP Senior T018CCU request: url=%s numEmp=%s", soap_url, numemp)
 
-    response = requests.post(soap_url, data=envelope.encode("utf-8"), headers=headers, timeout=60, verify=True)
+    from app.services import monitor_buffer as _mon
+    import time as _time
+    _t0 = _time.time()
+    _mon.record_start("T018CCU", f"numEmp={numemp}")
+    try:
+        # timeout=120: a Senior tem respondido T018CCU perto de ~55-60s; 60s falhava
+        # na borda. 120s dá folga (o resultado é cacheado por 6h depois da 1ª carga).
+        response = requests.post(soap_url, data=envelope.encode("utf-8"), headers=headers, timeout=120, verify=True)
+    except Exception as _e:
+        _mon.record_error("T018CCU", str(_e), elapsed_s=_time.time() - _t0)
+        raise
+    _elapsed = _time.time() - _t0
 
     if response.status_code != 200:
         logger.error("SOAP Senior T018CCU HTTP %s: %s", response.status_code, response.text[:500])
+        _mon.record_error("T018CCU", f"HTTP {response.status_code}: {response.text[:200]}", elapsed_s=_elapsed)
         raise Exception(f"Erro HTTP {response.status_code} na chamada SOAP T018CCU: {response.text[:300]}")
+    _mon.record_end("T018CCU", f"200 OK ({len(response.content)} bytes)", elapsed_s=_elapsed, ok=True)
 
     root = etree.fromstring(response.content)
 
@@ -602,6 +783,8 @@ def _call_soap_cost_centers(numemp: int = 6) -> List[Dict[str, Any]]:
     if erro_nodes:
         erro_text = erro_nodes[0].text
         if erro_text and erro_text.strip():
+            if _is_credential_error(erro_text):
+                _trip_auth_block(erro_text)
             raise Exception(f"Erro na execução SOAP T018CCU: {erro_text.strip()}")
 
     ccu_nodes = root.xpath("//*[local-name()='centrosCustos']")
@@ -766,6 +949,7 @@ def fetch_active_employees(codccu: str) -> List[Dict[str, Any]]:
         out.append({
             "numcad": numcad,
             "nomfun": r.get("nome_funcionario"),
+            "cpf": r.get("cpf"),
             "codccu": r.get("codccu"),
             "nomccu": r.get("nomccu"),
             "datadm": r.get("data_admissao"),
@@ -778,6 +962,76 @@ def fetch_active_employees(codccu: str) -> List[Dict[str, Any]]:
     out.sort(key=lambda e: (e.get("nomfun") or "").upper())
     employees_cache.set(cache_key, out)
     return out
+
+
+def fetch_employee_directory(force: bool = False) -> Dict[str, Dict[str, Any]]:
+    """Índice CPF -> {numcad, nome, codccu, nomccu} de TODA a TELOS (varredura da
+    folha do mês inteiro, sem filtro de CC). Pesado; cacheado por mês. Fallback p/
+    mês anterior se o mês corrente vier vazio."""
+    import re as _re
+    from datetime import date
+    from app.services.senior_cache import employees_cache, current_month_key
+
+    key = ("__directory__", current_month_key())
+    if not force:
+        cached = employees_cache.get(key)
+        if cached is not None:
+            return cached
+
+    today = date.today()
+    periodo = f"{today.year}-{today.month:02d}-01"
+    try:
+        registros = fetch_payroll(periodo=periodo, codccu=None)
+    except Exception as e:
+        logger.warning("fetch_employee_directory: %s falhou (%s) — tentando mês anterior", periodo, e)
+        registros = []
+    if not registros:
+        py, pm = (today.year - 1, 12) if today.month == 1 else (today.year, today.month - 1)
+        try:
+            registros = fetch_payroll(periodo=f"{py}-{pm:02d}-01", codccu=None)
+        except Exception as e:
+            logger.error("fetch_employee_directory: fallback falhou (%s)", e)
+            registros = []
+
+    directory: Dict[str, Dict[str, Any]] = {}
+    for r in registros:
+        cpf = _re.sub(r"\D", "", str(r.get("cpf") or ""))
+        if not cpf:
+            continue
+        if cpf not in directory:
+            directory[cpf] = {
+                "numcad": r.get("matricula"),
+                "nome": r.get("nome_funcionario"),
+                "codccu": r.get("codccu"),
+                "nomccu": r.get("nomccu"),
+            }
+    employees_cache.set(key, directory)
+    logger.info("fetch_employee_directory: %d CPFs indexados", len(directory))
+    return directory
+
+
+def peek_employee_directory() -> Dict[str, Dict[str, Any]]:
+    """Retorna o diretório CPF→funcionário SOMENTE se já estiver em cache (não
+    dispara a varredura pesada). Usado no upload para não bater na Senior."""
+    from app.services.senior_cache import employees_cache, current_month_key
+    return employees_cache.get(("__directory__", current_month_key())) or {}
+
+
+def lookup_employee_by_cpf(cpf: str) -> Optional[Dict[str, Any]]:
+    """Acha funcionário (numcad, nome, codccu, nomccu) pelo CPF no diretório cacheado."""
+    import re as _re
+    digits = _re.sub(r"\D", "", str(cpf or ""))
+    if not digits:
+        return None
+    digits = digits.zfill(11) if len(digits) <= 11 else digits
+    return fetch_employee_directory().get(digits)
+
+
+def employee_directory_status() -> Dict[str, Any]:
+    """Status do diretório cacheado (sem expor dados)."""
+    from app.services.senior_cache import employees_cache, current_month_key
+    cached = employees_cache.get(("__directory__", current_month_key()))
+    return {"carregado": cached is not None, "total_cpfs": len(cached) if cached else 0}
 
 
 def _fetch_payroll_local(
@@ -899,10 +1153,14 @@ def fetch_payroll(
     codccu: Optional[Union[str, List[str]]] = None,
     dat_ini: Optional[str] = None,
     dat_fim: Optional[str] = None,
+    progress_cb=None,
 ) -> List[Dict[str, Any]]:
     """
     Busca folha de pagamento via SOAP Senior (consultaRegistros).
     Em DEV_MODE usa o banco SQLite local como fallback.
+
+    progress_cb: callback opcional (done:int, total:int) chamado a cada CCU
+    processado — usado pela exportação em segundo plano para reportar progresso.
 
     Args:
         periodo: Data no formato 'YYYY-MM-DD' (usado para calcular datIni/datFim se não informados)
@@ -925,7 +1183,7 @@ def fetch_payroll(
 
     cod_ccu_list = _normalize_codccu_param(codccu)
 
-    registros = _call_soap_consulta(dat_ini, dat_fim, str(numemp), cod_ccu_list)
+    registros = _call_soap_consulta(dat_ini, dat_fim, str(numemp), cod_ccu_list, progress_cb=progress_cb)
 
     payroll_data: List[Dict[str, Any]] = []
     for row in registros:

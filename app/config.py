@@ -39,7 +39,13 @@ SENIOR_SOAP_ENCRYPTION = int(os.getenv("SENIOR_SOAP_ENCRYPTION", "0"))
 
 # Modo desenvolvimento: ativo quando credenciais Senior não estão configuradas.
 # Neste modo, endpoints que dependem do Senior usam dados locais do banco SQLite.
-DEV_MODE = not bool(SENIOR_SOAP_USER and SENIOR_SOAP_PASSWORD)
+#
+# FORCE_DEV_MODE=1 força o modo dev MESMO com credenciais preenchidas no .env —
+# útil para testar as telas com dados locais/sintéticos sem depender do Senior
+# (ou quando as credenciais estão temporariamente inválidas/bloqueadas).
+# Volte para 0 (ou remova a linha) quando as credenciais forem renovadas.
+FORCE_DEV_MODE = os.getenv("FORCE_DEV_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+DEV_MODE = FORCE_DEV_MODE or not bool(SENIOR_SOAP_USER and SENIOR_SOAP_PASSWORD)
 
 # Feature 002: SMTP para envio de solicitação de compra por email (opcional).
 SMTP_HOST = os.getenv("SMTP_HOST", "")
@@ -59,3 +65,29 @@ def is_smtp_configured() -> bool:
 SENIOR_CACHE_CCU_TTL = int(os.getenv("SENIOR_CACHE_CCU_TTL", "21600"))  # 6h default
 SENIOR_CACHE_EMPLOYEES_TTL = int(os.getenv("SENIOR_CACHE_EMPLOYEES_TTL", "3600"))  # 1h default
 SENIOR_SOAP_MAX_CONCURRENCY = max(1, int(os.getenv("SENIOR_SOAP_MAX_CONCURRENCY", "3")))
+# Delay entre chamadas SOAP consecutivas no loop multi-CCU (ms). Mitigar 503/RST
+# do F5 quando o servidor da Senior recebe muitas requisições em sequência.
+SENIOR_SOAP_DELAY_BETWEEN_CCUS_MS = max(0, int(os.getenv("SENIOR_SOAP_DELAY_BETWEEN_CCUS_MS", "2000")))
+# Só aplica o delay quando há MAIS de N CCUs na fila — exports pequenos rodam
+# rápido como antes, exports grandes ganham a proteção contra rate-limit.
+SENIOR_SOAP_DELAY_THRESHOLD_CCUS = max(1, int(os.getenv("SENIOR_SOAP_DELAY_THRESHOLD_CCUS", "10")))
+# Página /monitor de inspeção de chamadas SOAP — APENAS dev. Em produção, setar
+# MONITOR_PAGE_ENABLED=false no .env pra desabilitar o endpoint (volta 404).
+# APP_ENV define o "modo" do servidor. Controla defaults seguros de outras flags:
+# "development" → defaults voltados pra dev local (cookie sem secure, /monitor ON)
+# "production"  → defaults seguros automáticos (cookie secure, /monitor OFF)
+# Cada flag específica AINDA pode ser sobrescrita via env var individual.
+APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
+IS_PRODUCTION = APP_ENV == "production"
+
+# /monitor — em production default OFF (404). Em dev default ON.
+_monitor_default = "false" if IS_PRODUCTION else "true"
+MONITOR_PAGE_ENABLED = os.getenv("MONITOR_PAGE_ENABLED", _monitor_default).strip().lower() in {"1", "true", "yes", "on"}
+
+# Cookie secure — em production default TRUE (exige HTTPS). Em dev default FALSE.
+_secure_default = "true" if IS_PRODUCTION else "false"
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", _secure_default).strip().lower() in {"1", "true", "yes", "on"}
+# SameSite do cookie. "lax" (default) protege contra a maioria de CSRF e ainda
+# permite navegação top-level cross-site. "strict" é mais seguro mas quebra
+# links externos pro app. "none" exige HTTPS+secure=true.
+SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "lax").strip().lower()

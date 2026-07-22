@@ -6,7 +6,11 @@ from app.services.normalize import normalize_customer_data
 from app.models.customer import Customer
 import json
 
-router = APIRouter(prefix="/api/uploads", tags=["uploads"])
+from app.routers.auth import require_login
+
+# Todas as rotas exigem login (dependency no nível do router). Trilho legado.
+router = APIRouter(prefix="/api/uploads", tags=["uploads"],
+                   dependencies=[Depends(require_login)])
 
 @router.post("/customers")
 async def upload_customer_file(

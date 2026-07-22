@@ -4,6 +4,40 @@
 
 {% block extra_css %}
 <style>
+    /* Percentuais somente-leitura (operador): visual de "valor do sistema",
+       não de campo editável — fundo apagado, borda tracejada e cadeado. */
+    .pct-readonly-group label {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        color: var(--gray-400);
+    }
+    .pct-readonly-group label .pct-lock {
+        font-size: 0.85rem;
+        line-height: 1;
+        color: var(--gray-500);
+    }
+    .pct-readonly-group .pct-badge {
+        font-size: 0.6rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--gold);
+        border: 1px solid var(--gray-600);
+        border-radius: 999px;
+        padding: 0.1rem 0.5rem;
+        white-space: nowrap;
+    }
+    .pct-readonly-group input[disabled] {
+        background: transparent;
+        border: 1px dashed var(--gray-600);
+        color: var(--gray-300);
+        cursor: not-allowed;
+        opacity: 1; /* sem o esmaecido padrão do browser — o valor deve ficar legível */
+    }
+    .pct-readonly-group input[disabled]:hover {
+        border-color: var(--gray-500);
+    }
+
     .tabs {
         display: flex;
         gap: 0;
@@ -151,7 +185,38 @@
     @keyframes spin {
         to { transform: rotate(360deg); }
     }
-    
+
+    /* Spinner dentro do botão (estado "Exportando…") */
+    .btn-spinner {
+        display: inline-block;
+        width: 15px; height: 15px;
+        border: 2px solid rgba(0,0,0,0.3);
+        border-top-color: currentColor;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
+    }
+
+    /* Barra de progresso da exportação */
+    .progress-wrap { max-width: 420px; margin: 1rem auto 0; }
+    .progress-bar {
+        height: 8px; background: var(--gray-700);
+        border: 1px solid var(--gray-600); border-radius: 9999px; overflow: hidden;
+    }
+    .progress-fill {
+        height: 100%; width: 0; background: var(--gold);
+        border-radius: 9999px; transition: width 0.4s ease;
+    }
+    .progress-fill.indeterminate {
+        width: 35% !important; transition: none;
+        animation: indet 1.2s ease-in-out infinite;
+    }
+    @keyframes indet { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+    .progress-pct {
+        font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+        color: var(--gray-400); margin-top: 0.4rem; text-align: center;
+    }
+
     .info-box {
         background: var(--gray-700);
         padding: 1.5rem;
@@ -255,7 +320,7 @@
     <button class="tab-btn" onclick="showTab('exportar-faturamento')">Exportar Faturamento</button>
     <button class="tab-btn" onclick="showTab('folha-senior')">Folha Senior</button>
     <button class="tab-btn" onclick="showTab('exames-medicos')">Exames</button>
-    <button class="tab-btn" onclick="window.location.href='/epis?token={{ token }}'">EPIs</button>
+    <button class="tab-btn" onclick="window.location.href='/epis'">EPIs</button>
     <button class="tab-btn" onclick="showTab('valores-adicionais')">Valores Adicionais</button>
 </div>
 
@@ -412,12 +477,43 @@
             <div class="form-group">
                 <label for="export-modelo">Modelo de Exportacao</label>
                 <select id="export-modelo" required>
+                    <!-- Preenchido dinamicamente por loadExportModels() com os modelos
+                         de faturamento cadastrados (GERAL primeiro/padrão). FEMSA fica
+                         como fallback caso a API falhe. -->
                     <option value="femsa">FEMSA</option>
-                    <option value="skyrail">Skyrail</option>
                 </select>
             </div>
         </div>
-        
+
+        {# Percentuais: OPERADOR só visualiza (valores vêm do modelo/contrato);
+           gestor+ pode ajustar para o faturamento e salvar o padrão do contrato.
+           O backend reforça: override de % é ignorado para quem não é gestor. #}
+        {% set pode_editar_pct = user and (user.role or 'operador') in ('gestor', 'admin') %}
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 1rem; margin-bottom: 0.5rem; align-items: end;">
+            <div class="form-group {% if not pode_editar_pct %}pct-readonly-group{% endif %}" style="margin:0;">
+                <label for="param-encargos">{% if not pode_editar_pct %}<span class="pct-lock">🔒</span> {% endif %}Encargos Sociais (%){% if not pode_editar_pct %} <span class="pct-badge">via modelo</span>{% endif %}</label>
+                <input type="number" step="0.01" id="param-encargos" {% if pode_editar_pct %}placeholder="ex.: 57.91"{% else %}disabled title="Definido pelo modelo/contrato — somente gestores podem alterar"{% endif %}>
+            </div>
+            <div class="form-group {% if not pode_editar_pct %}pct-readonly-group{% endif %}" style="margin:0;">
+                <label for="param-taxa-adm">{% if not pode_editar_pct %}<span class="pct-lock">🔒</span> {% endif %}Taxa Administrativa (%){% if not pode_editar_pct %} <span class="pct-badge">via modelo</span>{% endif %}</label>
+                <input type="number" step="0.01" id="param-taxa-adm" {% if pode_editar_pct %}placeholder="ex.: 15"{% else %}disabled title="Definido pelo modelo/contrato — somente gestores podem alterar"{% endif %}>
+            </div>
+            <div class="form-group {% if not pode_editar_pct %}pct-readonly-group{% endif %}" style="margin:0;">
+                <label for="param-imposto">{% if not pode_editar_pct %}<span class="pct-lock">🔒</span> {% endif %}Imposto / Alíquota (%){% if not pode_editar_pct %} <span class="pct-badge">via modelo</span>{% endif %}</label>
+                <input type="number" step="0.01" id="param-imposto" {% if pode_editar_pct %}placeholder="ex.: 8.5"{% else %}disabled title="Definido pelo modelo/contrato — somente gestores podem alterar"{% endif %}>
+            </div>
+            {% if pode_editar_pct %}
+            <div class="form-group" style="margin:0;">
+                <button type="button" class="btn btn-secondary" onclick="saveContractParams()" style="white-space:nowrap;">Salvar padrão</button>
+            </div>
+            {% endif %}
+        </div>
+        {% if pode_editar_pct %}
+        <p style="color: var(--gray-400); font-size: 0.75rem; margin-bottom: 1.5rem;">Preenchidos pelo padrão do <b>modelo selecionado</b> (vazios = modelo sem padrão); ajuste para este faturamento se quiser. <b>Salvar padrão</b> grava no <b>modelo selecionado</b> — salvar com os campos vazios remove o padrão. Valor Total = (Subtotal + Taxa Adm) ÷ (1 − Imposto).</p>
+        {% else %}
+        <p style="color: var(--gray-400); font-size: 0.75rem; margin-bottom: 1.5rem;">Percentuais definidos pelo <b>modelo de exportação</b> (ou padrão do contrato) — somente gestores ou administradores podem alterá-los. Valor Total = (Subtotal + Taxa Adm) ÷ (1 − Imposto).</p>
+        {% endif %}
+
         <div class="form-group" style="margin-bottom: 1.5rem;">
             <label for="export-codccu-filter">Centro de Custo</label>
             <input type="text" id="export-codccu-filter" placeholder="Digite para filtrar..." autocomplete="off" style="margin-bottom: 0.5rem;">
@@ -572,9 +668,13 @@
         
         <div class="loading" id="export-loading">
             <div class="spinner"></div>
-            <p style="color: var(--gray-400);">Gerando arquivo...</p>
+            <p class="loading-msg" style="color: var(--gray-400);">Gerando arquivo...</p>
+            <div class="progress-wrap">
+                <div class="progress-bar"><div class="progress-fill"></div></div>
+                <div class="progress-pct"></div>
+            </div>
         </div>
-        
+
         <div class="info-box" style="margin-top: 1.5rem;">
             <h4>Modelo FEMSA</h4>
             <p>Gera planilha no formato padrao FEMSA com todas as colunas de faturamento, eventos com Qtde e Valor, taxas e encargos.</p>
@@ -634,7 +734,8 @@
     <div class="card">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
             <h2 id="exames-form-title">Cadastrar Exame Medico</h2>
-            <div>
+            <div style="display:flex; gap:0.5rem;">
+                <a href="/lancamento-exames" class="btn" style="font-size: 0.8rem; padding: 0.5rem 1rem; text-decoration:none;">Importar ASO / arquivo</a>
                 <button type="button" class="btn btn-outline" id="btn-toggle-exam-form" onclick="toggleExamForm()" style="font-size: 0.8rem; padding: 0.5rem 1rem;">Novo Exame</button>
             </div>
         </div>
@@ -643,12 +744,24 @@
             <input type="hidden" id="exam-edit-id" value="">
 
             <div class="form-group" style="margin-bottom: 1rem;">
-                <label for="exam-func-filter">Nome do Funcionario</label>
-                <input type="text" id="exam-func-filter" placeholder="Digite para buscar funcionario..." autocomplete="off" style="margin-bottom: 0.5rem;">
+                <label for="exam-ccu-filter">Centro de Custo</label>
+                <input type="text" id="exam-ccu-filter" placeholder="Digite para filtrar centro de custo..." autocomplete="off" style="margin-bottom: 0.5rem;">
+                <select id="exam-ccu-select" size="5" style="width: 100%; height: auto; min-height: 120px; max-height: 200px; overflow-y: auto;">
+                    <option value="">Carregando centros de custo...</option>
+                </select>
+                <div id="exam-ccu-selected" style="margin-top: 0.5rem; color: var(--gold); font-weight: 600; font-size: 0.9rem;"></div>
+                <input type="hidden" id="exam-codccu" value="">
+                <input type="hidden" id="exam-nomeccu" value="">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label for="exam-func-filter">Funcionario</label>
+                <input type="text" id="exam-func-filter" placeholder="Selecione um centro de custo acima..." autocomplete="off" style="margin-bottom: 0.5rem;" disabled>
                 <select id="exam-func-select" size="5" style="width: 100%; height: auto; min-height: 120px; max-height: 200px; overflow-y: auto; display: none;">
                 </select>
                 <div id="exam-func-selected" style="margin-top: 0.5rem; color: var(--gold); font-weight: 600; font-size: 0.9rem;"></div>
                 <input type="hidden" id="exam-numcad" value="">
+                <input type="hidden" id="exam-cpf" value="">
             </div>
 
             <div class="form-group" style="margin-bottom: 1rem;">
@@ -783,6 +896,7 @@
                         <th style="padding: 0.75rem 0.5rem; text-align: left; color: var(--gold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Nome</th>
                         <th style="padding: 0.75rem 0.5rem; text-align: center; color: var(--gold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Data</th>
                         <th style="padding: 0.75rem 0.5rem; text-align: right; color: var(--gold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Total</th>
+                        <th style="padding: 0.75rem 0.5rem; text-align: center; color: var(--gold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Status</th>
                         <th style="padding: 0.75rem 0.5rem; text-align: center; color: var(--gold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Acoes</th>
                     </tr>
                 </thead>
@@ -983,9 +1097,9 @@ async function loadPeriods() {
     document.getElementById('periods-table').style.display = 'none';
     
     try {
-        const response = await fetch('/api/billing/periods?token=' + token);
+        const response = await fetch('/api/billing/periods', { credentials: 'same-origin' });
         const data = await response.json();
-        
+
         const tbody = document.getElementById('periods-tbody');
         tbody.innerHTML = '';
         
@@ -1020,9 +1134,9 @@ async function loadPeriods() {
 
 async function loadPeriodsForSelect() {
     try {
-        const response = await fetch('/api/billing/periods?token=' + token);
+        const response = await fetch('/api/billing/periods', { credentials: 'same-origin' });
         const data = await response.json();
-        
+
         const select = document.getElementById('periodo-select');
         select.innerHTML = '<option value="">Selecione um periodo...</option>';
         
@@ -1047,7 +1161,7 @@ async function loadSummary() {
     document.getElementById('summary-content').style.display = 'none';
     
     try {
-        const response = await fetch(`/api/billing/periods/${periodId}/summary?token=${token}`);
+        const response = await fetch(`/api/billing/periods/${periodId}/summary`, { credentials: 'same-origin' });
         const data = await response.json();
         
         if (data.summary) {
@@ -1310,20 +1424,19 @@ function downloadPayrollExcel() {
     }
     
     const btn = document.getElementById('btn-download-payroll');
-    if (btn) btn.disabled = true;
-
-    const ccuParams = selectedCcus.map(ccu => `codccu=${encodeURIComponent(ccu)}`).join('&');
-    window.location.href = `/integrations/senior/payroll/export?periodo=${periodo}&${ccuParams}`;
-
-    setTimeout(() => {
-        if (btn) btn.disabled = false;
-    }, 3000);
+    _exportViaJob(
+        { periodo, codccu: selectedCcus, modelo: 'payroll' },
+        btn,
+        null,
+        'folha.xlsx'
+    );
 }
 
 // Initialize payroll tab on load
 document.addEventListener('DOMContentLoaded', function() {
     setPayrollDefaultDate();
     setExportDefaultDate();
+    loadExportModels();
     loadAllCostCenters();
     setupCostCenterFilter();
     setupAVCostCenterFilter();
@@ -1334,6 +1447,11 @@ document.addEventListener('DOMContentLoaded', function() {
     checkFlashStatus();
     checkIfoodStatus();
     initExamsTab();
+    loadContractParams();
+    // Troca de modelo no dropdown de exportação → preenche os percentuais
+    // com os padrões do modelo (fallback: contrato). Só no evento de troca.
+    const exportModeloSelect = document.getElementById('export-modelo');
+    if (exportModeloSelect) exportModeloSelect.addEventListener('change', applyExportModelDefaults);
 });
 
 function setExportDefaultDate() {
@@ -1341,6 +1459,50 @@ function setExportDefaultDate() {
     today.setMonth(today.getMonth() - 1);
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
     document.getElementById('export-periodo').value = firstDay.toISOString().split('T')[0];
+}
+
+// Popula o dropdown "Modelo de Exportação" com os modelos cadastrados
+// (/api/billing-models já ordena is_base -> GERAL primeiro/padrão). O valor
+// enviado é o NOME em minúsculas; o backend resolve as colunas por esse nome.
+let exportModelsCache = [];   // modelos com os percentuais padrão (to_dict)
+
+async function loadExportModels() {
+    const select = document.getElementById('export-modelo');
+    if (!select) return;
+    try {
+        const resp = await fetch('/api/billing-models');
+        const json = await resp.json();
+        const models = (json && json.data ? json.data : []).filter(m => m.ativo !== false);
+        exportModelsCache = models;
+        if (models.length) {
+            select.innerHTML = models.map(m =>
+                `<option value="${String(m.nome).toLowerCase()}">${m.nome}</option>`
+            ).join('');
+        }
+        // Preenche os percentuais com o padrão do modelo inicial já na carga.
+        applyExportModelDefaults();
+    } catch (e) {
+        // falha na API: mantém a opção estática (FEMSA) já presente no HTML
+    }
+}
+
+// Ao TROCAR o modelo no dropdown (e na carga), os percentuais mostram SOMENTE
+// o padrão do modelo selecionado — sem padrão, ficam VAZIOS (nada de fallback
+// invisível do contrato "ressuscitando" valores que o usuário limpou).
+// Só roda na troca/carga — não sobrescreve depois que o usuário digitar.
+function applyExportModelDefaults() {
+    const select = document.getElementById('export-modelo');
+    if (!select) return;
+    const nome = (select.value || '').toLowerCase();
+    const m = exportModelsCache.find(x => String(x.nome).toLowerCase() === nome) || null;
+    const setPct = (id, valorModelo) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = valorModelo != null ? valorModelo : '';
+    };
+    setPct('param-encargos', m ? m.encargos_pct : null);
+    setPct('param-taxa-adm', m ? m.taxa_adm_pct : null);
+    setPct('param-imposto', m ? m.imposto_pct : null);
 }
 
 function renderExportCostCenterOptions(centers) {
@@ -1382,32 +1544,218 @@ function setupExportCostCenterFilter() {
     });
 }
 
+// Helper: faz POST com JSON body e baixa o blob retornado.
+// Necessário quando a URL GET ficaria grande demais (muitos CCUs → browser bloqueia).
+async function _downloadFromPost(url, body, btn, loadingEl) {
+    if (btn) btn.disabled = true;
+    if (loadingEl) loadingEl.classList.add('active');
+    try {
+        const r = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const ct = r.headers.get('Content-Type') || '';
+        if (!r.ok || ct.includes('application/json')) {
+            // Backend retornou erro (geralmente JSON, mesmo com 200 do FastAPI antigo)
+            let msg = `HTTP ${r.status}`;
+            try {
+                const j = await r.json();
+                msg = j.message || j.detail || msg;
+            } catch (_) {}
+            throw new Error(msg);
+        }
+        const blob = await r.blob();
+        // Extrai nome do arquivo do header
+        const cd = r.headers.get('Content-Disposition') || '';
+        const m = cd.match(/filename[^;\n=]*=((['"]).*?\2|[^;\n]*)/);
+        const filename = m ? m[1].replace(/['"]/g, '').trim() : 'export.xlsx';
+        // Faz download via link temporário
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+        alert('Erro ao exportar: ' + err.message);
+    } finally {
+        if (loadingEl) loadingEl.classList.remove('active');
+        if (btn) btn.disabled = false;
+    }
+}
+
+// Exportação em SEGUNDO PLANO (helper compartilhado): inicia o job, acompanha
+// o progresso e baixa quando pronto. Cada requisição é curta, então não estoura
+// o timeout do proxy (Cloudflare 524), mesmo com muitos centros de custo.
+// body: { periodo, codccu, modelo, ...params }. loadingEl pode ser o elemento
+// real (mostra texto de progresso) ou um shim só com classList.
+async function _exportViaJob(body, btn, loadingEl, defaultName) {
+    // Guarda contra reentrada / cliques repetidos
+    if (btn && btn.dataset.busy === '1') return;
+
+    const hasEl = loadingEl && typeof loadingEl.querySelector === 'function';
+    const msgEl = hasEl ? (loadingEl.querySelector('.loading-msg') || loadingEl.querySelector('p')) : null;
+    const fillEl = hasEl ? loadingEl.querySelector('.progress-fill') : null;
+    const pctEl = hasEl ? loadingEl.querySelector('.progress-pct') : null;
+    const setText = t => { if (msgEl) msgEl.textContent = t; };
+    const setProgress = (pct, hasTotal) => {
+        if (fillEl) {
+            fillEl.classList.toggle('indeterminate', !hasTotal);
+            if (hasTotal) fillEl.style.width = pct + '%';
+        }
+        if (pctEl) pctEl.textContent = hasTotal ? (pct + '%') : '';
+    };
+
+    let pollTimer = null;
+    let originalHtml = null;
+
+    // Estado "trabalhando" no botão: desabilita + troca rótulo + spinner
+    if (btn) {
+        btn.dataset.busy = '1';
+        btn.disabled = true;
+        originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="btn-spinner"></span><span>Exportando…</span>';
+    }
+    if (loadingEl) loadingEl.classList.add('active');
+    setText('Enfileirando exportação…');
+    setProgress(0, false);
+
+    try {
+        // 1) inicia o job (volta na hora com um job_id)
+        const startResp = await fetch('/integrations/senior/billing/export-async', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const startJson = await startResp.json().catch(() => ({}));
+        if (!startResp.ok || !startJson.job_id) {
+            throw new Error(startJson.message || startJson.detail || `Falha ao iniciar (HTTP ${startResp.status})`);
+        }
+        const jobId = startJson.job_id;
+
+        // 2) acompanha o progresso (poll a cada 2.5s, limite de 30 min)
+        const startedAt = Date.now();
+        const MAX_MS = 30 * 60 * 1000;
+        await new Promise((resolve, reject) => {
+            async function poll() {
+                try {
+                    const r = await fetch(`/integrations/senior/billing/export-status/${jobId}`);
+                    if (!r.ok) throw new Error('Job não encontrado (pode ter expirado). Tente novamente.');
+                    const s = await r.json();
+                    if (s.status === 'pending' || s.status === 'running') {
+                        const hasTotal = !!s.total;
+                        setText(s.message || 'Processando…');
+                        setProgress(hasTotal ? s.percent : 0, hasTotal);
+                        if (Date.now() - startedAt > MAX_MS) { reject(new Error('Tempo limite excedido (30 min).')); return; }
+                        pollTimer = setTimeout(poll, 2500);
+                    } else if (s.status === 'done') {
+                        setText('Baixando arquivo…');
+                        setProgress(100, true);
+                        resolve();
+                    } else {
+                        reject(new Error(s.error || 'Erro ao gerar a exportação.'));
+                    }
+                } catch (e) { reject(e); }
+            }
+            poll();
+        });
+
+        // 3) baixa o arquivo pronto
+        const dl = await fetch(`/integrations/senior/billing/export-download/${jobId}`);
+        if (!dl.ok) {
+            let msg = `HTTP ${dl.status}`;
+            try { const j = await dl.json(); msg = j.message || j.detail || msg; } catch (_) {}
+            throw new Error(msg);
+        }
+        const blob = await dl.blob();
+        const cd = dl.headers.get('Content-Disposition') || '';
+        const m = cd.match(/filename[^;\n=]*=((['"]).*?\2|[^;\n]*)/);
+        const filename = m ? m[1].replace(/['"]/g, '').trim() : (defaultName || 'export.xlsx');
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(blobUrl);
+        setText('Concluído! Download iniciado.');
+    } catch (err) {
+        alert('Erro ao exportar: ' + err.message);
+    } finally {
+        if (pollTimer) clearTimeout(pollTimer);
+        if (loadingEl) loadingEl.classList.remove('active');
+        if (btn) {
+            btn.disabled = false;
+            btn.dataset.busy = '0';
+            if (originalHtml !== null) btn.innerHTML = originalHtml;
+        }
+        setText('Gerando arquivo...');
+        setProgress(0, false);
+    }
+}
+
 function downloadBillingExport() {
     const periodo = document.getElementById('export-periodo').value;
     const select = document.getElementById('export-codccu');
     const selectedOptions = Array.from(select.selectedOptions).map(opt => opt.value).filter(v => v);
     const modelo = document.getElementById('export-modelo').value;
-    
-    if (!periodo) {
-        alert('Selecione o periodo');
+
+    if (!periodo) { alert('Selecione o periodo'); return; }
+    if (selectedOptions.length === 0) { alert('Selecione pelo menos um centro de custo'); return; }
+
+    const num = id => { const v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
+    _exportViaJob(
+        { periodo, codccu: selectedOptions, modelo,
+          encargos_pct: num('param-encargos'), taxa_adm_pct: num('param-taxa-adm'), imposto_pct: num('param-imposto') },
+        document.getElementById('btn-download-billing-export'),
+        document.getElementById('export-loading'),
+        'faturamento.xlsx'
+    );
+}
+
+let contractParamsCache = {};  // padrões do contrato (só informativo — a tela usa o padrão do MODELO)
+
+async function loadContractParams() {
+    // Mantém o cache por compatibilidade, mas NÃO preenche mais os campos:
+    // os percentuais exibidos vêm exclusivamente do padrão do modelo selecionado
+    // (applyExportModelDefaults) — campo vazio significa "sem padrão" de verdade.
+    try {
+        const r = await fetch('/api/contract-params', { credentials: 'same-origin' });
+        const j = await r.json();
+        contractParamsCache = j.data || {};
+    } catch (e) { /* ignore */ }
+}
+
+async function saveContractParams() {
+    // Grava os percentuais como padrão do MODELO selecionado no dropdown
+    // (null explícito LIMPA o padrão do modelo — campos ficam vazios de verdade).
+    const num = id => { const v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
+    const body = { encargos_pct: num('param-encargos'), taxa_adm_pct: num('param-taxa-adm'), imposto_pct: num('param-imposto') };
+    const nomeSel = (document.getElementById('export-modelo')?.value || '').toLowerCase();
+    const modelo = (exportModelsCache || []).find(m => (m.nome || '').toLowerCase() === nomeSel);
+    if (!modelo) {
+        alert('Selecione um modelo de exportação válido para salvar o padrão.');
         return;
     }
-    if (selectedOptions.length === 0) {
-        alert('Selecione pelo menos um centro de custo');
-        return;
-    }
-    
-    const btn = document.getElementById('btn-download-billing-export');
-    if (btn) btn.disabled = true;
-    document.getElementById('export-loading').classList.add('active');
-
-    const codccuParams = selectedOptions.map(c => `codccu=${encodeURIComponent(c)}`).join('&');
-    window.location.href = `/integrations/senior/billing/export-${modelo}?periodo=${periodo}&${codccuParams}`;
-
-    setTimeout(() => {
-        document.getElementById('export-loading').classList.remove('active');
-        if (btn) btn.disabled = false;
-    }, 3000);
+    try {
+        const r = await fetch(`/api/billing-models/${modelo.id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin', body: JSON.stringify(body)
+        });
+        if (r.ok) {
+            // Atualiza o cache local pro comportamento do dropdown refletir na hora
+            const d = (await r.json()).data || {};
+            modelo.encargos_pct = d.encargos_pct; modelo.taxa_adm_pct = d.taxa_adm_pct; modelo.imposto_pct = d.imposto_pct;
+            const limpou = body.encargos_pct == null && body.taxa_adm_pct == null && body.imposto_pct == null;
+            alert(limpou ? `Padrão do modelo "${modelo.nome}" removido.`
+                         : `Percentuais salvos como padrão do modelo "${modelo.nome}".`);
+        } else if (r.status === 403) {
+            alert('Permissão insuficiente: apenas gestores ou administradores podem salvar padrões.');
+        } else {
+            const e = await r.json().catch(() => ({}));
+            alert('Erro ao salvar: ' + (e.detail || r.status));
+        }
+    } catch (e) { alert('Erro ao salvar: ' + e.message); }
 }
 
 function setupExportMultiSelect() {
@@ -1548,17 +1896,20 @@ function downloadSeniorExport() {
     }
 
     const btn = document.getElementById('btn-download-senior-export');
-    if (btn) btn.disabled = true;
+    // Spinner próprio dessa aba (display block/none) via shim de classList.
     const loading = document.getElementById('senior-loading');
-    if (loading) loading.style.display = 'block';
-
-    const codccuParams = selectedOptions.map(c => `codccu=${encodeURIComponent(c)}`).join('&');
-    window.location.href = `/integrations/senior/payroll/export-senior?periodo=${periodo}&${codccuParams}`;
-
-    setTimeout(() => {
-        if (loading) loading.style.display = 'none';
-        if (btn) btn.disabled = false;
-    }, 5000);
+    const loadingShim = loading ? {
+        classList: {
+            add: () => { loading.style.display = 'block'; },
+            remove: () => { loading.style.display = 'none'; },
+        }
+    } : null;
+    _exportViaJob(
+        { periodo, codccu: selectedOptions, modelo: 'senior' },
+        btn,
+        loadingShim,
+        'folha_senior.xlsx'
+    );
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1923,9 +2274,9 @@ async function loadAdditionalValues() {
     document.getElementById('av-empty').style.display = 'none';
     
     try {
-        const response = await fetch(`/api/billing/additional-values?token=${token}`);
+        const response = await fetch(`/api/billing/additional-values`, { credentials: 'same-origin' });
         const data = await response.json();
-        
+
         if (data.status === 'ok' && data.data) {
             if (data.data.length === 0) {
                 document.getElementById('av-empty').style.display = 'block';
@@ -2017,8 +2368,9 @@ async function saveEditAdditionalValue(id) {
     }
     
     try {
-        const response = await fetch(`/api/billing/additional-values/${id}?token=${token}`, {
+        const response = await fetch(`/api/billing/additional-values/${id}`, {
             method: 'PUT',
+            credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 valor: parseFloat(valor),
@@ -2055,8 +2407,9 @@ async function createAdditionalValue() {
     }
     
     try {
-        const response = await fetch(`/api/billing/additional-values?token=${token}`, {
+        const response = await fetch(`/api/billing/additional-values`, {
             method: 'POST',
+            credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 codccu: codccu,
@@ -2086,8 +2439,9 @@ async function deleteAdditionalValue(id) {
     }
     
     try {
-        const response = await fetch(`/api/billing/additional-values/${id}?token=${token}`, {
-            method: 'DELETE'
+        const response = await fetch(`/api/billing/additional-values/${id}`, {
+            method: 'DELETE',
+            credentials: 'same-origin'
         });
         
         const data = await response.json();
@@ -2104,6 +2458,8 @@ async function deleteAdditionalValue(id) {
 
 // ===== EXAMES MEDICOS TAB =====
 let examEmployees = [];
+let examCostCenters = [];
+let examSelectedCcu = '';
 let examCurrentPage = 1;
 let examFilterTimeout = null;
 
@@ -2127,10 +2483,143 @@ function initExamsTab() {
         });
     }
 
+    setupExamCcuFilter();
     setupExamFuncFilter();
+    loadExamCostCenters();
     loadExamList();
 }
 
+// ----- Centro de Custo (define o conjunto de funcionários) -----
+async function loadExamCostCenters() {
+    try {
+        const response = await fetch('/integrations/senior/cost-centers');
+        const data = await response.json();
+        if (data.status === 'ok' && data.data) {
+            examCostCenters = data.data;
+            renderExamCcuOptions(examCostCenters);
+        }
+    } catch (error) {
+        console.error('Erro ao carregar centros de custo:', error);
+    }
+}
+
+function renderExamCcuOptions(centers) {
+    const select = document.getElementById('exam-ccu-select');
+    if (!select) return;
+    select.innerHTML = '';
+    centers.slice(0, 500).forEach(ccu => {
+        const option = document.createElement('option');
+        const cod = ccu.codccu || ccu.CODCCU || '';
+        const nome = ccu.nomccu || ccu.NOMCCU || 'Sem nome';
+        option.value = cod;
+        option.dataset.nome = nome;
+        option.textContent = `${cod} - ${nome}`;
+        select.appendChild(option);
+    });
+}
+
+function setupExamCcuFilter() {
+    const filterInput = document.getElementById('exam-ccu-filter');
+    const select = document.getElementById('exam-ccu-select');
+    if (!filterInput || !select) return;
+
+    filterInput.addEventListener('input', function() {
+        const f = this.value.toLowerCase().trim();
+        const filtered = !f ? examCostCenters : examCostCenters.filter(ccu => {
+            const cod = String(ccu.codccu || ccu.CODCCU || '').toLowerCase();
+            const nome = String(ccu.nomccu || ccu.NOMCCU || '').toLowerCase();
+            return cod.includes(f) || nome.includes(f);
+        });
+        renderExamCcuOptions(filtered);
+    });
+
+    select.addEventListener('change', function() {
+        const selected = this.selectedOptions[0];
+        if (!selected || !selected.value) return;
+        examSelectedCcu = selected.value;
+        document.getElementById('exam-codccu').value = selected.value;
+        document.getElementById('exam-nomeccu').value = selected.dataset.nome || '';
+        document.getElementById('exam-ccu-selected').textContent = selected.textContent;
+        // limpa o funcionário escolhido e carrega os funcionários deste centro de custo
+        document.getElementById('exam-numcad').value = '';
+        document.getElementById('exam-func-selected').textContent = '';
+        document.getElementById('exam-func-filter').value = '';
+        loadExamEmployeesByCcu(selected.value);
+    });
+}
+
+async function loadExamEmployeesByCcu(codccu) {
+    const funcInput = document.getElementById('exam-func-filter');
+    const funcSelect = document.getElementById('exam-func-select');
+    funcInput.disabled = true;
+    funcInput.placeholder = 'Carregando funcionarios do centro de custo...';
+    funcSelect.style.display = 'none';
+    examEmployees = [];
+    try {
+        const response = await fetch(`/integrations/senior/employees?codccu=${encodeURIComponent(codccu)}`);
+        const data = await response.json();
+        examEmployees = (data.status === 'ok' && data.data) ? data.data : [];
+    } catch (error) {
+        console.error('Erro ao carregar funcionarios do CC:', error);
+        examEmployees = [];
+    }
+    funcInput.disabled = false;
+    funcInput.placeholder = examEmployees.length
+        ? `Filtrar entre ${examEmployees.length} funcionario(s)...`
+        : 'Nenhum funcionario ativo neste centro de custo';
+    renderExamFuncOptions(examEmployees);
+}
+
+function renderExamFuncOptions(list) {
+    const select = document.getElementById('exam-func-select');
+    select.innerHTML = '';
+    list.slice(0, 200).forEach(emp => {
+        const option = document.createElement('option');
+        const name = emp.NOMFUN || emp.nomfun || '';
+        const numcad = emp.NUMCAD || emp.numcad || '';
+        option.value = name;
+        option.dataset.numcad = numcad;
+        option.dataset.cpf = emp.CPF || emp.cpf || '';
+        option.textContent = `${numcad} - ${name}`;
+        select.appendChild(option);
+    });
+    select.style.display = list.length > 0 ? 'block' : 'none';
+}
+
+function setupExamFuncFilter() {
+    const filterInput = document.getElementById('exam-func-filter');
+    const select = document.getElementById('exam-func-select');
+    if (!filterInput || !select) return;
+
+    filterInput.addEventListener('input', async function() {
+        const filter = this.value.toLowerCase().trim();
+        // Sem centro de custo selecionado: mantém o comportamento antigo (busca em todos)
+        if (!examSelectedCcu) {
+            if (filter.length < 2) { select.style.display = 'none'; return; }
+            await loadExamEmployees();
+        }
+        const filtered = !filter ? examEmployees : examEmployees.filter(emp => {
+            const name = (emp.NOMFUN || emp.nomfun || '').toLowerCase();
+            return name.includes(filter);
+        });
+        renderExamFuncOptions(filtered);
+    });
+
+    const pick = function() {
+        const selected = select.selectedOptions[0];
+        if (selected) {
+            filterInput.value = selected.value;
+            document.getElementById('exam-numcad').value = selected.dataset.numcad || '';
+            document.getElementById('exam-cpf').value = selected.dataset.cpf || '';
+            document.getElementById('exam-func-selected').textContent = selected.textContent;
+            select.style.display = 'none';
+        }
+    };
+    select.addEventListener('change', pick);
+    select.addEventListener('dblclick', pick);
+}
+
+// Caminho legado (sem centro de custo): busca todos os funcionários
 async function loadExamEmployees() {
     if (examEmployees.length > 0) return;
     try {
@@ -2142,60 +2631,6 @@ async function loadExamEmployees() {
     } catch (error) {
         console.error('Erro ao carregar funcionarios:', error);
     }
-}
-
-function setupExamFuncFilter() {
-    const filterInput = document.getElementById('exam-func-filter');
-    const select = document.getElementById('exam-func-select');
-    if (!filterInput || !select) return;
-
-    filterInput.addEventListener('input', async function() {
-        const filter = this.value.toLowerCase().trim();
-        if (filter.length < 2) {
-            select.style.display = 'none';
-            return;
-        }
-
-        await loadExamEmployees();
-
-        const filtered = examEmployees.filter(emp => {
-            const name = (emp.NOMFUN || emp.nomfun || '').toLowerCase();
-            return name.includes(filter);
-        });
-
-        select.innerHTML = '';
-        filtered.slice(0, 50).forEach(emp => {
-            const option = document.createElement('option');
-            const name = emp.NOMFUN || emp.nomfun || '';
-            const numcad = emp.NUMCAD || emp.numcad || '';
-            option.value = name;
-            option.dataset.numcad = numcad;
-            option.textContent = `${numcad} - ${name}`;
-            select.appendChild(option);
-        });
-
-        select.style.display = filtered.length > 0 ? 'block' : 'none';
-    });
-
-    select.addEventListener('change', function() {
-        const selected = this.selectedOptions[0];
-        if (selected) {
-            filterInput.value = selected.value;
-            document.getElementById('exam-numcad').value = selected.dataset.numcad || '';
-            document.getElementById('exam-func-selected').textContent = selected.textContent;
-            select.style.display = 'none';
-        }
-    });
-
-    select.addEventListener('dblclick', function() {
-        const selected = this.selectedOptions[0];
-        if (selected) {
-            filterInput.value = selected.value;
-            document.getElementById('exam-numcad').value = selected.dataset.numcad || '';
-            document.getElementById('exam-func-selected').textContent = selected.textContent;
-            select.style.display = 'none';
-        }
-    });
 }
 
 function updateExamTotal() {
@@ -2225,6 +2660,18 @@ function resetExamForm() {
     document.getElementById('exam-func-filter').value = '';
     document.getElementById('exam-func-selected').textContent = '';
     document.getElementById('exam-numcad').value = '';
+    document.getElementById('exam-cpf').value = '';
+    // limpa centro de custo
+    examSelectedCcu = '';
+    document.getElementById('exam-codccu').value = '';
+    document.getElementById('exam-nomeccu').value = '';
+    document.getElementById('exam-ccu-filter').value = '';
+    document.getElementById('exam-ccu-selected').textContent = '';
+    document.getElementById('exam-ccu-select').selectedIndex = -1;
+    const funcInput = document.getElementById('exam-func-filter');
+    funcInput.disabled = true;
+    funcInput.placeholder = 'Selecione um centro de custo acima...';
+    examEmployees = [];
     document.getElementById('exam-data').value = new Date().toISOString().split('T')[0];
     document.getElementById('exam-func-select').style.display = 'none';
     document.getElementById('exames-form-title').textContent = 'Cadastrar Exame Medico';
@@ -2247,6 +2694,11 @@ function getExamFormData() {
     const data = {
         nome_funcionario: document.getElementById('exam-func-filter').value.trim(),
         numcad: parseInt(document.getElementById('exam-numcad').value) || null,
+        cpf: document.getElementById('exam-cpf').value.trim() || null,
+        codccu: document.getElementById('exam-codccu').value.trim() || null,
+        nome_ccu: document.getElementById('exam-nomeccu').value.trim() || null,
+        origem: 'manual',
+        status: 'confirmado',
         data_exame: document.getElementById('exam-data').value,
     };
 
@@ -2333,28 +2785,57 @@ function renderExamList(exams) {
     tbody.innerHTML = '';
 
     if (!exams.length) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--gray-400); padding: 2rem;">Nenhum exame encontrado</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--gray-400); padding: 2rem;">Nenhum exame encontrado</td></tr>';
         return;
     }
 
     exams.forEach(exam => {
         const tr = document.createElement('tr');
-        tr.style.cssText = 'border-bottom: 1px solid var(--gray-700);';
+        const isDraft = (exam.status === 'rascunho');
+        tr.style.cssText = 'border-bottom: 1px solid var(--gray-700);' + (isDraft ? ' background: rgba(160,96,0,0.12);' : '');
 
         const dataFormatada = exam.data_exame ? new Date(exam.data_exame + 'T00:00:00').toLocaleDateString('pt-BR') : '-';
         const totalFormatado = (exam.total || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+        const origem = exam.origem === 'upload' ? ' (upload)' : '';
+        const statusBadge = isDraft
+            ? `<span style="font-size:0.65rem; padding:0.15rem 0.5rem; border-radius:6px; background:#a06000; color:#fff;">RASCUNHO${origem}</span>`
+            : `<span style="font-size:0.65rem; padding:0.15rem 0.5rem; border-radius:6px; background:#1f7a3d; color:#fff;">CONFIRMADO</span>`;
+        const confirmBtn = isDraft
+            ? `<button onclick="confirmExam(${exam.id})" style="background: var(--gold); border: 1px solid var(--gold); color: #111; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.7rem; font-family: 'Space Grotesk', sans-serif; margin-right: 0.25rem; font-weight:600;">Confirmar</button>`
+            : '';
 
         tr.innerHTML = `
             <td style="padding: 0.75rem 0.5rem; color: var(--gray-200); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;" title="${exam.nome_funcionario}">${exam.nome_funcionario}</td>
             <td style="padding: 0.75rem 0.5rem; text-align: center; color: var(--gray-300); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">${dataFormatada}</td>
             <td style="padding: 0.75rem 0.5rem; text-align: right; color: var(--gold); font-family: 'JetBrains Mono', monospace; font-weight: 600;">R$ ${totalFormatado}</td>
+            <td style="padding: 0.75rem 0.5rem; text-align: center;">${statusBadge}</td>
             <td style="padding: 0.75rem 0.5rem; text-align: center; white-space: nowrap;">
+                ${confirmBtn}
                 <button onclick="editExam(${exam.id})" style="background: none; border: 1px solid var(--gold); color: var(--gold); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.7rem; font-family: 'Space Grotesk', sans-serif; margin-right: 0.25rem;">Editar</button>
                 <button onclick="deleteExam(${exam.id})" style="background: none; border: 1px solid var(--error); color: var(--error); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.7rem; font-family: 'Space Grotesk', sans-serif;">Excluir</button>
             </td>
         `;
         tbody.appendChild(tr);
     });
+}
+
+async function confirmExam(id) {
+    if (!confirm('Confirmar este exame? Ele passará a contar na exportação.')) return;
+    try {
+        const response = await fetch(`/api/medical-exams/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'confirmado' })
+        });
+        if (response.ok) {
+            loadExamList();
+        } else {
+            const j = await response.json();
+            alert('Erro ao confirmar: ' + (j.message || j.detail || 'desconhecido'));
+        }
+    } catch (e) {
+        alert('Erro ao confirmar: ' + e.message);
+    }
 }
 
 function renderExamPagination(currentPage, totalPages, total) {
@@ -2407,9 +2888,23 @@ async function editExam(id) {
         document.getElementById('btn-toggle-exam-form').textContent = 'Fechar';
         document.getElementById('exames-form-title').textContent = 'Editar Exame Medico';
         document.getElementById('exam-edit-id').value = exam.id;
-        document.getElementById('exam-func-filter').value = exam.nome_funcionario;
+        // Exame existente: centro de custo não é armazenado neste cadastro, então o
+        // campo de funcionário fica habilitado para manter/ajustar diretamente.
+        examSelectedCcu = '';
+        document.getElementById('exam-codccu').value = '';
+        document.getElementById('exam-ccu-selected').textContent = '';
+        const funcInput = document.getElementById('exam-func-filter');
+        funcInput.disabled = false;
+        funcInput.placeholder = 'Digite para buscar funcionario...';
+        funcInput.value = exam.nome_funcionario;
         document.getElementById('exam-func-selected').textContent = exam.nome_funcionario;
         document.getElementById('exam-numcad').value = exam.numcad || '';
+        document.getElementById('exam-cpf').value = exam.cpf || '';
+        document.getElementById('exam-codccu').value = exam.codccu || '';
+        document.getElementById('exam-nomeccu').value = exam.nome_ccu || '';
+        if (exam.codccu) {
+            document.getElementById('exam-ccu-selected').textContent = exam.codccu + (exam.nome_ccu ? ' - ' + exam.nome_ccu : '');
+        }
         document.getElementById('exam-data').value = exam.data_exame || '';
 
         const fields = ['clinic','audio','acuid','hemo','lipidograma','rx_coluna','met_e_cet','acet_u','hg','retic','ac_trans','eeg','ecg','etanol','glice','gama_gt','tgp','rx_torax','espiro','rx_lomb','aval_psicossocial'];

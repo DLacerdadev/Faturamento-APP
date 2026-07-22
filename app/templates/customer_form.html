@@ -4,7 +4,7 @@
 
 {% block content %}
 <div style="margin-bottom: 2rem;">
-    <a href="/customers?token={{ token }}" style="color: #667eea; text-decoration: none;">&larr; Voltar para lista</a>
+    <a href="/customers" style="color: #667eea; text-decoration: none;">&larr; Voltar para lista</a>
 </div>
 
 <div class="card">
@@ -57,7 +57,7 @@ document.getElementById('customer-form').addEventListener('submit', async functi
             successAlert.textContent = 'Cliente criado com sucesso!';
             successAlert.style.display = 'block';
             setTimeout(() => {
-                window.location.href = '/customers/' + data.id + '?token=' + AUTH_TOKEN;
+                window.location.href = '/customers/' + data.id;
             }, 1000);
         } else {
             const data = await response.json();
