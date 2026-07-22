@@ -12,6 +12,14 @@ Hoje os totais do sistema (competência inteira, somando todos os cálculos da f
 
 Esta feature cria um **relatório de conciliação** que demonstra, com números, a ponte entre os dois recortes: total da competência inteira → (menos) cálculos fora do recorte mensal → total do recorte mensal. O objetivo de negócio é que a conferência mensal feche **de forma autônoma pela contabilidade**, usando apenas o relatório, sem intervenção do Daniel. Acompanha o relatório um **documento de conciliação** (tarefa 3.1) que formaliza a explicação do recorte com exemplos numéricos reais, para aprovação de quem confere.
 
+## Clarifications
+
+### Session 2026-07-22
+
+- Q: Ao gerar a conciliação de uma competência, de onde vêm os números? → A: Consulta à Senior no momento da geração, reutilizando o padrão de tarefa em segundo plano das exportações (números sempre atuais; sem armazenamento novo de folha; resultado não é persistido).
+- Q: Até onde desce o detalhamento da conciliação (drill-down do FR-2)? → A: Agregado por evento (valor total + quantidade de lançamentos por evento dentro de cada código de cálculo); sem dados por funcionário na tela ou na planilha.
+- Q: A classificação de um código de cálculo vale globalmente ou por competência? → A: Global por codcal — uma classificação única aplicada a todas as competências; alterações auditadas.
+
 ## User Scenarios & Testing
 
 ### Primary Flow
@@ -42,14 +50,15 @@ Esta feature cria um **relatório de conciliação** que demonstra, com números
 ## Functional Requirements
 
 - **FR-1**: O sistema deve oferecer uma tela de conciliação por competência, com filtro opcional por centro de custo, exibindo: (a) total da competência inteira; (b) decomposição por código de cálculo com valor e classificação; (c) total do recorte mensal; (d) resíduo da ponte (deve ser zero quando tudo classificado).
-- **FR-2**: A decomposição deve permitir detalhamento (drill-down) de cada código de cálculo por evento da folha, com valores, para conferência evento a evento.
-- **FR-3**: O sistema deve manter uma classificação configurável de códigos de cálculo ("entra no recorte mensal" / "fora do recorte"), editável por gestor+ na própria tela, persistida e auditada (quem alterou, quando, de → para).
+- **FR-2**: A decomposição deve permitir detalhamento (drill-down) de cada código de cálculo por evento da folha, **agregado por evento** (valor total e quantidade de lançamentos), para conferência evento a evento. Nenhum dado individual de funcionário (nome, CPF, valores por pessoa) aparece na tela ou na planilha exportada.
+- **FR-3**: O sistema deve manter uma classificação configurável de códigos de cálculo ("entra no recorte mensal" / "fora do recorte"), **global por código** (uma única classificação vale para todas as competências), editável por gestor+ na própria tela, persistida e auditada (quem alterou, quando, de → para).
 - **FR-4**: A classificação inicial deve vir pré-carregada por heurística a partir dos códigos de cálculo conhecidos da competência de referência, e o mecanismo deve prever a substituição futura pela marcação oficial de tipo de cálculo quando a Senior a expuser (sem retrabalho para o usuário).
 - **FR-5**: Códigos de cálculo não classificados devem ser destacados visualmente e impedir que a conciliação seja apresentada como "fechada"; o status da conciliação (fechada / incompleta / com resíduo) deve ser explícito.
 - **FR-6**: O relatório deve ser exportável em planilha com as mesmas informações da tela (resumo + decomposição + detalhamento), incluindo competência, filtro aplicado e data/hora de geração.
 - **FR-7**: O acesso à tela e à exportação deve ser restrito a gestor e admin; toda geração/exportação deve ser registrada na trilha de auditoria.
 - **FR-8**: Deve ser produzido o **documento de conciliação** (tarefa 3.1): explicação da diferença de recorte com ao menos 2 exemplos numéricos de competências reais (valores reais, sem dados pessoais de funcionários — apenas totais e códigos de cálculo), versionado no repositório e submetido à aprovação de quem confere (contabilidade/cliente).
 - **FR-9**: A pendência junto à Senior (exposição da marcação de tipo de cálculo) deve ficar registrada no documento de conciliação com a data do último follow-up (tarefa 3.3 do plano, recorrência mensal).
+- **FR-10**: A geração da conciliação consulta a integração da folha no momento do pedido e executa em segundo plano com indicação de progresso (mesmo padrão das exportações), respeitando o limite de tempo do SC-4; o resultado não é persistido — a planilha exportada é o registro da conferência.
 
 ## Success Criteria
 
