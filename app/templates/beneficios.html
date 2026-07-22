@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Eventos de Benefício - Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .msg { padding: 0.8rem 1rem; margin: 1rem 0; border-left: 4px solid; font-weight: 500; display: none; font-size: 0.85rem; }
+    .msg.show { display: block; }
+    .msg.ok { background: rgba(74,222,128,0.1); color: var(--success); border-color: var(--success); }
+    .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
+    .hint { font-size: 0.82rem; color: var(--text-muted); }
+    table.be { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    table.be th { background: var(--table-header-bg); color: var(--gold); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; padding: 0.6rem; text-align: left; }
+    table.be td { border-bottom: 1px solid var(--border-color); padding: 0.5rem 0.6rem; vertical-align: middle; }
+    table.be input[type=text], table.be select { padding: 0.4rem 0.5rem; font-size: 0.8rem; width: 100%; }
+    .codeve { font-family: 'JetBrains Mono', monospace; color: var(--gold); font-weight: 700; }
+    .pill { font-size: 0.68rem; padding: 0.15rem 0.6rem; border-radius: 2px; font-weight: 700; text-transform: uppercase; }
+    .pill.on { background: rgba(74,222,128,0.2); color: var(--success); border: 1px solid var(--success); }
+    .pill.off { background: rgba(251,191,36,0.18); color: var(--warning); border: 1px solid var(--warning); }
+    .row-actions { white-space: nowrap; }
+    .row-actions button { font-size: 0.7rem; padding: 0.35rem 0.6rem; margin-right: 0.2rem; }
+    .new-grid { display: grid; grid-template-columns: 110px 1fr 1fr 120px; gap: 0.6rem; align-items: end; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Eventos de Benefício (Senior → Faturamento)</h1>
+</div>
+
+<div class="card">
+    <p class="hint">Mapeia o <b>evento da folha Senior (CODEVE)</b> para a coluna do faturamento. Só os <b>ativos</b> entram na exportação. Os pendentes ficam desligados até você confirmar os valores.</p>
+    <div id="msg" class="msg"></div>
+    <div style="overflow-x:auto;">
+        <table class="be">
+            <thead>
+                <tr>
+                    <th>CODEVE</th><th>Descrição</th><th>Grupo</th><th>Coluna no Faturamento</th>
+                    <th>Status</th><th>Observação</th><th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="be-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h2>Adicionar evento</h2></div>
+    <div class="new-grid">
+        <div><label>CODEVE</label><input type="text" id="n-cod" placeholder="ex.: 3611"></div>
+        <div><label>Descrição</label><input type="text" id="n-desc" placeholder="ex.: Vale Refeição"></div>
+        <div><label>Coluna no Faturamento</label>
+            <select id="n-col"></select>
+        </div>
+        <div><button class="btn" onclick="createEvent()">Adicionar</button></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const HEADERS = { "Authorization": "Bearer " + AUTH_TOKEN };
+const JSON_HEADERS = { ...HEADERS, "Content-Type": "application/json" };
+const COLUNAS = {{ colunas | tojson }};
+let eventos = [];
+
+function showMsg(t, ok) {
+    const m = document.getElementById("msg");
+    m.className = "msg show " + (ok ? "ok" : "err");
+    m.textContent = t;
+}
+function colOptions(sel) {
+    return COLUNAS.map(c => `<option value="${c}" ${c === sel ? "selected" : ""}>${c}</option>`).join("")
+        + (COLUNAS.includes(sel) || !sel ? "" : `<option value="${sel}" selected>${sel}</option>`);
+}
+async function load() {
+    const r = await fetch("/api/benefit-events", { headers: HEADERS, credentials: "same-origin" });
+    eventos = (await r.json()).data || [];
+    render();
+    document.getElementById("n-col").innerHTML = colOptions("PAGTO. VALE REFEICAO (Valor)");
+}
+function render() {
+    document.getElementById("be-body").innerHTML = eventos.map(e => `
+        <tr data-id="${e.id}">
+            <td class="codeve">${e.codeve}</td>
+            <td><input type="text" data-f="descricao" value="${(e.descricao||'').replace(/"/g,'&quot;')}"></td>
+            <td><input type="text" data-f="grupo" value="${e.grupo||''}" style="max-width:90px;"></td>
+            <td><select data-f="coluna_femsa">${colOptions(e.coluna_femsa)}</select></td>
+            <td><span class="pill ${e.ativo ? 'on':'off'}">${e.ativo ? 'ATIVO':'pendente'}</span></td>
+            <td><input type="text" data-f="observacao" value="${(e.observacao||'').replace(/"/g,'&quot;')}"></td>
+            <td class="row-actions">
+                <button class="btn btn-outline" onclick="toggle(${e.id})">${e.ativo ? 'Desligar':'Ativar'}</button>
+                <button class="btn btn-secondary" onclick="save(${e.id})">Salvar</button>
+                <button class="btn btn-danger" onclick="del(${e.id})">×</button>
+            </td>
+        </tr>`).join("");
+}
+function rowData(id) {
+    const tr = document.querySelector(`tr[data-id="${id}"]`);
+    const e = eventos.find(x => x.id === id);
+    const get = f => tr.querySelector(`[data-f="${f}"]`).value;
+    return { codeve: e.codeve, descricao: get("descricao"), grupo: get("grupo"),
+             coluna_femsa: get("coluna_femsa"), observacao: get("observacao"), ativo: e.ativo };
+}
+async function save(id) {
+    const r = await fetch(`/api/benefit-events/${id}`, { method:"PUT", headers:JSON_HEADERS, credentials:"same-origin", body: JSON.stringify(rowData(id)) });
+    if (r.ok) { await load(); showMsg("Evento salvo.", true); } else { showMsg("Erro ao salvar.", false); }
+}
+async function toggle(id) {
+    const r = await fetch(`/api/benefit-events/${id}/toggle`, { method:"PATCH", headers:HEADERS, credentials:"same-origin" });
+    if (r.ok) { await load(); const e=(await r.json()).data; showMsg("Status atualizado.", true); } else { showMsg("Erro.", false); }
+}
+async function del(id) {
+    if (!confirm("Remover este evento do mapeamento?")) return;
+    const r = await fetch(`/api/benefit-events/${id}`, { method:"DELETE", headers:HEADERS, credentials:"same-origin" });
+    if (r.ok) { await load(); }
+}
+async function createEvent() {
+    const cod = parseInt(document.getElementById("n-cod").value);
+    if (!cod) { showMsg("Informe o CODEVE.", false); return; }
+    const payload = { codeve: cod, descricao: document.getElementById("n-desc").value.trim(),
+                      coluna_femsa: document.getElementById("n-col").value, ativo: false, grupo: "" };
+    const r = await fetch("/api/benefit-events", { method:"POST", headers:JSON_HEADERS, credentials:"same-origin", body: JSON.stringify(payload) });
+    const j = await r.json();
+    if (r.ok) { document.getElementById("n-cod").value=""; document.getElementById("n-desc").value=""; await load(); showMsg("Evento adicionado (pendente).", true); }
+    else { showMsg(j.detail || "Erro ao adicionar.", false); }
+}
+load();
+{% endblock %}
