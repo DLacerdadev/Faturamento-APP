@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoria - Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hint { font-size: 0.8rem; color: var(--text-muted); }
+    .msg { padding: 0.7rem 1rem; margin: 0.8rem 0; border-left: 4px solid; font-weight: 500; display: none; font-size: 0.85rem; white-space: pre-wrap; }
+    .msg.show { display: block; }
+    .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
+
+    .filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.9rem; align-items: end; }
+    .filtros .form-group { margin-bottom: 0; }
+    .filtros-acoes { display: flex; gap: 0.6rem; }
+
+    table.logs th { background: var(--table-header-bg); color: var(--gold); text-transform: uppercase; font-size: 0.68rem; letter-spacing: 1px; padding: 0.55rem; text-align: left; }
+    table.logs td { border-bottom: 1px solid var(--border-color); padding: 0.5rem 0.55rem; font-size: 0.82rem; vertical-align: middle; }
+    table.logs tr.log-row { cursor: pointer; }
+    table.logs tr.log-row:hover td { background: var(--bg-tertiary); }
+    .u-ident { font-family: 'JetBrains Mono', monospace; color: var(--text-muted); font-size: 0.72rem; }
+    .mono-cell { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+
+    .badge-role { font-size: 0.6rem; padding: 0.1rem 0.45rem; border-radius: 2px; border: 1px solid; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; margin-left: 0.35rem; }
+    .badge-role.admin { background: rgba(251,191,36,0.15); color: var(--gold); border-color: var(--gold); }
+    .badge-role.gestor { background: rgba(96,165,250,0.12); color: #60a5fa; border-color: #60a5fa; }
+    .badge-role.operador { background: rgba(148,163,184,0.12); color: var(--text-muted); border-color: var(--text-muted); }
+
+    .badge-st { font-size: 0.62rem; padding: 0.12rem 0.5rem; border-radius: 2px; border: 1px solid; text-transform: uppercase; font-weight: 700; }
+    .badge-st.ok { background: rgba(74,222,128,0.12); color: var(--success); border-color: var(--success); }
+    .badge-st.negado { background: rgba(251,191,36,0.12); color: var(--warning); border-color: var(--warning); }
+    .badge-st.erro { background: rgba(248,113,113,0.12); color: var(--error); border-color: var(--error); }
+
+    tr.det-row { display: none; }
+    tr.det-row.open { display: table-row; }
+    tr.det-row td { background: var(--bg-primary); padding: 0.75rem 1rem; }
+    tr.det-row pre {
+        font-family: 'JetBrains Mono', monospace; font-size: 0.74rem;
+        color: var(--text-secondary); white-space: pre-wrap; word-break: break-word;
+        margin: 0; max-height: 320px; overflow-y: auto;
+    }
+    .chev { font-size: 16px; vertical-align: middle; color: var(--text-muted); transition: transform 0.15s ease; }
+    tr.log-row.open .chev { transform: rotate(90deg); color: var(--gold-text); }
+
+    .pager { display: flex; gap: 1rem; align-items: center; justify-content: center; margin-top: 1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Auditoria</h1>
+</div>
+<p class="hint" style="margin-bottom: 1.2rem;">
+    Trilha imutável das ações do sistema: quem fez o quê, quando e de onde.
+    Clique numa linha para ver o detalhe da ação. Somente administradores enxergam esta tela.
+</p>
+
+<div id="topmsg" class="msg"></div>
+
+<div class="card">
+    <div class="card-header"><h2>Filtros</h2></div>
+    <div class="filtros">
+        <div class="form-group">
+            <label for="f-username">Usuário</label>
+            <input type="text" id="f-username" placeholder="ex.: maria">
+        </div>
+        <div class="form-group">
+            <label for="f-acao">Ação</label>
+            <select id="f-acao">
+                <option value="">Todas</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="f-entidade">Entidade</label>
+            <input type="text" id="f-entidade" placeholder="ex.: pedido">
+        </div>
+        <div class="form-group">
+            <label for="f-status">Status</label>
+            <select id="f-status">
+                <option value="">Todos</option>
+                <option value="ok">OK</option>
+                <option value="negado">Negado</option>
+                <option value="erro">Erro</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="f-de">De</label>
+            <input type="date" id="f-de">
+        </div>
+        <div class="form-group">
+            <label for="f-ate">Até</label>
+            <input type="date" id="f-ate">
+        </div>
+        <div class="filtros-acoes">
+            <button class="btn" onclick="aplicarFiltros()">
+                <span class="material-symbols-outlined">filter_alt</span> Filtrar
+            </button>
+            <button class="btn btn-secondary" onclick="limparFiltros()">Limpar</button>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h2>Registros</h2></div>
+    <div style="overflow-x:auto;">
+        <table class="logs" style="width:100%; border-collapse:collapse;">
+            <thead>
+                <tr>
+                    <th style="width:24px;"></th>
+                    <th>Data/Hora</th>
+                    <th>Usuário</th>
+                    <th>Ação</th>
+                    <th>Entidade</th>
+                    <th>IP</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="logs-body">
+                <tr><td colspan="7" style="text-align:center; padding:1.2rem; color:var(--text-muted);">Carregando...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pager" id="pager"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const HEADERS = { "Authorization": "Bearer " + AUTH_TOKEN };
+let page = 1;
+const PER_PAGE = 50;
+
+function esc(s) { return String(s == null ? "" : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showErr(t) {
+    const m = document.getElementById("topmsg");
+    m.className = "msg show err";
+    m.textContent = t;
+}
+function hideErr() { document.getElementById("topmsg").className = "msg"; }
+
+function fmtTs(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return esc(iso);
+    const p = n => String(n).padStart(2, "0");
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+async function loadAcoes() {
+    try {
+        const r = await fetch("/api/audit-logs/acoes", { headers: HEADERS, credentials: "same-origin" });
+        const j = await r.json();
+        if (!r.ok) return;
+        const sel = document.getElementById("f-acao");
+        (j.data || []).forEach(a => {
+            const opt = document.createElement("option");
+            opt.value = a;
+            opt.textContent = a;
+            sel.appendChild(opt);
+        });
+    } catch (e) { /* filtro de ação fica só com "Todas" */ }
+}
+
+function filtrosQuery() {
+    const params = new URLSearchParams();
+    const val = id => document.getElementById(id).value.trim();
+    if (val("f-username")) params.set("username", val("f-username"));
+    if (val("f-acao")) params.set("acao", val("f-acao"));
+    if (val("f-entidade")) params.set("entidade", val("f-entidade"));
+    if (val("f-status")) params.set("status", val("f-status"));
+    if (val("f-de")) params.set("de", val("f-de"));
+    if (val("f-ate")) params.set("ate", val("f-ate"));
+    params.set("page", page);
+    params.set("per_page", PER_PAGE);
+    return params.toString();
+}
+
+async function loadLogs() {
+    hideErr();
+    const body = document.getElementById("logs-body");
+    try {
+        const r = await fetch("/api/audit-logs?" + filtrosQuery(), { headers: HEADERS, credentials: "same-origin" });
+        const j = await r.json();
+        if (!r.ok) { showErr(j.detail || "Erro ao carregar a auditoria."); return; }
+        renderRows(j.data || []);
+        renderPager(j.page, j.total_pages, j.total);
+    } catch (e) {
+        showErr("Erro de comunicação ao carregar a auditoria.");
+        body.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:1.2rem; color:var(--text-muted);">Falha ao carregar.</td></tr>';
+    }
+}
+
+function renderRows(logs) {
+    const body = document.getElementById("logs-body");
+    if (!logs.length) {
+        body.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:1.2rem; color:var(--text-muted);">Nenhum registro encontrado.</td></tr>';
+        return;
+    }
+    body.innerHTML = logs.map(l => {
+        const role = (l.role || "").toLowerCase();
+        const roleBadge = role ? `<span class="badge-role ${esc(role)}">${esc(role)}</span>` : "";
+        const usuario = l.username
+            ? `${esc(l.username)}${roleBadge}`
+            : '<span class="u-ident">anônimo</span>';
+        const ent = l.entidade
+            ? `${esc(l.entidade)}${l.entidade_id ? "#" + esc(l.entidade_id) : ""}`
+            : "—";
+        const st = (l.status || "ok").toLowerCase();
+        const stCls = (st === "ok" || st === "negado" || st === "erro") ? st : "erro";
+        const detalhe = (l.detalhe !== null && l.detalhe !== undefined)
+            ? JSON.stringify(l.detalhe, null, 2)
+            : "Sem detalhe registrado.";
+        return `
+        <tr class="log-row" onclick="toggleDet(${l.id})" id="row-${l.id}">
+            <td><span class="material-symbols-outlined chev">chevron_right</span></td>
+            <td class="mono-cell">${fmtTs(l.ts)}</td>
+            <td>${usuario}</td>
+            <td class="mono-cell">${esc(l.acao)}</td>
+            <td class="mono-cell">${ent}</td>
+            <td class="u-ident">${esc(l.ip || "—")}</td>
+            <td><span class="badge-st ${stCls}">${esc(st)}</span></td>
+        </tr>
+        <tr class="det-row" id="det-${l.id}">
+            <td colspan="7"><pre>${esc(detalhe)}</pre></td>
+        </tr>`;
+    }).join("");
+}
+
+function toggleDet(id) {
+    const det = document.getElementById("det-" + id);
+    const row = document.getElementById("row-" + id);
+    if (!det || !row) return;
+    det.classList.toggle("open");
+    row.classList.toggle("open");
+}
+
+function renderPager(p, totalPages, total) {
+    const el = document.getElementById("pager");
+    if (!totalPages || totalPages <= 1) {
+        el.innerHTML = `<span class="hint">${total} registro(s)</span>`;
+        return;
+    }
+    el.innerHTML = `
+        <button class="btn btn-outline" ${p <= 1 ? 'disabled' : ''} onclick="page=${p - 1};loadLogs()">‹ Anterior</button>
+        <span class="hint">Página ${p} de ${totalPages} (${total} registros)</span>
+        <button class="btn btn-outline" ${p >= totalPages ? 'disabled' : ''} onclick="page=${p + 1};loadLogs()">Próxima ›</button>`;
+}
+
+function aplicarFiltros() { page = 1; loadLogs(); }
+function limparFiltros() {
+    ["f-username", "f-entidade", "f-de", "f-ate"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("f-acao").value = "";
+    document.getElementById("f-status").value = "";
+    page = 1;
+    loadLogs();
+}
+
+["f-username", "f-entidade"].forEach(id => {
+    document.getElementById(id).addEventListener("keydown", e => { if (e.key === "Enter") aplicarFiltros(); });
+});
+
+loadAcoes();
+loadLogs();
+{% endblock %}
