@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="5">
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<title>Monitor Senior — DEV</title>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --bg-2: #1a1a1a;
+    --bg-3: #232323;
+    --gold: #d4a84b;
+    --text: #e6e6e6;
+    --muted: #888;
+    --border: #2c2c2c;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --error: #ef4444;
+    --info: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 1.2rem;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 13px;
+  }
+  h1 {
+    margin: 0 0 0.3rem;
+    font-size: 1.05rem;
+    color: var(--gold);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+  .lead {
+    color: var(--muted);
+    margin: 0 0 1.2rem;
+    font-size: 0.78rem;
+  }
+  .lead .pulse {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--ok);
+    margin-right: 0.4rem;
+    animation: pulse 1.6s ease-in-out infinite;
+    vertical-align: middle;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .counters {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 1.2rem;
+  }
+  .counter {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.6rem 0.8rem;
+  }
+  .counter .label {
+    font-size: 0.6rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .counter .value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 0.15rem;
+  }
+  .counter.ok    .value { color: var(--ok); }
+  .counter.error .value { color: var(--error); }
+  .counter.warn  .value { color: var(--warn); }
+
+  .toolbar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.8rem;
+  }
+  .toolbar form { display: inline; }
+  button, .btn {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.35rem 0.8rem;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: border-color .15s ease;
+  }
+  button:hover { border-color: var(--gold); color: var(--gold); }
+  .meta { color: var(--muted); font-size: 0.7rem; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  thead th {
+    background: rgba(212, 168, 75, 0.06);
+    color: var(--gold);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: left;
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid var(--gold);
+  }
+  tbody td {
+    padding: 0.4rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(212, 168, 75, 0.04); }
+  .badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 3px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .badge.info  { background: rgba(96, 165, 250, 0.18); color: var(--info); }
+  .badge.ok    { background: rgba(74, 222, 128, 0.18); color: var(--ok); }
+  .badge.warn  { background: rgba(251, 191, 36, 0.18); color: var(--warn); }
+  .badge.error { background: rgba(239, 68, 68, 0.18); color: var(--error); }
+  .lat-fast { color: var(--ok); }
+  .lat-slow { color: var(--warn); }
+  .lat-vslow { color: var(--error); }
+  .empty {
+    text-align: center;
+    padding: 2rem;
+    color: var(--muted);
+    font-style: italic;
+  }
+  .col-ts    { width: 110px; white-space: nowrap; color: var(--muted); }
+  .col-kind  { width: 100px; }
+  .col-label { width: 180px; }
+  .col-lat   { width: 80px; text-align: right; }
+  .col-detail { word-break: break-word; }
+</style>
+</head>
+<body>
+
+<h1>Monitor Senior — DEV</h1>
+<p class="lead">
+  <span class="pulse"></span>
+  Auto-refresh a cada 5s · captura últimos 300 eventos das chamadas SOAP Senior
+</p>
+
+<div class="counters">
+  <div class="counter">
+    <div class="label">Total SOAPs</div>
+    <div class="value">{{ counters.soap_total }}</div>
+  </div>
+  <div class="counter ok">
+    <div class="label">OK (200)</div>
+    <div class="value">{{ counters.soap_ok }}</div>
+  </div>
+  <div class="counter error">
+    <div class="label">Erros</div>
+    <div class="value">{{ counters.soap_error }}</div>
+  </div>
+  <div class="counter error">
+    <div class="label">503 / F5</div>
+    <div class="value">{{ counters.soap_503 }}</div>
+  </div>
+  <div class="counter error">
+    <div class="label">Connection Reset</div>
+    <div class="value">{{ counters.soap_reset }}</div>
+  </div>
+  <div class="counter error">
+    <div class="label">Timeout</div>
+    <div class="value">{{ counters.soap_timeout }}</div>
+  </div>
+  <div class="counter warn">
+    <div class="label">Lentas (&gt;5s)</div>
+    <div class="value">{{ counters.soap_slow }}</div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <form method="post" action="/monitor/reset" onsubmit="return confirm('Zerar contadores e buffer?')">
+    <button type="submit">↻ Resetar buffer</button>
+  </form>
+  <span class="meta">Mostrando {{ events|length }} eventos (mais recente primeiro)</span>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th class="col-ts">Hora (UTC)</th>
+      <th class="col-kind">Tipo</th>
+      <th class="col-label">Operação</th>
+      <th class="col-lat">Latência</th>
+      <th class="col-detail">Detalhe</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if events %}
+      {% for e in events %}
+      <tr>
+        <td class="col-ts">{{ e.ts.split("T")[1].split("+")[0][:8] }}</td>
+        <td class="col-kind">
+          {% if e.severity == "error" %}
+            <span class="badge error">{{ e.kind }}</span>
+          {% elif e.severity == "warn" %}
+            <span class="badge warn">{{ e.kind }}</span>
+          {% elif e.kind == "soap_start" %}
+            <span class="badge info">{{ e.kind }}</span>
+          {% else %}
+            <span class="badge ok">{{ e.kind }}</span>
+          {% endif %}
+        </td>
+        <td class="col-label">{{ e.label }}</td>
+        <td class="col-lat">
+          {% if e.elapsed_s is none %}
+            —
+          {% elif e.elapsed_s < 1 %}
+            <span class="lat-fast">{{ "%.2f"|format(e.elapsed_s) }}s</span>
+          {% elif e.elapsed_s < 5 %}
+            <span class="lat-fast">{{ "%.2f"|format(e.elapsed_s) }}s</span>
+          {% elif e.elapsed_s < 30 %}
+            <span class="lat-slow">{{ "%.2f"|format(e.elapsed_s) }}s</span>
+          {% else %}
+            <span class="lat-vslow">{{ "%.2f"|format(e.elapsed_s) }}s</span>
+          {% endif %}
+        </td>
+        <td class="col-detail">{{ e.detail }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="5" class="empty">Sem eventos ainda — dispare uma operação (consulta de folha, export, etc) e atualize.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+</body>
+</html>
