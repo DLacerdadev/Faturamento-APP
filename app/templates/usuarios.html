@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}Usuários - Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hint { font-size: 0.8rem; color: var(--text-muted); }
+    .msg { padding: 0.7rem 1rem; margin: 0.8rem 0; border-left: 4px solid; font-weight: 500; display: none; font-size: 0.85rem; white-space: pre-wrap; }
+    .msg.show { display: block; }
+    .msg.ok { background: rgba(74,222,128,0.1); color: var(--success); border-color: var(--success); }
+    .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
+
+    table.users th { background: var(--table-header-bg); color: var(--gold); text-transform: uppercase; font-size: 0.68rem; letter-spacing: 1px; padding: 0.55rem; text-align: left; }
+    table.users td { border-bottom: 1px solid var(--border-color); padding: 0.5rem 0.55rem; font-size: 0.82rem; vertical-align: middle; }
+    table.users tr:hover td { background: var(--bg-tertiary); }
+    .u-ident { font-family: 'JetBrains Mono', monospace; color: var(--text-muted); font-size: 0.72rem; }
+
+    .badge-role { font-size: 0.62rem; padding: 0.12rem 0.5rem; border-radius: 2px; border: 1px solid; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+    .badge-role.admin { background: rgba(251,191,36,0.15); color: var(--gold); border-color: var(--gold); }
+    .badge-role.gestor { background: rgba(96,165,250,0.12); color: #60a5fa; border-color: #60a5fa; }
+    .badge-role.operador { background: rgba(148,163,184,0.12); color: var(--text-muted); border-color: var(--text-muted); }
+
+    .badge-status { font-size: 0.62rem; padding: 0.12rem 0.5rem; border-radius: 2px; border: 1px solid; text-transform: uppercase; font-weight: 700; }
+    .badge-status.on { background: rgba(74,222,128,0.12); color: var(--success); border-color: var(--success); }
+    .badge-status.off { background: rgba(248,113,113,0.12); color: var(--error); border-color: var(--error); }
+
+    .btn-mini { padding: 0.3rem 0.7rem; font-size: 0.72rem; }
+    .acoes { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+    .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 900;
+        display: flex; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-box {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-top: 4px solid var(--gold);
+        padding: 1.5rem;
+        max-width: 480px;
+        width: 100%;
+    }
+    .modal-box h3 { color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; font-size: 1rem; }
+    .modal-box .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+    .modal-msg { margin-top: 0.8rem; margin-bottom: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Usuários</h1>
+    <button class="btn" onclick="novoUsuario()">+ Novo usuário</button>
+</div>
+<p class="hint" style="margin-bottom: 1.2rem;">
+    Gestão de acesso ao sistema: papéis (<b>operador</b> &lt; <b>gestor</b> &lt; <b>admin</b>),
+    ativação de contas e redefinição de senha. Somente administradores enxergam esta tela.
+</p>
+
+<div id="topmsg" class="msg"></div>
+
+<div class="card">
+    <div class="card-header"><h2>Usuários cadastrados</h2></div>
+    <div style="overflow-x:auto;">
+        <table class="users" style="width:100%; border-collapse:collapse;">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Username / Email</th>
+                    <th>Papel</th>
+                    <th>Ativo</th>
+                    <th>Último login</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="users-body">
+                <tr><td colspan="6" style="text-align:center; padding:1.2rem; color:var(--text-muted);">Carregando...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal criar/editar usuário -->
+<div id="user-modal" style="display:none;">
+    <div class="modal-backdrop">
+        <div class="modal-box">
+            <h3 id="user-modal-title">Novo usuário</h3>
+            <div class="form-group">
+                <label for="f-nome">Nome completo</label>
+                <input type="text" id="f-nome" placeholder="ex.: Maria Silva">
+            </div>
+            <div class="form-group">
+                <label for="f-username">Username</label>
+                <input type="text" id="f-username" placeholder="ex.: maria.silva">
+            </div>
+            <div class="form-group">
+                <label for="f-email">Email</label>
+                <input type="email" id="f-email" placeholder="ex.: maria@empresa.com">
+            </div>
+            <div class="form-group">
+                <label for="f-role">Papel</label>
+                <select id="f-role">
+                    <option value="operador">Operador</option>
+                    <option value="gestor">Gestor</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="form-group" id="grp-senha">
+                <label for="f-senha">Senha (mínimo 8 caracteres)</label>
+                <input type="password" id="f-senha" autocomplete="new-password">
+            </div>
+            <div class="form-group" id="grp-ativo" style="display:none;">
+                <label style="display:flex; align-items:center; gap:0.4rem; text-transform:none; color:var(--text-secondary);">
+                    <input type="checkbox" id="f-ativo" style="width:auto;" checked> Ativo
+                </label>
+            </div>
+            <div id="user-modal-msg" class="msg modal-msg"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="fecharModalUsuario()">Cancelar</button>
+                <button type="button" class="btn" onclick="salvarUsuario()">Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal redefinir senha -->
+<div id="pwd-modal" style="display:none;">
+    <div class="modal-backdrop">
+        <div class="modal-box">
+            <h3>Redefinir senha</h3>
+            <p class="hint" id="pwd-quem" style="margin-bottom:0.8rem;"></p>
+            <div class="form-group">
+                <label for="p-senha">Nova senha (mínimo 8 caracteres)</label>
+                <input type="password" id="p-senha" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label for="p-senha2">Confirmar nova senha</label>
+                <input type="password" id="p-senha2" autocomplete="new-password">
+            </div>
+            <div id="pwd-modal-msg" class="msg modal-msg"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="fecharModalSenha()">Cancelar</button>
+                <button type="button" class="btn" onclick="salvarSenha()">Redefinir</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const HEADERS = { "Authorization": "Bearer " + AUTH_TOKEN };
+const JSON_HEADERS = { ...HEADERS, "Content-Type": "application/json" };
+const ROLE_LABEL = { operador: "Operador", gestor: "Gestor", admin: "Admin" };
+
+let USERS = [];
+let editId = null;   // id em edição no modal de usuário (null = criação)
+let pwdId = null;    // id alvo do modal de senha
+
+function esc(s) { return String(s == null ? "" : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showMsg(el, t, ok) {
+    const m = document.getElementById(el);
+    m.className = m.className.includes("modal-msg") ? "msg modal-msg show " + (ok ? "ok" : "err") : "msg show " + (ok ? "ok" : "err");
+    m.textContent = (typeof t === "string") ? t : JSON.stringify(t, null, 2);
+}
+function hideMsg(el) {
+    const m = document.getElementById(el);
+    m.className = m.className.includes("modal-msg") ? "msg modal-msg" : "msg";
+}
+
+function fmtLogin(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return esc(iso);
+    return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+async function loadUsers() {
+    try {
+        const r = await fetch("/api/users", { headers: HEADERS, credentials: "same-origin" });
+        const j = await r.json();
+        if (!r.ok) { showMsg("topmsg", j.detail || "Erro ao carregar usuários.", false); return; }
+        USERS = j.data || [];
+        renderUsers();
+    } catch (e) {
+        showMsg("topmsg", "Erro de comunicação ao carregar usuários.", false);
+    }
+}
+
+function renderUsers() {
+    const body = document.getElementById("users-body");
+    if (!USERS.length) {
+        body.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:1.2rem; color:var(--text-muted);">Nenhum usuário cadastrado.</td></tr>';
+        return;
+    }
+    body.innerHTML = USERS.map(u => {
+        const role = (u.role || "operador").toLowerCase();
+        return `
+        <tr>
+            <td>${esc(u.full_name || "—")}</td>
+            <td>
+                <div>${esc(u.username || "")}</div>
+                <div class="u-ident">${esc(u.email || "")}</div>
+            </td>
+            <td><span class="badge-role ${role}">${esc(ROLE_LABEL[role] || role)}</span></td>
+            <td><span class="badge-status ${u.is_active ? "on" : "off"}">${u.is_active ? "Ativo" : "Inativo"}</span></td>
+            <td class="u-ident">${fmtLogin(u.last_login)}</td>
+            <td>
+                <div class="acoes">
+                    <button class="btn btn-outline btn-mini" onclick="editarUsuario(${u.id})">Editar</button>
+                    <button class="btn btn-secondary btn-mini" onclick="abrirModalSenha(${u.id})">Redefinir senha</button>
+                </div>
+            </td>
+        </tr>`;
+    }).join("");
+}
+
+/* ---------- Modal criar/editar ---------- */
+function novoUsuario() {
+    editId = null;
+    document.getElementById("user-modal-title").textContent = "Novo usuário";
+    document.getElementById("f-nome").value = "";
+    document.getElementById("f-username").value = "";
+    document.getElementById("f-username").disabled = false;
+    document.getElementById("f-email").value = "";
+    document.getElementById("f-role").value = "operador";
+    document.getElementById("f-senha").value = "";
+    document.getElementById("grp-senha").style.display = "block";
+    document.getElementById("grp-ativo").style.display = "none";
+    hideMsg("user-modal-msg");
+    document.getElementById("user-modal").style.display = "block";
+}
+
+function editarUsuario(id) {
+    const u = USERS.find(x => x.id === id);
+    if (!u) return;
+    editId = id;
+    document.getElementById("user-modal-title").textContent = "Editar usuário";
+    document.getElementById("f-nome").value = u.full_name || "";
+    document.getElementById("f-username").value = u.username || "";
+    document.getElementById("f-username").disabled = true;  // username não muda
+    document.getElementById("f-email").value = u.email || "";
+    document.getElementById("f-role").value = (u.role || "operador").toLowerCase();
+    document.getElementById("grp-senha").style.display = "none";
+    document.getElementById("grp-ativo").style.display = "block";
+    document.getElementById("f-ativo").checked = !!u.is_active;
+    hideMsg("user-modal-msg");
+    document.getElementById("user-modal").style.display = "block";
+}
+
+function fecharModalUsuario() {
+    document.getElementById("user-modal").style.display = "none";
+}
+
+async function salvarUsuario() {
+    hideMsg("user-modal-msg");
+    const full_name = document.getElementById("f-nome").value.trim();
+    const username = document.getElementById("f-username").value.trim();
+    const email = document.getElementById("f-email").value.trim();
+    const role = document.getElementById("f-role").value;
+
+    let r;
+    if (editId === null) {
+        const password = document.getElementById("f-senha").value;
+        if (!username) { showMsg("user-modal-msg", "Informe o username.", false); return; }
+        if (!email) { showMsg("user-modal-msg", "Informe o email.", false); return; }
+        if (!password || password.length < 8) { showMsg("user-modal-msg", "A senha deve ter no mínimo 8 caracteres.", false); return; }
+        r = await fetch("/api/users", {
+            method: "POST", headers: JSON_HEADERS, credentials: "same-origin",
+            body: JSON.stringify({ username, email, full_name, role, password }),
+        });
+    } else {
+        if (!email) { showMsg("user-modal-msg", "Informe o email.", false); return; }
+        const is_active = document.getElementById("f-ativo").checked;
+        r = await fetch(`/api/users/${editId}`, {
+            method: "PUT", headers: JSON_HEADERS, credentials: "same-origin",
+            body: JSON.stringify({ full_name, email, role, is_active }),
+        });
+    }
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.success) {
+        fecharModalUsuario();
+        showMsg("topmsg", j.message || "Usuário salvo.", true);
+        await loadUsers();
+    } else {
+        showMsg("user-modal-msg", j.detail || "Erro ao salvar usuário.", false);
+    }
+}
+
+/* ---------- Modal redefinir senha ---------- */
+function abrirModalSenha(id) {
+    const u = USERS.find(x => x.id === id);
+    if (!u) return;
+    pwdId = id;
+    document.getElementById("pwd-quem").textContent = "Usuário: " + (u.full_name || u.username || u.email || "");
+    document.getElementById("p-senha").value = "";
+    document.getElementById("p-senha2").value = "";
+    hideMsg("pwd-modal-msg");
+    document.getElementById("pwd-modal").style.display = "block";
+}
+
+function fecharModalSenha() {
+    document.getElementById("pwd-modal").style.display = "none";
+    pwdId = null;
+}
+
+async function salvarSenha() {
+    hideMsg("pwd-modal-msg");
+    const s1 = document.getElementById("p-senha").value;
+    const s2 = document.getElementById("p-senha2").value;
+    if (!s1 || s1.length < 8) { showMsg("pwd-modal-msg", "A senha deve ter no mínimo 8 caracteres.", false); return; }
+    if (s1 !== s2) { showMsg("pwd-modal-msg", "As senhas não conferem.", false); return; }
+    const r = await fetch(`/api/users/${pwdId}/password`, {
+        method: "POST", headers: JSON_HEADERS, credentials: "same-origin",
+        body: JSON.stringify({ password: s1 }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.success) {
+        fecharModalSenha();
+        showMsg("topmsg", "Senha redefinida com sucesso.", true);
+    } else {
+        showMsg("pwd-modal-msg", j.detail || "Erro ao redefinir senha.", false);
+    }
+}
+
+loadUsers();
+{% endblock %}

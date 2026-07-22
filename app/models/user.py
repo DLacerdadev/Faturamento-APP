@@ -12,6 +12,8 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     full_name = Column(String)
     is_active = Column(BigInteger, default=1)
+    # Papel/cargo do usuário: 'operador' < 'gestor' < 'admin' (ver app/services/permissions.py)
+    role = Column(String(20), nullable=False, default="operador", server_default="operador")
     created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
     last_login = Column(String)
     
@@ -26,6 +28,7 @@ class User(Base):
             "id": self.id,
             "email": self.email,
             "full_name": self.full_name,
+            "role": self.role or "operador",
             "is_active": self.is_active,
             "created_at": self.created_at,
             "last_login": self.last_login
