@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Catálogo de Produtos - Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filters { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: end; margin-bottom: 1rem; }
+    .filters .form-group { margin: 0; }
+    .chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .chip { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-left: 4px solid var(--gold); padding: 0.5rem 0.9rem; font-size: 0.8rem; }
+    .chip b { color: var(--gold); font-family: 'JetBrains Mono', monospace; }
+    table.prod th { background: var(--table-header-bg); color: var(--gold); text-transform: uppercase; font-size: 0.68rem; letter-spacing: 1px; padding: 0.5rem; text-align: left; }
+    table.prod td { border-bottom: 1px solid var(--border-color); padding: 0.4rem 0.5rem; font-size: 0.8rem; }
+    table.prod input[type=number] { width: 110px; padding: 0.35rem 0.5rem; }
+    .cod { font-family: 'JetBrains Mono', monospace; color: var(--text-muted); }
+    .cat { font-size: 0.65rem; padding: 0.1rem 0.5rem; border-radius: 2px; text-transform: uppercase; font-weight: 700; }
+    .cat.uniforme { background: rgba(79,172,254,0.15); color:#4facfe; border:1px solid #4facfe; }
+    .cat.epi { background: rgba(74,222,128,0.15); color: var(--success); border:1px solid var(--success); }
+    .cat.equipamento { background: rgba(251,191,36,0.15); color: var(--warning); border:1px solid var(--warning); }
+    .msg { padding: 0.8rem 1rem; margin: 1rem 0; border-left: 4px solid; font-weight: 500; display: none; font-size: 0.85rem; white-space: pre-wrap; }
+    .msg.show { display: block; }
+    .msg.ok { background: rgba(74,222,128,0.1); color: var(--success); border-color: var(--success); }
+    .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
+    .hint { font-size: 0.8rem; color: var(--text-muted); }
+    .pager { display:flex; gap:1rem; align-items:center; justify-content:center; margin-top:1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header"><h1>Catálogo de Produtos (Uniformes / EPIs / Equipamentos)</h1></div>
+
+<div class="card">
+    <div class="card-header"><h2>Importar do TOTVS</h2></div>
+    <p class="hint" style="margin-bottom:0.6rem;">Sobe o Excel do cadastro de produtos do TOTVS. Importa só os grupos: EPI (0003), Uniformes (0004) e Equipamentos/materiais (0001, 0002, 0006, 0007, 0008). Atualiza pelos códigos (não duplica) e <b>preserva os preços já editados</b>.</p>
+    <input type="file" id="imp-file" accept=".xlsx,.xls" style="max-width:420px; display:inline-block;">
+    <button class="btn" onclick="importar()">Importar</button>
+    <div id="imp-msg" class="msg"></div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h2>Produtos</h2></div>
+    <div class="chips" id="resumo"></div>
+    <div class="filters">
+        <div class="form-group">
+            <label for="f-cat">Categoria</label>
+            <select id="f-cat" onchange="reload()">
+                <option value="">Todas</option>
+                <option value="uniforme">Uniformes</option>
+                <option value="epi">EPIs</option>
+                <option value="equipamento">Equipamentos</option>
+            </select>
+        </div>
+        <div class="form-group" style="flex:1; min-width:240px;">
+            <label for="f-q">Buscar (descrição ou código)</label>
+            <input type="text" id="f-q" placeholder="ex.: luva, camiseta, notebook..." onkeydown="if(event.key==='Enter')reload()">
+        </div>
+        <div class="form-group">
+            <label style="display:flex; align-items:center; gap:0.4rem; text-transform:none; color:var(--text-secondary);">
+                <input type="checkbox" id="f-sempreco" style="width:auto;" onchange="reload()"> só sem preço
+            </label>
+        </div>
+        <div class="form-group"><button class="btn btn-outline" onclick="reload()">Filtrar</button></div>
+    </div>
+    <div id="prod-msg" class="msg"></div>
+    <div style="overflow-x:auto;">
+        <table class="prod">
+            <thead><tr><th>Código</th><th>Descrição</th><th>Grupo</th><th>Un.</th><th>Categoria</th><th>Preço (R$)</th><th></th></tr></thead>
+            <tbody id="prod-body"></tbody>
+        </table>
+    </div>
+    <div class="pager" id="pager"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const HEADERS = { "Authorization": "Bearer " + AUTH_TOKEN };
+const JSON_HEADERS = { ...HEADERS, "Content-Type": "application/json" };
+let page = 1;
+
+function showMsg(el, t, ok) {
+    const m = document.getElementById(el);
+    m.className = "msg show " + (ok ? "ok" : "err");
+    m.textContent = (typeof t === "string") ? t : JSON.stringify(t, null, 2);
+}
+function reload() { page = 1; loadProducts(); }
+
+async function loadProducts() {
+    const cat = document.getElementById("f-cat").value;
+    const q = document.getElementById("f-q").value.trim();
+    const sp = document.getElementById("f-sempreco").checked;
+    const url = `/api/products?page=${page}&per_page=50${cat ? "&categoria=" + cat : ""}${q ? "&q=" + encodeURIComponent(q) : ""}${sp ? "&sem_preco=true" : ""}`;
+    const r = await fetch(url, { headers: HEADERS, credentials: "same-origin" });
+    const j = await r.json();
+    renderResumo(j.resumo || {});
+    renderRows(j.data || []);
+    renderPager(j.page, j.total_pages, j.total);
+}
+function renderResumo(resumo) {
+    const labels = { uniforme: "Uniformes", epi: "EPIs", equipamento: "Equipamentos" };
+    const total = Object.values(resumo).reduce((a, b) => a + b, 0);
+    let html = `<div class="chip">Total: <b>${total}</b></div>`;
+    Object.keys(labels).forEach(k => { if (resumo[k]) html += `<div class="chip">${labels[k]}: <b>${resumo[k]}</b></div>`; });
+    document.getElementById("resumo").innerHTML = html;
+}
+function renderRows(items) {
+    if (!items.length) { document.getElementById("prod-body").innerHTML = '<tr><td colspan="7" style="text-align:center; padding:1.5rem; color:var(--text-muted)">Nenhum produto.</td></tr>'; return; }
+    document.getElementById("prod-body").innerHTML = items.map(p => `
+        <tr data-id="${p.id}">
+            <td class="cod">${p.codigo}</td>
+            <td>${(p.descricao||'').replace(/</g,'&lt;')}</td>
+            <td class="hint">${p.grupo_nome||''}</td>
+            <td>${p.unidade||''}</td>
+            <td><span class="cat ${p.categoria}">${p.categoria||''}</span></td>
+            <td><input type="number" step="0.01" min="0" id="preco-${p.id}" value="${p.preco != null ? p.preco : ''}" placeholder="—"></td>
+            <td><button class="btn btn-secondary" style="padding:0.35rem 0.7rem; font-size:0.75rem;" onclick="savePreco(${p.id})">Salvar</button></td>
+        </tr>`).join("");
+}
+function renderPager(p, totalPages, total) {
+    const el = document.getElementById("pager");
+    if (!totalPages || totalPages <= 1) { el.innerHTML = `<span class="hint">${total} produto(s)</span>`; return; }
+    el.innerHTML = `
+        <button class="btn btn-outline" ${p<=1?'disabled':''} onclick="page=${p-1};loadProducts()">‹ Anterior</button>
+        <span class="hint">Página ${p} de ${totalPages} (${total} produtos)</span>
+        <button class="btn btn-outline" ${p>=totalPages?'disabled':''} onclick="page=${p+1};loadProducts()">Próxima ›</button>`;
+}
+async function savePreco(id) {
+    const v = document.getElementById(`preco-${id}`).value;
+    const preco = v === "" ? null : parseFloat(v);
+    const r = await fetch(`/api/products/${id}`, { method:"PUT", headers:JSON_HEADERS, credentials:"same-origin", body: JSON.stringify({ preco }) });
+    showMsg("prod-msg", r.ok ? "Preço salvo." : "Erro ao salvar preço.", r.ok);
+}
+async function importar() {
+    const f = document.getElementById("imp-file").files[0];
+    if (!f) { showMsg("imp-msg", "Selecione o arquivo do TOTVS.", false); return; }
+    showMsg("imp-msg", "Importando... (pode levar alguns segundos)", true);
+    const fd = new FormData(); fd.append("file", f);
+    try {
+        const r = await fetch("/api/products/import", { method:"POST", headers:HEADERS, credentials:"same-origin", body:fd });
+        const j = await r.json();
+        if (r.ok && j.success) {
+            const pc = Object.entries(j.por_categoria||{}).map(([k,v])=>`${k}: ${v}`).join(" · ");
+            showMsg("imp-msg", `✅ Inseridos: ${j.inseridos} · Atualizados: ${j.atualizados} · Ignorados (outros grupos): ${j.ignorados_outros_grupos}\nPor categoria: ${pc}`, true);
+            reload();
+        } else { showMsg("imp-msg", j.detail || j.erro || "Erro ao importar.", false); }
+    } catch (e) { showMsg("imp-msg", e.message, false); }
+}
+loadProducts();
+{% endblock %}

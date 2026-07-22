@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Catálogo de Treinamentos - Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); }
+    .tab-btn { padding: 0.8rem 1.6rem; font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); text-decoration: none; border-bottom: 3px solid transparent; margin-bottom: -1px; transition: all 0.2s ease; }
+    .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); background: var(--bg-tertiary); }
+    .tab-btn:hover:not(.active) { color: var(--text-primary); background: var(--bg-tertiary); }
+
+    .chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    .chip { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-left: 3px solid var(--gold); padding: 0.5rem 0.9rem; font-size: 0.8rem; border-radius: var(--radius); }
+    .chip b { color: var(--gold-text); font-family: var(--font-mono); }
+
+    .add-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 1rem; align-items: end; }
+    .add-grid .form-group { margin: 0; }
+    .add-grid .full { grid-column: 1 / -1; }
+    @media (max-width: 900px) { .add-grid { grid-template-columns: 1fr 1fr; } }
+
+    table.tr-tbl th { white-space: nowrap; }
+    table.tr-tbl td { font-size: 0.85rem; vertical-align: middle; }
+    table.tr-tbl input[type=number] { width: 100px; padding: 0.4rem 0.5rem; }
+    table.tr-tbl input[type=text] { padding: 0.4rem 0.5rem; }
+    .row-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+    .toggle { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.75rem; color: var(--text-secondary); }
+    .toggle input { width: auto; }
+
+    .filters { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: end; margin-bottom: 1rem; }
+    .filters .form-group { margin: 0; }
+    .hint { font-size: 0.8rem; color: var(--text-muted); }
+
+    .msg { padding: 0.8rem 1rem; margin: 1rem 0; border-left: 3px solid; border-radius: var(--radius); font-weight: 500; display: none; font-size: 0.85rem; white-space: pre-wrap; }
+    .msg.show { display: block; }
+    .msg.ok { background: rgba(74,222,128,0.1); color: var(--success); border-color: var(--success); }
+    .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header"><h1>Treinamentos</h1></div>
+
+<div class="tabs">
+    <a href="/catalogo-treinamentos" class="tab-btn active">Catálogo</a>
+    <a href="/lancamento-treinamentos" class="tab-btn">Lançamentos</a>
+</div>
+
+<div class="card">
+    <div class="card-header"><h2>Adicionar treinamento</h2></div>
+    <div class="add-grid">
+        <div class="form-group">
+            <label for="a-nome">Nome do treinamento</label>
+            <input type="text" id="a-nome" placeholder="ex.: NR-35 — Trabalho em Altura">
+        </div>
+        <div class="form-group">
+            <label for="a-valor">Valor (R$)</label>
+            <input type="number" step="0.01" min="0" id="a-valor" placeholder="0,00">
+        </div>
+        <div class="form-group">
+            <label for="a-carga">Carga horária (h)</label>
+            <input type="number" step="0.5" min="0" id="a-carga" placeholder="—">
+        </div>
+        <div class="form-group">
+            <label for="a-validade">Validade (meses)</label>
+            <input type="number" step="1" min="0" id="a-validade" placeholder="—">
+        </div>
+        <div class="form-group full">
+            <label for="a-obs">Observação (opcional)</label>
+            <input type="text" id="a-obs" placeholder="ex.: norma, fornecedor, exigência do contrato...">
+        </div>
+    </div>
+    <div style="margin-top:1rem;">
+        <button class="btn" onclick="addTraining()"><span class="material-symbols-outlined">add</span> Adicionar</button>
+    </div>
+    <div id="add-msg" class="msg"></div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h2>Treinamentos cadastrados</h2></div>
+    <div class="chips" id="resumo"></div>
+    <div class="filters">
+        <div class="form-group" style="flex:1; min-width:240px;">
+            <label for="f-q">Buscar</label>
+            <input type="text" id="f-q" placeholder="nome ou observação..." onkeydown="if(event.key==='Enter')load()">
+        </div>
+        <div class="form-group">
+            <label for="f-ativo">Situação</label>
+            <select id="f-ativo" onchange="load()">
+                <option value="">Todos</option>
+                <option value="true">Somente ativos</option>
+                <option value="false">Somente inativos</option>
+            </select>
+        </div>
+        <div class="form-group"><button class="btn btn-outline" onclick="load()">Filtrar</button></div>
+    </div>
+    <div id="list-msg" class="msg"></div>
+    <div style="overflow-x:auto;">
+        <table class="tr-tbl">
+            <thead>
+                <tr>
+                    <th>Treinamento</th>
+                    <th>Valor (R$)</th>
+                    <th>Carga (h)</th>
+                    <th>Validade (m)</th>
+                    <th>Ativo</th>
+                    <th style="text-align:right;">Ações</th>
+                </tr>
+            </thead>
+            <tbody id="tr-body"></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const HEADERS = { "Authorization": "Bearer " + AUTH_TOKEN };
+const JSON_HEADERS = { ...HEADERS, "Content-Type": "application/json" };
+
+function showMsg(el, t, ok) {
+    const m = document.getElementById(el);
+    m.className = "msg show " + (ok ? "ok" : "err");
+    m.textContent = (typeof t === "string") ? t : JSON.stringify(t, null, 2);
+    if (ok) setTimeout(() => { m.className = "msg"; }, 2500);
+}
+const esc = s => (s || "").replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const numOrEmpty = v => (v !== null && v !== undefined && v !== "") ? v : "";
+
+async function load() {
+    const q = document.getElementById("f-q").value.trim();
+    const at = document.getElementById("f-ativo").value;
+    let url = "/api/trainings";
+    const params = [];
+    if (q) params.push("q=" + encodeURIComponent(q));
+    if (at) params.push("ativo=" + at);
+    if (params.length) url += "?" + params.join("&");
+    const r = await fetch(url, { headers: HEADERS, credentials: "same-origin" });
+    const j = await r.json();
+    renderResumo(j.resumo || {});
+    renderRows(j.data || []);
+}
+
+function renderResumo(r) {
+    document.getElementById("resumo").innerHTML =
+        `<div class="chip">Total: <b>${r.total||0}</b></div>` +
+        `<div class="chip">Ativos: <b>${r.ativos||0}</b></div>` +
+        `<div class="chip">Com valor: <b>${r.com_valor||0}</b></div>`;
+}
+
+function renderRows(items) {
+    const body = document.getElementById("tr-body");
+    if (!items.length) {
+        body.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:1.5rem; color:var(--text-muted)">Nenhum treinamento cadastrado.</td></tr>';
+        return;
+    }
+    body.innerHTML = items.map(t => `
+        <tr data-id="${t.id}">
+            <td><input type="text" id="nome-${t.id}" value="${esc(t.nome)}" style="min-width:220px;"></td>
+            <td><input type="number" step="0.01" min="0" id="valor-${t.id}" value="${numOrEmpty(t.valor)}" placeholder="—"></td>
+            <td><input type="number" step="0.5" min="0" id="carga-${t.id}" value="${numOrEmpty(t.carga_horaria)}" placeholder="—"></td>
+            <td><input type="number" step="1" min="0" id="val-${t.id}" value="${numOrEmpty(t.validade_meses)}" placeholder="—"></td>
+            <td><label class="toggle"><input type="checkbox" id="ativo-${t.id}" ${t.ativo?'checked':''}> ${t.ativo?'sim':'não'}</label></td>
+            <td>
+                <div class="row-actions">
+                    <button class="btn btn-secondary" style="padding:0.35rem 0.7rem; font-size:0.75rem;" onclick="saveTraining(${t.id})">Salvar</button>
+                    <button class="btn btn-danger" style="padding:0.35rem 0.7rem; font-size:0.75rem;" onclick="delTraining(${t.id}, this)">Excluir</button>
+                </div>
+            </td>
+        </tr>`).join("");
+}
+
+function parseNum(id) {
+    const v = document.getElementById(id).value;
+    return v === "" ? null : parseFloat(v);
+}
+function parseInteger(id) {
+    const v = document.getElementById(id).value;
+    return v === "" ? null : parseInt(v, 10);
+}
+
+async function addTraining() {
+    const nome = document.getElementById("a-nome").value.trim();
+    if (!nome) { showMsg("add-msg", "Informe o nome do treinamento.", false); return; }
+    const body = {
+        nome,
+        valor: parseNum("a-valor"),
+        carga_horaria: parseNum("a-carga"),
+        validade_meses: parseInteger("a-validade"),
+        observacao: document.getElementById("a-obs").value.trim() || null,
+        ativo: true,
+    };
+    const r = await fetch("/api/trainings", { method:"POST", headers:JSON_HEADERS, credentials:"same-origin", body: JSON.stringify(body) });
+    const j = await r.json();
+    if (r.ok && j.success) {
+        ["a-nome","a-valor","a-carga","a-validade","a-obs"].forEach(i => document.getElementById(i).value = "");
+        showMsg("add-msg", "Treinamento adicionado.", true);
+        load();
+    } else { showMsg("add-msg", j.detail || "Erro ao adicionar.", false); }
+}
+
+async function saveTraining(id) {
+    const body = {
+        nome: document.getElementById(`nome-${id}`).value.trim(),
+        valor: parseNum(`valor-${id}`),
+        carga_horaria: parseNum(`carga-${id}`),
+        validade_meses: parseInteger(`val-${id}`),
+        ativo: document.getElementById(`ativo-${id}`).checked,
+    };
+    if (!body.nome) { showMsg("list-msg", "O nome não pode ficar vazio.", false); return; }
+    const r = await fetch(`/api/trainings/${id}`, { method:"PUT", headers:JSON_HEADERS, credentials:"same-origin", body: JSON.stringify(body) });
+    const j = await r.json();
+    if (r.ok && j.success) { showMsg("list-msg", "Alterações salvas.", true); load(); }
+    else { showMsg("list-msg", j.detail || "Erro ao salvar.", false); }
+}
+
+async function delTraining(id, btn) {
+    if (!confirm("Excluir este treinamento?")) return;
+    const r = await fetch(`/api/trainings/${id}`, { method:"DELETE", headers:HEADERS, credentials:"same-origin" });
+    if (r.ok) { showMsg("list-msg", "Treinamento removido.", true); load(); }
+    else { const j = await r.json().catch(()=>({})); showMsg("list-msg", j.detail || "Erro ao excluir.", false); }
+}
+
+load();
+{% endblock %}

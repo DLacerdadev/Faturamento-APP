@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+
+{% block title %}Lançamento de Treinamentos - Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); }
+    .tab-btn { padding: 0.8rem 1.6rem; font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); text-decoration: none; border-bottom: 3px solid transparent; margin-bottom: -1px; transition: all 0.2s ease; }
+    .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); background: var(--bg-tertiary); }
+    .tab-btn:hover:not(.active) { color: var(--text-primary); background: var(--bg-tertiary); }
+
+    .hint { font-size: 0.8rem; color: var(--text-muted); }
+
+    /* Spinner dentro do botão (estado "Importando…") */
+    .btn-spinner {
+        display: inline-block; width: 15px; height: 15px;
+        border: 2px solid rgba(0,0,0,0.3); border-top-color: currentColor;
+        border-radius: 50%; animation: btnspin 0.8s linear infinite; vertical-align: middle;
+    }
+    @keyframes btnspin { to { transform: rotate(360deg); } }
+
+    /* Mensagens de feedback (padrão das telas existentes) */
+    .msg { padding: 0.9rem 1rem; margin-top: 1rem; border-left: 4px solid; font-weight: 500; display: none; white-space: pre-wrap; font-size: 0.85rem; border-radius: var(--radius); }
+    .msg.show { display: block; }
+    .msg.ok { background: rgba(74,222,128,0.1); color: var(--success); border-color: var(--success); }
+    .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
+
+    /* Grid do cadastro manual */
+    .add-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; align-items: end; }
+    .add-grid .form-group { margin: 0; }
+    .add-grid .full { grid-column: 1 / -1; }
+    @media (max-width: 900px) { .add-grid { grid-template-columns: 1fr 1fr; } }
+
+    /* Filtros da lista */
+    .filters { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: end; margin-bottom: 1rem; }
+    .filters .form-group { margin: 0; }
+
+    /* Resumo em chips */
+    .chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    .chip { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-left: 3px solid var(--gold); padding: 0.5rem 0.9rem; font-size: 0.8rem; border-radius: var(--radius); }
+    .chip b { color: var(--gold-text); font-family: var(--font-mono); }
+
+    .table-wrap { overflow-x: auto; }
+    table.lt-tbl th { white-space: nowrap; }
+    table.lt-tbl td { font-size: 0.85rem; vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header"><h1>Treinamentos</h1></div>
+
+<div class="tabs">
+    <a href="/catalogo-treinamentos" class="tab-btn">Catálogo</a>
+    <a href="/lancamento-treinamentos" class="tab-btn active">Lançamentos</a>
+</div>
+
+<p class="hint" style="margin-bottom: 1.5rem;">Lance os treinamentos realizados por funcionário: suba uma planilha/CSV ou cadastre manualmente. O vínculo com o funcionário é feito pela <b>matrícula</b> ou pelo <b>CPF</b>. Os lançamentos aparecem na lista abaixo e entram no faturamento da competência.</p>
+
+<!-- ============ 1. UPLOAD ============ -->
+<div class="card">
+    <div class="card-header"><h2>1. Importar planilha</h2></div>
+    <div class="form-group">
+        <label for="imp-file">Arquivo (.xlsx, .xls, .csv)</label>
+        <input type="file" id="imp-file" accept=".xlsx,.xls,.csv">
+        <p class="hint" style="margin-top: 0.4rem;">Colunas reconhecidas: CC / centro de custo, CPF, matrícula, funcionário, treinamento, data, quantidade, valor.</p>
+    </div>
+    <button class="btn" id="btn-import" onclick="doImport()"><span class="material-symbols-outlined">upload_file</span> Importar</button>
+    <div id="imp-msg" class="msg"></div>
+</div>
+
+<!-- ============ 2. CADASTRO MANUAL ============ -->
+<div class="card">
+    <div class="card-header"><h2>2. Lançar manualmente</h2></div>
+    <div class="add-grid">
+        <div class="form-group">
+            <label for="a-competencia">Competência</label>
+            <input type="month" id="a-competencia">
+        </div>
+        <div class="form-group">
+            <label for="a-codccu">Centro de custo (CC)</label>
+            <input type="text" id="a-codccu" placeholder="ex.: 1001">
+        </div>
+        <div class="form-group">
+            <label for="a-nomeccu">Nome do CC (opcional)</label>
+            <input type="text" id="a-nomeccu" placeholder="—">
+        </div>
+        <div class="form-group">
+            <label for="a-data">Data do treinamento</label>
+            <input type="date" id="a-data">
+        </div>
+
+        <div class="form-group">
+            <label for="a-numcad">Matrícula</label>
+            <input type="number" id="a-numcad" placeholder="ex.: 12345">
+        </div>
+        <div class="form-group">
+            <label for="a-cpf">CPF</label>
+            <input type="text" id="a-cpf" placeholder="000.000.000-00">
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+            <label for="a-nome">Funcionário (nome)</label>
+            <input type="text" id="a-nome" placeholder="Nome completo">
+        </div>
+
+        <div class="form-group full">
+            <label for="a-catalogo">Treinamento (catálogo)</label>
+            <select id="a-catalogo" onchange="onCatalogoChange()">
+                <option value="">— Selecione do catálogo ou digite abaixo —</option>
+            </select>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+            <label for="a-treinamento">Treinamento (nome)</label>
+            <input type="text" id="a-treinamento" placeholder="ex.: NR-35 — Trabalho em Altura">
+        </div>
+        <div class="form-group">
+            <label for="a-quantidade">Quantidade</label>
+            <input type="number" min="1" step="1" id="a-quantidade" value="1">
+        </div>
+        <div class="form-group">
+            <label for="a-valor">Valor (R$)</label>
+            <input type="number" step="0.01" min="0" id="a-valor" placeholder="0,00">
+        </div>
+    </div>
+    <div style="margin-top:1rem;">
+        <button class="btn" onclick="addRecord()"><span class="material-symbols-outlined">add</span> Lançar</button>
+    </div>
+    <div id="add-msg" class="msg"></div>
+</div>
+
+<!-- ============ 3. LISTA ============ -->
+<div class="card">
+    <div class="card-header"><h2>3. Lançamentos</h2></div>
+    <div class="chips" id="resumo"></div>
+    <div class="filters">
+        <div class="form-group">
+            <label for="f-competencia">Competência</label>
+            <input type="month" id="f-competencia" onchange="load()">
+        </div>
+        <div class="form-group">
+            <label for="f-codccu">Centro de custo</label>
+            <input type="text" id="f-codccu" placeholder="CC" onkeydown="if(event.key==='Enter')load()">
+        </div>
+        <div class="form-group" style="flex:1; min-width:220px;">
+            <label for="f-q">Buscar</label>
+            <input type="text" id="f-q" placeholder="funcionário ou treinamento..." onkeydown="if(event.key==='Enter')load()">
+        </div>
+        <div class="form-group"><button class="btn btn-outline" onclick="load()">Filtrar</button></div>
+    </div>
+    <div id="list-msg" class="msg"></div>
+    <div class="table-wrap">
+        <table class="lt-tbl">
+            <thead>
+                <tr>
+                    <th>Competência</th>
+                    <th>CC</th>
+                    <th>Funcionário</th>
+                    <th>Matríc.</th>
+                    <th>CPF</th>
+                    <th>Treinamento</th>
+                    <th>Data</th>
+                    <th>Qtd</th>
+                    <th>Valor (R$)</th>
+                    <th style="text-align:right;">Ações</th>
+                </tr>
+            </thead>
+            <tbody id="lt-body"></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const HEADERS = { "Authorization": "Bearer " + AUTH_TOKEN };
+const JSON_HEADERS = { ...HEADERS, "Content-Type": "application/json" };
+
+function showMsg(el, t, ok) {
+    const m = document.getElementById(el);
+    m.className = "msg show " + (ok ? "ok" : "err");
+    m.textContent = (typeof t === "string") ? t : JSON.stringify(t, null, 2);
+    if (ok) setTimeout(() => { m.className = "msg"; }, 4000);
+}
+const esc = s => (s == null ? "" : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const show = v => (v !== null && v !== undefined && v !== "") ? v : "—";
+
+function parseNum(id) {
+    const v = document.getElementById(id).value;
+    return v === "" ? null : parseFloat(v);
+}
+function parseInteger(id) {
+    const v = document.getElementById(id).value;
+    return v === "" ? null : parseInt(v, 10);
+}
+
+// ---------- Catálogo de treinamentos (para preencher nome/valor) ----------
+let catalogo = [];
+async function loadCatalogo() {
+    try {
+        const r = await fetch("/api/trainings", { headers: HEADERS, credentials: "same-origin" });
+        const j = await r.json();
+        catalogo = (j.data || []).filter(t => t.ativo !== false);
+        const sel = document.getElementById("a-catalogo");
+        catalogo.forEach(t => {
+            const o = document.createElement("option");
+            o.value = t.id;
+            o.textContent = t.nome + (t.valor != null ? ` — R$ ${t.valor}` : "");
+            sel.appendChild(o);
+        });
+    } catch (e) { /* segue permitindo digitação livre */ }
+}
+function onCatalogoChange() {
+    const id = document.getElementById("a-catalogo").value;
+    if (!id) return;
+    const t = catalogo.find(x => String(x.id) === String(id));
+    if (!t) return;
+    document.getElementById("a-treinamento").value = t.nome || "";
+    if (t.valor != null && document.getElementById("a-valor").value === "") {
+        document.getElementById("a-valor").value = t.valor;
+    }
+}
+
+// ---------- Cadastro manual ----------
+async function addRecord() {
+    const competencia = document.getElementById("a-competencia").value; // 'YYYY-MM'
+    const codccu = document.getElementById("a-codccu").value.trim();
+    const nome = document.getElementById("a-nome").value.trim();
+    const numcad = parseInteger("a-numcad");
+    const cpf = document.getElementById("a-cpf").value.trim();
+    const treinamento = document.getElementById("a-treinamento").value.trim();
+    const catId = document.getElementById("a-catalogo").value;
+
+    if (!competencia) { showMsg("add-msg", "Informe a competência.", false); return; }
+    if (!codccu) { showMsg("add-msg", "Informe o centro de custo (CC).", false); return; }
+    if (!nome) { showMsg("add-msg", "Informe o nome do funcionário.", false); return; }
+    if (!numcad && !cpf) { showMsg("add-msg", "Informe a matrícula ou o CPF do funcionário.", false); return; }
+    if (!treinamento) { showMsg("add-msg", "Informe o treinamento (selecione do catálogo ou digite o nome).", false); return; }
+
+    const body = {
+        competencia,
+        codccu,
+        nome_ccu: document.getElementById("a-nomeccu").value.trim() || null,
+        employee_numcad: numcad,
+        employee_nome: nome,
+        cpf: cpf || null,
+        training_catalog_id: catId ? parseInt(catId, 10) : null,
+        treinamento_nome: treinamento,
+        data_treinamento: document.getElementById("a-data").value || null, // 'YYYY-MM-DD'
+        quantidade: parseInteger("a-quantidade") || 1,
+        valor: parseNum("a-valor"),
+    };
+
+    const r = await fetch("/api/training-records", { method: "POST", headers: JSON_HEADERS, credentials: "same-origin", body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.success) {
+        ["a-numcad","a-cpf","a-nome","a-treinamento","a-valor","a-data"].forEach(i => document.getElementById(i).value = "");
+        document.getElementById("a-catalogo").value = "";
+        document.getElementById("a-quantidade").value = "1";
+        showMsg("add-msg", "Treinamento lançado.", true);
+        load();
+    } else {
+        showMsg("add-msg", j.detail || "Erro ao lançar treinamento.", false);
+    }
+}
+
+// ---------- Upload / importação ----------
+async function doImport() {
+    const f = document.getElementById("imp-file").files[0];
+    if (!f) { showMsg("imp-msg", "Selecione um arquivo primeiro.", false); return; }
+    const btn = document.getElementById("btn-import");
+    // Anti-spam: se já está importando, ignora cliques repetidos.
+    if (btn.dataset.busy === "1") return;
+    const originalHtml = btn.innerHTML;
+    btn.dataset.busy = "1";
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span><span>Importando…</span>';
+    showMsg("imp-msg", "Importando... aguarde, não feche a página.", true);
+    const fd = new FormData();
+    fd.append("file", f);
+    try {
+        const r = await fetch("/api/training-records/import", { method: "POST", headers: HEADERS, credentials: "same-origin", body: fd });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.success) {
+            let txt = `✅ ${j.criados || 0} lançamento(s) criado(s).`;
+            if (j.resumo) txt += `\n${typeof j.resumo === "string" ? j.resumo : JSON.stringify(j.resumo)}`;
+            if (j.erros && j.erros.length) txt += `\n\nObservações:\n- ${j.erros.slice(0, 20).join("\n- ")}`;
+            showMsg("imp-msg", txt, true);
+            document.getElementById("imp-file").value = "";
+            load();
+        } else {
+            const errs = (j.erros && j.erros.length) ? "\n- " + j.erros.slice(0, 20).join("\n- ") : "";
+            showMsg("imp-msg", (j.detail || "Falha na importação.") + errs, false);
+        }
+    } catch (e) {
+        showMsg("imp-msg", e.message, false);
+    } finally {
+        // Restaura o botão sempre (sucesso, erro ou exceção).
+        btn.disabled = false;
+        btn.dataset.busy = "0";
+        btn.innerHTML = originalHtml;
+    }
+}
+
+// ---------- Lista + filtros ----------
+async function load() {
+    const competencia = document.getElementById("f-competencia").value;
+    const codccu = document.getElementById("f-codccu").value.trim();
+    const q = document.getElementById("f-q").value.trim();
+    const params = [];
+    if (codccu) params.push("codccu=" + encodeURIComponent(codccu));
+    if (competencia) params.push("competencia=" + encodeURIComponent(competencia));
+    if (q) params.push("q=" + encodeURIComponent(q));
+    let url = "/api/training-records";
+    if (params.length) url += "?" + params.join("&");
+    try {
+        const r = await fetch(url, { headers: HEADERS, credentials: "same-origin" });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { showMsg("list-msg", j.detail || "Erro ao carregar lançamentos.", false); return; }
+        renderRows(j.data || []);
+    } catch (e) {
+        showMsg("list-msg", e.message, false);
+    }
+}
+
+function renderRows(items) {
+    renderResumo(items);
+    const body = document.getElementById("lt-body");
+    if (!items.length) {
+        body.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:1.5rem; color:var(--text-muted)">Nenhum lançamento encontrado.</td></tr>';
+        return;
+    }
+    body.innerHTML = items.map(t => {
+        const cc = esc(t.codccu) + (t.nome_ccu ? " - " + esc(t.nome_ccu) : "");
+        const valor = (t.valor != null) ? Number(t.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
+        return `
+        <tr data-id="${t.id}">
+            <td class="mono">${esc(t.competencia)}</td>
+            <td>${cc}</td>
+            <td>${esc(t.employee_nome)}</td>
+            <td class="mono">${show(esc(t.employee_numcad))}</td>
+            <td class="mono">${show(esc(t.cpf))}</td>
+            <td>${esc(t.treinamento_nome)}</td>
+            <td class="mono">${show(esc(t.data_treinamento))}</td>
+            <td class="mono">${show(t.quantidade)}</td>
+            <td class="mono">${valor}</td>
+            <td>
+                <div style="display:flex; gap:0.4rem; justify-content:flex-end;">
+                    <button class="btn btn-danger" style="padding:0.35rem 0.7rem; font-size:0.75rem;" onclick="delRecord(${t.id})">Excluir</button>
+                </div>
+            </td>
+        </tr>`;
+    }).join("");
+}
+
+function renderResumo(items) {
+    const total = items.length;
+    const comValor = items.filter(t => t.valor != null).length;
+    const somaValor = items.reduce((s, t) => s + (t.valor != null ? Number(t.valor) * (t.quantidade || 1) : 0), 0);
+    const somaFmt = somaValor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById("resumo").innerHTML =
+        `<div class="chip">Lançamentos: <b>${total}</b></div>` +
+        `<div class="chip">Com valor: <b>${comValor}</b></div>` +
+        `<div class="chip">Total: <b>R$ ${somaFmt}</b></div>`;
+}
+
+async function delRecord(id) {
+    if (!confirm("Excluir este lançamento?")) return;
+    try {
+        const r = await fetch(`/api/training-records/${id}`, { method: "DELETE", headers: HEADERS, credentials: "same-origin" });
+        if (r.ok) { showMsg("list-msg", "Lançamento removido.", true); load(); }
+        else { const j = await r.json().catch(() => ({})); showMsg("list-msg", j.detail || "Erro ao excluir.", false); }
+    } catch (e) { showMsg("list-msg", e.message, false); }
+}
+
+// Competência padrão = mês atual
+(function initCompetencia() {
+    const now = new Date();
+    const ym = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+    document.getElementById("a-competencia").value = ym;
+})();
+
+loadCatalogo();
+load();
+{% endblock %}
