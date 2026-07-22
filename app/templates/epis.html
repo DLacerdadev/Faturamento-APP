@@ -71,38 +71,203 @@
         font-family: 'Space Grotesk', sans-serif;
     }
     .employee-meta button:hover { border-color: var(--gold); color: var(--gold); }
-    .items-table {
-        width: 100%;
-        border-collapse: collapse;
+    /* === Tabela de atribuições EPI — visual refinado === */
+    .items-table-wrap {
+        overflow-x: auto;
+        background: var(--bg-secondary, #1c1c1c);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
         margin-bottom: 0.75rem;
     }
-    .items-table th {
+    .items-table {
+        width: 100%;
+        min-width: 1120px;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .items-table thead th {
         text-align: left;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         color: var(--gold);
         text-transform: uppercase;
         letter-spacing: 1px;
-        padding: 0.5rem;
-        border-bottom: 1px solid var(--border-color);
+        padding: 0.75rem 0.65rem;
+        background: rgba(212, 168, 75, 0.06);
+        border-bottom: 2px solid var(--gold);
+        position: sticky;
+        top: 0;
+        white-space: nowrap;
+        font-weight: 700;
     }
-    .items-table td {
-        padding: 0.5rem;
+    .items-table thead th .col-hint {
+        display: block;
+        font-size: 0.6rem;
+        color: var(--text-muted);
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: 0;
+        margin-top: 0.1rem;
+    }
+    .items-table tbody td {
+        padding: 0.55rem 0.65rem;
         font-family: 'JetBrains Mono', monospace;
         border-bottom: 1px solid var(--border-color);
+        vertical-align: middle;
     }
-    .items-table input {
+    .items-table tbody tr:last-child td { border-bottom: none; }
+    .items-table tbody tr:hover { background: rgba(212, 168, 75, 0.04); }
+    .items-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+    .items-table tbody tr:nth-child(even):hover { background: rgba(212, 168, 75, 0.06); }
+
+    .items-table select,
+    .items-table input[type="number"],
+    .items-table input[type="text"] {
         width: 100%;
-        padding: 0.5rem 0.75rem;
+        box-sizing: border-box;
+        padding: 0.5rem 0.7rem;
         border: 1px solid var(--border-strong);
         background: var(--input-bg);
         color: var(--text-primary);
         font-family: 'JetBrains Mono', monospace;
         font-size: 0.875rem;
+        border-radius: 4px;
+        transition: border-color .15s ease, box-shadow .15s ease;
     }
-    .items-table input:focus { border-color: var(--gold); outline: none; }
-    .items-table .col-qty { width: 90px; }
+    .items-table select:focus,
+    .items-table input:focus {
+        border-color: var(--gold);
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(212, 168, 75, 0.18);
+    }
+    .items-table input[readonly] {
+        background: var(--bg-tertiary);
+        color: var(--gold);
+        font-weight: 600;
+        border-color: transparent;
+        cursor: default;
+    }
+
+    /* Larguras das colunas */
+    .items-table .col-func  { min-width: 220px; }
+    .items-table .col-cat   { width: 150px; }
+    .items-table .col-epi   { min-width: 200px; }
+    .items-table .col-size  { width: 100px; }
+    .items-table .col-qty   { width: 90px; }
     .items-table .col-money { width: 130px; }
-    .items-table .col-action { width: 50px; text-align: center; }
+    .items-table .col-ca    { width: 130px; }
+    .items-table .col-total { width: 130px; }
+    .items-table .col-action { width: 48px; text-align: center; }
+
+    /* Célula sem valor aplicável à categoria da linha (ex.: C.A fora de EPI) */
+    .items-table .cell-na { color: var(--text-muted); text-align: center; }
+
+    /* Prefixo R$ em campos monetários */
+    .money-input {
+        position: relative;
+    }
+    .money-input::before {
+        content: "R$";
+        position: absolute;
+        left: 0.6rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 0.7rem;
+        font-family: 'JetBrains Mono', monospace;
+        pointer-events: none;
+    }
+    /* Especificidade (0,2,2) para vencer `.items-table input[type=...]` (0,2,1),
+       que senão zera o padding e o valor cai em cima do "R$". */
+    .items-table td .money-input input { padding-left: 2rem; }
+
+    /* Combobox com busca (funcionário / EPI) */
+    .combo { position: relative; }
+    /* Dropdown ÚNICO e flutuante (ancorado no <body>). position:fixed + coords
+       de viewport (via JS) o tiram de dentro do .items-table-wrap (overflow) e
+       do .card (backdrop-filter), garantindo que a lista sempre SOBREPONHA o
+       campo em vez de ser cortada. Largura/posição definidas em _positionComboFloat. */
+    .combo-list {
+        position: fixed; z-index: 1000;
+        max-height: 260px; overflow-y: auto;
+        background: var(--bg-secondary); border: 1px solid var(--gold);
+        border-radius: 6px; box-shadow: 0 10px 28px rgba(0,0,0,0.45);
+    }
+    .combo-opt { padding: 0.5rem 0.7rem; cursor: pointer; font-size: 0.85rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .combo-opt:hover { background: var(--bg-hover); color: var(--gold-text); }
+    .combo-empty { padding: 0.6rem 0.7rem; font-size: 0.8rem; color: var(--text-muted); }
+
+    /* Badges de status do pedido (aba Confirmar) */
+    .status-badge {
+        display: inline-block; padding: 0.2rem 0.6rem;
+        font-family: 'JetBrains Mono', monospace; font-size: 0.65rem;
+        text-transform: uppercase; letter-spacing: 1px; font-weight: 700;
+        border-radius: 4px; border: 1px solid;
+    }
+    .status-badge.confirmado { color: var(--success); border-color: var(--success); background: rgba(74,222,128,0.1); }
+    .status-badge.pendente { color: var(--warning); border-color: var(--warning); background: rgba(212,168,75,0.08); }
+    /* Coluna Ações: botões com espaçamento consistente e quebra organizada */
+    .acoes-cell { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .acoes-cell .btn { margin: 0; white-space: nowrap; }
+    .categoria-badge {
+        display: inline-block; padding: 0.15rem 0.5rem;
+        font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1px;
+        font-weight: 700; border-radius: 4px;
+        background: rgba(255,255,255,0.05); border: 1px solid var(--border-strong);
+        color: var(--text-secondary);
+    }
+
+    /* Abas Solicitar / Confirmar */
+    .compras-tabs { display: flex; gap: 0.25rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); }
+    .compras-tab {
+        display: inline-flex; align-items: center; gap: 0.45rem;
+        background: transparent; border: none; cursor: pointer;
+        padding: 0.7rem 1.15rem; color: var(--text-secondary);
+        font-family: var(--font-head); font-weight: 600; font-size: 0.9rem;
+        border-bottom: 2px solid transparent; margin-bottom: -1px;
+        transition: color 0.15s ease, border-color 0.15s ease;
+    }
+    .compras-tab:hover { color: var(--gold-text); }
+    .compras-tab.active { color: var(--gold-text); border-bottom-color: var(--gold); }
+    .compras-tab .material-symbols-outlined { font-size: 19px; }
+
+    /* Botão remover refinado */
+    .items-table .icon-btn {
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--text-muted);
+        font-size: 1.1rem;
+        line-height: 1;
+        padding: 0.3rem 0.55rem;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all .15s ease;
+    }
+    .items-table .icon-btn:hover {
+        color: var(--error);
+        border-color: var(--error);
+        background: rgba(239, 68, 68, 0.08);
+    }
+
+    /* Empty state quando não há linha */
+    .items-empty {
+        padding: 1.5rem 1rem;
+        text-align: center;
+        color: var(--text-muted);
+        font-style: italic;
+        font-size: 0.85rem;
+        background: rgba(255,255,255,0.015);
+        border-radius: 4px;
+    }
+
+    /* Toolbar de ações abaixo da tabela */
+    .items-toolbar {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 0.5rem;
+        align-items: center;
+    }
+    .items-toolbar .spacer { flex: 1; }
     .icon-btn {
         background: none;
         border: none;
@@ -277,7 +442,19 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>Compras de EPIs</h1>
+    <div>
+        <h1>Compras</h1>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem;">Pedidos de compra e confirmação de recebimento</p>
+    </div>
+</div>
+
+<div class="compras-tabs">
+    <button type="button" class="compras-tab active" data-tab="solicitar" onclick="showComprasTab('solicitar')">
+        <span class="material-symbols-outlined">add_shopping_cart</span> Solicitar
+    </button>
+    <button type="button" class="compras-tab" data-tab="confirmar" onclick="showComprasTab('confirmar')">
+        <span class="material-symbols-outlined">fact_check</span> Confirmar recebimento
+    </button>
 </div>
 
 <div id="editing-banner" class="editing-banner" style="display:none;">
@@ -285,10 +462,10 @@
     <a href="#" onclick="cancelEdit(); return false;" style="color:inherit; text-decoration: underline;">cancelar edição</a>
 </div>
 
-<!-- Form -->
-<div class="card">
+<!-- Form / Solicitar -->
+<div class="card" id="tab-solicitar">
     <div class="card-header">
-        <h2 id="form-title">Nova Compra de EPI</h2>
+        <h2 id="form-title">Novo pedido de compra</h2>
     </div>
 
     <!-- 1. Centro de custo -->
@@ -305,8 +482,12 @@
             </div>
         </div>
         <div class="form-group">
-            <label for="mes_ano">Mês de referência</label>
+            <label for="mes_ano">Mês de referência (competência do faturamento)</label>
             <input type="month" id="mes_ano" required>
+            <small style="display:block;margin-top:0.35rem;color:var(--text-muted);font-size:0.75rem;">
+                Mês em que a compra será debitada no faturamento. O mês do pedido é
+                registrado automaticamente pela data em que ele é salvo.
+            </small>
         </div>
     </div>
 
@@ -330,24 +511,38 @@
 
     <!-- 3. Itens -->
     <div class="epi-section">
-        <h3>3. Itens da Compra</h3>
-        <table class="items-table" id="items-table">
-            <thead>
-                <tr>
-                    <th>EPI (catálogo)</th>
-                    <th style="width: 140px;">Tamanho</th>
-                    <th class="col-qty">Qtde/func.</th>
-                    <th class="col-qty">Qtd total</th>
-                    <th class="col-money">Valor unit. (R$)</th>
-                    <th class="col-money">Total item (R$)</th>
-                    <th class="col-action"></th>
-                </tr>
-            </thead>
-            <tbody id="items-body"></tbody>
-        </table>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;">
-            <button type="button" class="btn btn-outline" onclick="addItem()" style="font-size: 0.75rem; padding: 0.5rem 1rem;">+ Adicionar item</button>
-            <a href="/catalogo-epis?token={{ token }}" target="_blank" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.5rem 1rem;">+ Cadastrar EPI no catálogo</a>
+        <h3>3. Atribuições <span style="color:var(--text-muted);font-weight:400;font-size:0.85rem;">— 1 linha = 1 funcionário recebendo 1 item</span></h3>
+        <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0 0 0.75rem;">
+            A categoria é escolhida <strong>por item</strong>: EPI puxa do catálogo de EPIs (com tamanho e C.A);
+            Uniforme e Equipamento puxam do catálogo de produtos (TOTVS). Um mesmo pedido pode misturar categorias,
+            e o mesmo funcionário pode aparecer em várias linhas. Para EPI, o C.A é pré-preenchido do catálogo e pode ser sobrescrito por linha.
+        </p>
+        <div class="items-table-wrap">
+            <table class="items-table" id="items-table">
+                <thead>
+                    <tr>
+                        <th class="col-func">Funcionário</th>
+                        <th class="col-cat">Categoria<span class="col-hint">por item</span></th>
+                        <th class="col-epi">Item<span class="col-hint">EPI ou produto do catálogo</span></th>
+                        <th class="col-size">Tamanho<span class="col-hint">EPI / uniforme</span></th>
+                        <th class="col-qty">Quantidade</th>
+                        <th class="col-money">Valor unitário</th>
+                        <th class="col-ca" title="Certificado de Aprovação do MTE — número do registro do EPI (somente linhas de EPI)">C.A<span class="col-hint">somente EPI</span></th>
+                        <th class="col-total">Total</th>
+                        <th class="col-action" aria-label="Remover"></th>
+                    </tr>
+                </thead>
+                <tbody id="items-body"></tbody>
+            </table>
+        </div>
+        <div class="items-toolbar">
+            <button type="button" class="btn btn-outline" onclick="addItem()" style="font-size: 0.75rem; padding: 0.5rem 1rem;">+ Adicionar linha</button>
+            <button type="button" class="btn btn-outline" id="btn-aplicar-todos" onclick="aplicarUltimoItemATodos()" style="font-size: 0.75rem; padding: 0.5rem 1rem;" title="Replica a última linha (categoria/item/tamanho/valor) para todos os funcionários selecionados">
+                Aplicar último item a todos
+            </button>
+            <span class="spacer"></span>
+            <a href="/catalogo-epis" target="_blank" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.5rem 1rem;">+ Cadastrar EPI no catálogo</a>
+            <a href="/catalogo-produtos" target="_blank" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.5rem 1rem;">Ver catálogo de produtos</a>
         </div>
     </div>
 
@@ -404,22 +599,28 @@
     </div>
 </div>
 
-<!-- Listagem -->
-<div class="card">
+<!-- Listagem / Confirmar recebimento -->
+<div class="card" id="tab-confirmar" style="display:none;">
     <div class="card-header">
-        <h2>Compras Existentes</h2>
+        <h2>Pedidos de compra — confirmar recebimento</h2>
     </div>
     <div style="overflow-x: auto;">
+        <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0 0 1rem;">
+            Somente pedidos <strong style="color:var(--success);">confirmados</strong> entram no faturamento.
+        </p>
         <table id="packages-table">
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Mês</th>
+                    <th>Categorias</th>
+                    <th title="Mês em que o pedido foi feito (data de criação)">Mês Pedido</th>
+                    <th title="Competência que entra no faturamento (mês a ser debitado)">Mês Ref.</th>
                     <th>CCU</th>
                     <th>Funcionários</th>
                     <th>Itens</th>
                     <th>Linhas</th>
                     <th>Valor total</th>
+                    <th>Status</th>
                     <th>Solicitação</th>
                     <th>Ações</th>
                 </tr>
@@ -447,11 +648,13 @@
 
 {% block extra_js %}
 const TOKEN = AUTH_TOKEN;
-const employees = { all: [], selected: new Set(), nomeByNumcad: {} };
+const employees = { all: [], selected: new Set(), nomeByNumcad: {}, cargoByNumcad: {} };
 const ccuState = { all: [], highlighted: -1 };
 const purchaseState = { editingId: null, lastSavedPkg: null };
 let lastStaleInactive = [];
 const catalogState = { all: [] };
+// Cache de produtos (uniforme/equipamento) por categoria, vindo de /api/products.
+const productCatalogState = { byCat: { uniforme: [], equipamento: [] }, loaded: { uniforme: false, equipamento: false } };
 const smtpState = { configured: false, defaultRecipient: '' };
 
 // ---- inicialização ----
@@ -484,10 +687,10 @@ function subscribeCatalogUpdates() {
 }
 
 function refreshEpiSelects() {
-    // 1) cada select de EPI: re-renderiza preservando seleção atual
-    document.querySelectorAll('.epi-select').forEach(sel => {
-        const currentVal = sel.value;
-        sel.innerHTML = _epiSelectOptions(currentVal);
+    // 1) cada combo de EPI: atualiza o rótulo exibido (catálogo pode ter carregado depois)
+    document.querySelectorAll('#items-body .combo[data-kind="epi"]').forEach(combo => {
+        const hidden = combo.querySelector('.epi-select');
+        combo.querySelector('.combo-search').value = _comboLabel('epi', hidden.value);
     });
     // 2) cada select de tamanho: depende do epi selecionado na mesma linha
     document.querySelectorAll('.size-select').forEach(sizeSel => {
@@ -510,6 +713,37 @@ async function loadCatalog() {
         console.warn('Falha ao carregar catálogo:', e.message);
         catalogState.all = [];
     }
+}
+
+// Carrega os produtos (uniforme/equipamento) do catálogo TOTVS para a categoria.
+async function loadProductCatalog(categoria) {
+    if (categoria === 'epi') return;
+    try {
+        const r = await fetch('/api/products?categoria=' + encodeURIComponent(categoria) + '&per_page=200');
+        const j = await r.json();
+        const data = (j.data || []).filter(p => p.ativo !== false);
+        productCatalogState.byCat[categoria] = data.map(p => ({
+            codigo: String(p.codigo), descricao: p.descricao || String(p.codigo), preco: p.preco,
+        }));
+        productCatalogState.loaded[categoria] = true;
+    } catch (e) {
+        console.warn('Falha ao carregar catálogo de produtos:', e.message);
+        productCatalogState.byCat[categoria] = [];
+        productCatalogState.loaded[categoria] = false;  // permite nova tentativa
+    }
+}
+
+// Garante que o catálogo de produtos da categoria já está em cache (carrega 1x).
+async function ensureProductCatalog(categoria) {
+    if (categoria === 'epi') return;
+    if (productCatalogState.loaded[categoria]) return;
+    await loadProductCatalog(categoria);
+}
+
+// Categoria da LINHA à qual o elemento pertence ('epi' | 'uniforme' | 'equipamento').
+function _rowCategoria(el) {
+    const tr = el && el.closest ? el.closest('tr') : null;
+    return (tr && tr.dataset.categoria) || 'epi';
 }
 
 async function loadSmtpStatus() {
@@ -667,7 +901,11 @@ async function onCcuChange() {
         if (j.status !== 'ok') throw new Error(j.message || 'erro carregando funcionários');
         employees.all = j.data || [];
         employees.nomeByNumcad = {};
-        for (const e of employees.all) employees.nomeByNumcad[e.numcad] = e.nomfun;
+        employees.cargoByNumcad = {};
+        for (const e of employees.all) {
+            employees.nomeByNumcad[e.numcad] = e.nomfun;
+            employees.cargoByNumcad[e.numcad] = e.cargo || '';
+        }
         if (employees.all.length === 0) {
             list.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--warning);font-style:italic;">Nenhum funcionário ativo neste centro de custo.</div>';
         } else {
@@ -703,6 +941,7 @@ function renderEmployees() {
 function toggleEmployee(numcad, checked) {
     if (checked) employees.selected.add(numcad);
     else employees.selected.delete(numcad);
+    refreshAllFuncSelects();
     updateCounters();
 }
 
@@ -713,11 +952,13 @@ function selectAllVisible() {
         if (matches) employees.selected.add(e.numcad);
     });
     renderEmployees();
+    refreshAllFuncSelects();
     updateCounters();
 }
 
 function clearEmployees() {
     employees.selected.clear();
+    refreshAllFuncSelects();
     renderEmployees();
     updateCounters();
 }
@@ -745,40 +986,312 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
 
+// ===== Combobox com busca (funcionário / EPI / produto) =====
+// Mantém um <input type="hidden"> com a classe .func-select/.epi-select (valor = id),
+// para todo o resto do código continuar lendo .value normalmente.
+function _comboOptions(kind, categoria) {
+    if (kind === 'func') {
+        return Array.from(employees.selected).map(n => ({
+            value: String(n), label: employees.nomeByNumcad[n] || ('matr. ' + n),
+        }));
+    }
+    if (kind === 'prod') {
+        // Produtos (uniforme/equipamento): value=codigo, label=descricao.
+        // A categoria vem da LINHA (data-categoria do <tr>), não mais do pedido.
+        const list = productCatalogState.byCat[categoria] || [];
+        return list.map(p => ({ value: p.codigo, label: p.descricao }));
+    }
+    return catalogState.all.map(e => ({ value: String(e.id), label: e.nome }));
+}
+function _comboLabel(kind, value, categoria) {
+    if (value === '' || value == null) return '';
+    const o = _comboOptions(kind, categoria).find(o => o.value === String(value));
+    return o ? o.label : '';
+}
+function _comboHtml(kind, selectedValue, categoria) {
+    const ph = kind === 'func' ? 'Buscar funcionário…'
+        : (kind === 'prod' ? 'Buscar produto…' : 'Buscar EPI…');
+    const label = _comboLabel(kind, selectedValue, categoria);
+    return `<div class="combo" data-kind="${kind}">
+        <input type="hidden" class="${kind}-select" value="${selectedValue || ''}">
+        <input type="text" class="combo-search" placeholder="${ph}" autocomplete="off" value="${escapeAttr(label)}">
+    </div>`;
+}
+
+// -- Dropdown ÚNICO e flutuante ------------------------------------------------
+// Em vez de uma lista por linha (que ficava presa dentro do .items-table-wrap
+// com overflow e era cortada), há UM só elemento flutuante ancorado no <body>,
+// reaproveitado pelo campo que estiver aberto (_activeCombo). Como fica no body,
+// position:fixed + getBoundingClientRect posicionam-no com precisão sobre o
+// campo, sempre por cima de tudo.
+let _activeCombo = null;
+function _comboFloat() {
+    let el = document.getElementById('combo-float');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'combo-float';
+    el.className = 'combo-list';
+    el.style.display = 'none';
+    el.addEventListener('mousedown', e => {
+        const opt = e.target.closest && e.target.closest('.combo-opt');
+        if (!opt || !_activeCombo) return;
+        e.preventDefault();  // evita blur antes de registrar a seleção
+        _comboSelect(_activeCombo, opt.dataset.value);
+    });
+    document.body.appendChild(el);
+    return el;
+}
+function _positionComboFloat() {
+    const el = _comboFloat();
+    if (el.style.display === 'none' || !_activeCombo) return;
+    const input = _activeCombo.querySelector('.combo-search');
+    if (!input || !input.offsetParent) { _closeComboFloat(); return; }  // saiu do DOM/oculto
+    const r = input.getBoundingClientRect();
+    const gap = 4;
+    const h = Math.min(el.scrollHeight, 260);
+    const abaixo = window.innerHeight - r.bottom;
+    el.style.width = r.width + 'px';
+    el.style.left = r.left + 'px';
+    if (abaixo < h + gap && r.top > abaixo) {
+        el.style.top = Math.max(gap, r.top - h - gap) + 'px';  // sem espaço abaixo: abre pra cima
+    } else {
+        el.style.top = (r.bottom + gap) + 'px';
+    }
+}
+function _closeComboFloat(restoreLabel) {
+    const el = _comboFloat();
+    el.style.display = 'none';
+    if (restoreLabel !== false && _activeCombo) {
+        const kind = _activeCombo.dataset.kind;
+        const search = _activeCombo.querySelector('.combo-search');
+        if (search && document.activeElement !== search)
+            search.value = _comboLabel(kind, _activeCombo.querySelector('.' + kind + '-select').value, _rowCategoria(_activeCombo));
+    }
+    _activeCombo = null;
+}
+function _renderComboList(combo, filter) {
+    const kind = combo.dataset.kind;
+    const el = _comboFloat();
+    _activeCombo = combo;
+    const f = (filter || '').trim().toLowerCase();
+    const opts = _comboOptions(kind, _rowCategoria(combo)).filter(o => !f || o.label.toLowerCase().includes(f));
+    if (!opts.length) {
+        el.innerHTML = `<div class="combo-empty">${kind === 'func'
+            ? 'Nenhum funcionário no pool — selecione no passo 2.'
+            : (kind === 'prod' ? 'Nenhum produto encontrado no catálogo desta categoria.'
+                               : 'Nenhum item encontrado.')}</div>`;
+    } else {
+        el.innerHTML = opts.slice(0, 200).map(o =>
+            `<div class="combo-opt" data-value="${escapeAttr(o.value)}" title="${escapeAttr(o.label)}">${escapeHtml(o.label)}</div>`
+        ).join('');
+    }
+    el.style.display = 'block';
+    _positionComboFloat();
+}
+function _comboSelect(combo, value) {
+    const kind = combo.dataset.kind;
+    const hidden = combo.querySelector('.' + kind + '-select');
+    hidden.value = value || '';
+    combo.querySelector('.combo-search').value = _comboLabel(kind, value, _rowCategoria(combo));
+    _closeComboFloat(false);
+    if (kind === 'epi') onEpiSelected(hidden);
+    else if (kind === 'prod') onProdSelected(hidden);
+    else updateRow(hidden);
+}
+function _comboOutsideClick(e) {
+    if (!_activeCombo) return;
+    if (_activeCombo.contains(e.target) || _comboFloat().contains(e.target)) return;
+    _closeComboFloat();
+}
+function _initComboDelegation() {
+    const body = document.getElementById('items-body');
+    if (!body || body._comboInit) return;
+    body._comboInit = true;
+    _comboFloat();  // cria o elemento flutuante + handler de seleção
+    body.addEventListener('focusin', e => {
+        const s = e.target.closest && e.target.closest('.combo-search');
+        if (!s) return;
+        _renderComboList(s.closest('.combo'), '');
+        setTimeout(() => s.select(), 0);
+    });
+    body.addEventListener('input', e => {
+        const s = e.target.closest && e.target.closest('.combo-search');
+        if (!s) return;
+        const combo = s.closest('.combo');
+        if (!s.value.trim()) combo.querySelector('.' + combo.dataset.kind + '-select').value = '';
+        _renderComboList(combo, s.value);
+    });
+    body.addEventListener('keydown', e => {
+        const s = e.target.closest && e.target.closest('.combo-search');
+        if (!s) return;
+        const combo = s.closest('.combo');
+        if (e.key === 'Escape') { _closeComboFloat(); }
+        else if (e.key === 'Enter') {
+            e.preventDefault();
+            const o = _comboFloat().querySelector('.combo-opt');
+            if (o) _comboSelect(combo, o.dataset.value);
+        }
+    });
+    document.addEventListener('click', _comboOutsideClick);
+    // Mantém o dropdown colado ao campo quando a página ou a tabela rolam.
+    // capture=true também captura o scroll interno do .items-table-wrap.
+    window.addEventListener('scroll', _positionComboFloat, true);
+    window.addEventListener('resize', _positionComboFloat);
+}
+
+// Linha unificada: a categoria (epi | uniforme | equipamento) é escolhida POR LINHA
+// e funciona como filtro da fonte do item (catálogo de EPIs vs. catálogo de produtos).
 function addItem(prefill) {
     const tbody = document.getElementById('items-body');
+    _initComboDelegation();
     const tr = document.createElement('tr');
-    const epiId = prefill?.epi_id || '';
-    const tamanho = prefill?.tamanho || '';
-    const qpf = prefill?.quantidade_por_funcionario || 1;
+    const categoria = prefill?.categoria || 'epi';
+    tr.dataset.categoria = categoria;
+    const numcad = prefill?.numcad ?? prefill?.employee_numcad ?? '';
+    const qtd = prefill?.quantidade ?? prefill?.quantidade_por_funcionario ?? 1;
     const valor = prefill?.valor_unitario || '';
-    const qtdTotal = prefill?.quantidade_total_item ?? '';
-    // Marca que o valor vem do banco (override do usuário). Linhas novas
-    // arrancam sem override (vazio = auto-preencher na primeira atualização).
-    const overrideAttr = (qtdTotal !== '' && qtdTotal != null) ? 'data-user-overridden="1"' : '';
     tr.innerHTML = `
+        <td>${_comboHtml('func', numcad)}</td>
         <td>
-            <select class="epi-select" onchange="onEpiSelected(this)">${_epiSelectOptions(epiId)}</select>
+            <select class="cat-select" onchange="onRowCategoriaChanged(this)">
+                <option value="epi" ${categoria === 'epi' ? 'selected' : ''}>EPI</option>
+                <option value="uniforme" ${categoria === 'uniforme' ? 'selected' : ''}>Uniforme</option>
+                <option value="equipamento" ${categoria === 'equipamento' ? 'selected' : ''}>Equipamento</option>
+            </select>
         </td>
+        <td class="cell-item"></td>
+        <td class="cell-size"></td>
+        <td><input type="number" class="qpf-input" min="1" step="1" value="${qtd}" oninput="updateRow(this)"></td>
         <td>
-            <select class="size-select" onchange="onSizeSelected(this)">${_sizeSelectOptions(epiId, tamanho)}</select>
-        </td>
-        <td><input type="number" class="qpf-input" min="1" step="1" value="${qpf}" oninput="updateRow(this)"></td>
-        <td><input type="number" class="qtd-total-input" min="1" step="1" value="${qtdTotal}" placeholder="auto" oninput="onQtdTotalEdited(this)" ${overrideAttr}></td>
-        <td>
-            <input type="number" class="valor-input" min="0.01" step="0.01" value="${valor}" placeholder="0,00" oninput="updateRow(this)">
+            <div class="money-input">
+                <input type="number" class="valor-input" min="0.01" step="0.01" value="${valor}" placeholder="0,00" oninput="updateRow(this)">
+            </div>
             <div class="valor-aviso" style="display:none;color:var(--warning);font-size:0.7rem;margin-top:0.25rem;font-family:'JetBrains Mono',monospace;"></div>
         </td>
-        <td><input type="text" readonly value="0,00" class="item-total" style="background:var(--bg-tertiary);"></td>
-        <td><button type="button" class="icon-btn" title="Remover" onclick="removeItem(this)">×</button></td>
+        <td class="cell-ca"></td>
+        <td>
+            <div class="money-input">
+                <input type="text" readonly value="0,00" class="item-total">
+            </div>
+        </td>
+        <td><button type="button" class="icon-btn" title="Remover esta linha" aria-label="Remover" onclick="removeItem(this)">×</button></td>
     `;
+    _fillRowCategoriaCells(tr, categoria, prefill);
     tbody.appendChild(tr);
-    if (epiId && tamanho) {
-        // já pré-popula a info do tamanho selecionado pra checar override
-        _refreshValorAviso(tr);
+    updateRow(tr.querySelector('input,select'));
+}
+
+// Preenche as células que dependem da categoria da linha (item, tamanho, C.A).
+function _fillRowCategoriaCells(tr, categoria, prefill) {
+    const itemCell = tr.querySelector('.cell-item');
+    const sizeCell = tr.querySelector('.cell-size');
+    const caCell = tr.querySelector('.cell-ca');
+    const tamanho = prefill?.tamanho || '';
+    if (categoria === 'epi') {
+        const epiId = prefill?.epi_id || '';
+        let ca = prefill?.ca_numero || '';
+        // Sem CA no prefill: pré-popula com o ca_padrao do catálogo
+        if (epiId && !ca) {
+            const epi = catalogState.all.find(e => e.id == epiId);
+            if (epi && epi.ca_padrao) ca = epi.ca_padrao;
+        }
+        itemCell.innerHTML = _comboHtml('epi', epiId);
+        sizeCell.innerHTML = `<select class="size-select" onchange="onSizeSelected(this)">${_sizeSelectOptions(epiId, tamanho)}</select>`;
+        caCell.classList.remove('cell-na');
+        caCell.innerHTML = `<input type="text" class="ca-input" value="${escapeAttr(ca)}" placeholder="ex: 11199" maxlength="50">`;
+        if (epiId && tamanho) _refreshValorAviso(tr);
+    } else {
+        const codigo = prefill?.produto_codigo || '';
+        itemCell.innerHTML = _comboHtml('prod', codigo, categoria);
+        sizeCell.innerHTML = categoria === 'uniforme'
+            ? `<input type="text" class="size-text" value="${escapeAttr(tamanho)}" placeholder="ex: M, 42…" maxlength="20" oninput="updateRow(this)">`
+            : `<input type="text" class="size-text" value="" placeholder="—" disabled>`;
+        caCell.classList.add('cell-na');
+        caCell.innerHTML = '—';
     }
-    updateRow(tr.querySelector('input'));
-    updateCounters();
+}
+
+// Troca de categoria em uma linha existente: limpa item/tamanho/C.A/valor da linha
+// e reconstrói as células conforme a nova categoria (carregando o catálogo se preciso).
+async function onRowCategoriaChanged(sel) {
+    const tr = sel.closest('tr');
+    const categoria = sel.value;
+    tr.dataset.categoria = categoria;
+    if (categoria !== 'epi') await ensureProductCatalog(categoria);
+    _fillRowCategoriaCells(tr, categoria, null);
+    const valorInput = tr.querySelector('.valor-input');
+    if (valorInput) valorInput.value = '';
+    const aviso = tr.querySelector('.valor-aviso');
+    if (aviso) aviso.style.display = 'none';
+    updateRow(sel);
+}
+
+// Ao selecionar um produto no combobox 'prod', pré-preenche o valor com o preço do catálogo.
+function onProdSelected(sel) {
+    const tr = sel.closest('tr');
+    const codigo = sel.value;
+    const list = productCatalogState.byCat[_rowCategoria(sel)] || [];
+    const prod = list.find(p => p.codigo === String(codigo));
+    const valorInput = tr.querySelector('.valor-input');
+    if (prod && prod.preco != null && (!valorInput.value || parseFloat(valorInput.value) === 0)) {
+        valorInput.value = Number(prod.preco).toFixed(2);
+    }
+    updateRow(sel);
+}
+
+function refreshAllFuncSelects() {
+    // Chamada quando employees.selected muda: re-renderiza dropdowns das linhas
+    // mantendo a seleção atual quando ainda presente no pool.
+    document.querySelectorAll('#items-body .combo[data-kind="func"]').forEach(combo => {
+        const hidden = combo.querySelector('.func-select');
+        const current = hidden.value;
+        const stillInPool = current && employees.selected.has(parseInt(current, 10));
+        if (!stillInPool) hidden.value = '';
+        combo.querySelector('.combo-search').value = _comboLabel('func', hidden.value);
+        // se este for o combo com dropdown aberto, re-renderiza as opções
+        if (_activeCombo === combo) _renderComboList(combo, combo.querySelector('.combo-search').value);
+    });
+}
+
+function aplicarUltimoItemATodos() {
+    const rows = document.querySelectorAll('#items-body tr');
+    if (!rows.length) {
+        toast('Adicione uma linha primeiro com o item/tamanho/valor que quer replicar.', 'warning');
+        return;
+    }
+    const last = rows[rows.length - 1];
+    const categoria = last.dataset.categoria || 'epi';
+    const qtd = parseInt(last.querySelector('.qpf-input').value, 10) || 1;
+    const valor = parseFloat(last.querySelector('.valor-input').value) || 0;
+    const lastNumcad = parseInt(last.querySelector('.func-select').value, 10);
+    const alvos = Array.from(employees.selected).filter(n => n !== lastNumcad);
+
+    if (categoria === 'epi') {
+        const epiId = last.querySelector('.epi-select').value;
+        const tamanho = last.querySelector('.size-select').value;
+        const ca = last.querySelector('.ca-input').value;
+        if (!epiId || !tamanho || valor <= 0) {
+            toast('Preencha a última linha (EPI, tamanho e valor) antes de replicar.', 'warning');
+            return;
+        }
+        if (!alvos.length) { toast('Selecione mais de 1 funcionário no passo 2 para replicar.', 'warning'); return; }
+        for (const numcad of alvos) {
+            addItem({ categoria, numcad, epi_id: parseInt(epiId, 10), tamanho, quantidade: qtd, valor_unitario: valor, ca_numero: ca });
+        }
+    } else {
+        const codigo = last.querySelector('.prod-select').value;
+        const sizeEl = last.querySelector('.size-text');
+        const tamanho = sizeEl ? sizeEl.value.trim() : '';
+        if (!codigo || valor <= 0) {
+            toast('Preencha a última linha (produto e valor) antes de replicar.', 'warning');
+            return;
+        }
+        if (!alvos.length) { toast('Selecione mais de 1 funcionário no passo 2 para replicar.', 'warning'); return; }
+        for (const numcad of alvos) {
+            addItem({ categoria, numcad, produto_codigo: codigo, tamanho, quantidade: qtd, valor_unitario: valor });
+        }
+    }
+    toast(`+${alvos.length} linha(s) adicionadas.`, 'success');
 }
 
 function onEpiSelected(sel) {
@@ -787,6 +1300,12 @@ function onEpiSelected(sel) {
     const sizeSel = tr.querySelector('.size-select');
     sizeSel.innerHTML = _sizeSelectOptions(epiId, '');
     tr.querySelector('.valor-input').value = '';
+    // Pré-popula CA com o ca_padrao do catálogo (se o campo estiver vazio)
+    const caInput = tr.querySelector('.ca-input');
+    if (caInput && !caInput.value.trim()) {
+        const epi = catalogState.all.find(e => e.id == epiId);
+        if (epi && epi.ca_padrao) caInput.value = epi.ca_padrao;
+    }
     _refreshValorAviso(tr);
     updateRow(sel);
 }
@@ -803,6 +1322,8 @@ function onSizeSelected(sel) {
 }
 
 function _refreshValorAviso(tr) {
+    const aviso0 = tr.querySelector('.valor-aviso');
+    if (!aviso0) return;  // linhas de produto não têm aviso de catálogo
     const sizeSel = tr.querySelector('.size-select');
     const selected = sizeSel?.options[sizeSel.selectedIndex];
     const catalogValor = selected ? parseFloat(selected.dataset.valor || '0') : 0;
@@ -816,35 +1337,13 @@ function _refreshValorAviso(tr) {
     }
 }
 
-function onQtdTotalEdited(input) {
-    // Marca a linha como "override manual" pra parar de auto-preencher
-    const tr = input.closest('tr');
-    const qtdInput = tr.querySelector('.qtd-total-input');
-    if (input.value === '' || input.value === null) {
-        qtdInput.removeAttribute('data-user-overridden');
-    } else {
-        qtdInput.setAttribute('data-user-overridden', '1');
-    }
-    updateRow(input);
-}
-
-function _autoUpdateQtdTotal(tr) {
-    // Re-popula qtd-total quando NÃO está em override manual.
-    const qtdInput = tr.querySelector('.qtd-total-input');
-    if (!qtdInput) return;
-    if (qtdInput.getAttribute('data-user-overridden') === '1') return;
-    const qpf = parseFloat(tr.querySelector('.qpf-input')?.value || '0') || 0;
-    const empN = employees.selected.size || 0;
-    qtdInput.value = (qpf > 0 && empN > 0) ? (qpf * empN) : '';
-}
-
 function updateRow(input) {
     const tr = input.closest('tr');
-    _autoUpdateQtdTotal(tr);
-    const qtdTotal = parseFloat(tr.querySelector('.qtd-total-input')?.value || '0') || 0;
+    const qtd = parseFloat(tr.querySelector('.qpf-input')?.value || '0') || 0;
     const unit = parseFloat(tr.querySelector('.valor-input').value) || 0;
-    const totalItemValor = qtdTotal * unit;
-    tr.querySelector('.item-total').value = totalItemValor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Modelo 1:1: total da linha = qtd × valor_unit
+    const totalLinha = qtd * unit;
+    tr.querySelector('.item-total').value = totalLinha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     _refreshValorAviso(tr);
     updateCounters();
 }
@@ -855,45 +1354,76 @@ function removeItem(btn) {
     updateCounters();
 }
 
-function collectItems() {
+function collectLines() {
+    // Modelo 1:1: cada linha de categoria EPI do form vira uma entrada em `linhas`.
     const rows = document.querySelectorAll('#items-body tr');
     const out = [];
     for (const tr of rows) {
+        if ((tr.dataset.categoria || 'epi') !== 'epi') continue;
+        const numcad = parseInt(tr.querySelector('.func-select').value, 10);
         const epi_id = parseInt(tr.querySelector('.epi-select').value, 10);
         const tamanho = tr.querySelector('.size-select').value;
-        const quantidade_por_funcionario = parseInt(tr.querySelector('.qpf-input').value, 10);
+        const quantidade = parseInt(tr.querySelector('.qpf-input').value, 10);
         const valor_unitario = parseFloat(tr.querySelector('.valor-input').value);
-        if (!epi_id && !tamanho && !valor_unitario) continue;
-        const item = { epi_id, tamanho, quantidade_por_funcionario, valor_unitario };
-        // Inclui quantidade_total APENAS quando o usuário sobrescreveu o valor auto.
-        const qtdEl = tr.querySelector('.qtd-total-input');
-        if (qtdEl && qtdEl.getAttribute('data-user-overridden') === '1') {
-            const qtdTotal = parseInt(qtdEl.value, 10);
-            if (Number.isFinite(qtdTotal) && qtdTotal > 0) {
-                item.quantidade_total = qtdTotal;
-            }
-        }
-        out.push(item);
+        const ca = tr.querySelector('.ca-input').value.trim();
+        // Pula linha totalmente em branco
+        if (!numcad && !epi_id && !tamanho && !valor_unitario) continue;
+        out.push({
+            numcad,
+            // `nome`/`cargo` não são mais persistidos no backend, mas `nome` segue
+            // sendo enviado por ser usado nas mensagens de revalidação de ativos.
+            nome: employees.nomeByNumcad[numcad] || '',
+            cargo: employees.cargoByNumcad[numcad] || '',
+            epi_id,
+            tamanho,
+            quantidade,
+            valor_unitario,
+            ca_numero: ca || null,
+        });
+    }
+    return out;
+}
+
+function collectProductLines() {
+    // Modelo 1:1 de produto: cada linha uniforme/equipamento vira entrada em linhas_produto.
+    // A categoria de cada produto é derivada no backend pelo catálogo (product_catalog).
+    const rows = document.querySelectorAll('#items-body tr');
+    const out = [];
+    for (const tr of rows) {
+        if ((tr.dataset.categoria || 'epi') === 'epi') continue;
+        const numcad = parseInt(tr.querySelector('.func-select').value, 10);
+        const produto_codigo = tr.querySelector('.prod-select').value;
+        const sizeEl = tr.querySelector('.size-text');
+        const tamanho = (sizeEl && !sizeEl.disabled) ? sizeEl.value.trim() : '';
+        const quantidade = parseInt(tr.querySelector('.qpf-input').value, 10);
+        const valor_unitario = parseFloat(tr.querySelector('.valor-input').value);
+        // Pula linha totalmente em branco
+        if (!numcad && !produto_codigo && !valor_unitario) continue;
+        out.push({
+            numcad,
+            nome: employees.nomeByNumcad[numcad] || '',
+            cargo: employees.cargoByNumcad[numcad] || '',
+            produto_codigo,
+            tamanho: tamanho || null,
+            quantidade,
+            valor_unitario,
+        });
     }
     return out;
 }
 
 function updateCounters() {
     const empN = employees.selected.size;
-    const items = collectItems();
-    const itemN = items.length;
-    const rowsN = empN * itemN;  // cartesiano: 1 linha por funcionário×item no banco
+    const nLinhas = collectLines().length + collectProductLines().length;
     document.getElementById('sum-emp').textContent = empN;
-    document.getElementById('sum-items').textContent = itemN;
-    document.getElementById('sum-rows').textContent = rowsN;
+    document.getElementById('sum-items').textContent = nLinhas;  // # de atribuições
+    document.getElementById('sum-rows').textContent = nLinhas;   // 1:1: linhas = atribuições
     document.getElementById('employee-counter').textContent = empN + (empN === 1 ? ' selecionado' : ' selecionados');
-    // Atualiza qtd-total auto + total por linha
     let money = 0;
     document.querySelectorAll('#items-body tr').forEach(tr => {
-        _autoUpdateQtdTotal(tr);
-        const qtdTotal = parseFloat(tr.querySelector('.qtd-total-input')?.value || '0') || 0;
+        const qtd = parseFloat(tr.querySelector('.qpf-input')?.value || '0') || 0;
         const unit = parseFloat(tr.querySelector('.valor-input')?.value || '0') || 0;
-        const total = qtdTotal * unit;
+        const total = qtd * unit;
         money += total;
         const totEl = tr.querySelector('.item-total');
         if (totEl) totEl.value = total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -902,35 +1432,63 @@ function updateCounters() {
 }
 
 // ---- submit ----
+// Payload ÚNICO (pedido pode misturar categorias): linhas de EPI vão em `linhas`
+// e linhas de uniforme/equipamento em `linhas_produto`. `categoria` do pacote não
+// é mais enviada — o backend deriva dos itens (única categoria ou 'misto').
 function buildPayload() {
     return {
         empresa: 'FEMSA',
         mes_ano: document.getElementById('mes_ano').value,
         codccu: document.getElementById('codccu').value,
         observacao: document.getElementById('observacao').value.trim() || null,
-        employees: Array.from(employees.selected).map(numcad => ({ numcad, nome: employees.nomeByNumcad[numcad] || '' })),
-        items: collectItems(),
+        linhas: collectLines(),
+        linhas_produto: collectProductLines(),
     };
 }
 
-function validatePayload(p) {
-    if (!p.codccu) return 'Selecione um centro de custo.';
-    if (!p.mes_ano) return 'Informe o mês de referência.';
-    if (!p.employees.length) return 'Selecione ao menos 1 funcionário.';
-    if (!p.items.length) return 'Adicione ao menos 1 item.';
-    for (const it of p.items) {
-        if (!Number.isFinite(it.epi_id) || it.epi_id < 1) return 'Cada item precisa de um EPI selecionado do catálogo.';
-        if (!it.tamanho) return 'Cada item precisa de um tamanho selecionado.';
-        if (!Number.isFinite(it.quantidade_por_funcionario) || it.quantidade_por_funcionario < 1) return 'Quantidade por funcionário deve ser >= 1.';
-        if (!Number.isFinite(it.valor_unitario) || it.valor_unitario <= 0) return 'Valor unitário do item deve ser > 0.';
+// Validação direto nas linhas do form (a categoria é por linha; o payload
+// não carrega a distinção uniforme × equipamento necessária pro tamanho).
+function validateForm() {
+    if (!document.getElementById('codccu').value) return 'Selecione um centro de custo.';
+    if (!document.getElementById('mes_ano').value) return 'Informe o mês de referência.';
+    const rows = document.querySelectorAll('#items-body tr');
+    let preenchidas = 0;
+    for (const tr of rows) {
+        const categoria = tr.dataset.categoria || 'epi';
+        const numcad = parseInt(tr.querySelector('.func-select').value, 10);
+        const quantidade = parseInt(tr.querySelector('.qpf-input').value, 10);
+        const valor_unitario = parseFloat(tr.querySelector('.valor-input').value);
+        if (categoria === 'epi') {
+            const epi_id = parseInt(tr.querySelector('.epi-select').value, 10);
+            const tamanho = tr.querySelector('.size-select').value;
+            // Pula linha totalmente em branco (mesmo critério de collectLines)
+            if (!numcad && !epi_id && !tamanho && !valor_unitario) continue;
+            preenchidas++;
+            if (!Number.isFinite(numcad) || numcad < 1) return 'Cada linha precisa de um funcionário selecionado.';
+            if (!Number.isFinite(epi_id) || epi_id < 1) return 'Cada linha de EPI precisa de um EPI selecionado.';
+            if (!tamanho) return 'Cada linha de EPI precisa de um tamanho.';
+        } else {
+            const produto_codigo = tr.querySelector('.prod-select').value;
+            const sizeEl = tr.querySelector('.size-text');
+            const tamanho = (sizeEl && !sizeEl.disabled) ? sizeEl.value.trim() : '';
+            // Pula linha totalmente em branco (mesmo critério de collectProductLines)
+            if (!numcad && !produto_codigo && !valor_unitario) continue;
+            preenchidas++;
+            if (!Number.isFinite(numcad) || numcad < 1) return 'Cada linha precisa de um funcionário selecionado.';
+            if (!produto_codigo) return 'Cada linha precisa de um produto selecionado.';
+            if (categoria === 'uniforme' && !tamanho) return 'Cada linha de uniforme precisa de um tamanho.';
+        }
+        if (!Number.isFinite(quantidade) || quantidade < 1) return 'Quantidade deve ser >= 1.';
+        if (!Number.isFinite(valor_unitario) || valor_unitario <= 0) return 'Valor unitário deve ser > 0.';
     }
+    if (preenchidas === 0) return 'Adicione ao menos 1 linha de atribuição.';
     return null;
 }
 
 async function submitPurchase() {
-    const payload = buildPayload();
-    const err = validatePayload(payload);
+    const err = validateForm();
     if (err) { toast(err, 'error'); return; }
+    const payload = buildPayload();
 
     const btn = document.getElementById('btn-submit');
     btn.disabled = true;
@@ -1041,7 +1599,7 @@ async function sendEmail() {
 // ---- modal 409 ----
 function openStaleModal(inactive) {
     const ul = document.getElementById('stale-list');
-    ul.innerHTML = inactive.map(e => `<li>${e.numcad} — ${e.nome} (${e.motivo || 'não mais ativo'})</li>`).join('');
+    ul.innerHTML = inactive.map(e => `<li>${e.numcad} — ${e.nome || 'matr. ' + e.numcad} (${e.motivo || 'não mais ativo'})</li>`).join('');
     document.getElementById('stale-modal').style.display = 'block';
 }
 function closeStaleModal() {
@@ -1063,14 +1621,14 @@ async function loadPackages() {
         if (j.status !== 'ok') throw new Error(j.message || 'erro');
         renderPackages(j.data || []);
     } catch (e) {
-        document.getElementById('packages-body').innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--error);padding:1rem;">Erro: ${e.message}</td></tr>`;
+        document.getElementById('packages-body').innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--error);padding:1rem;">Erro: ${e.message}</td></tr>`;
     }
 }
 
 function renderPackages(pkgs) {
     const tbody = document.getElementById('packages-body');
     if (!pkgs.length) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:2rem;font-style:italic;">Nenhuma compra registrada ainda.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:2rem;font-style:italic;">Nenhuma compra registrada ainda.</td></tr>';
         return;
     }
     tbody.innerHTML = pkgs.map(p => {
@@ -1085,27 +1643,77 @@ function renderPackages(pkgs) {
         } else {
             solicitacaoCell = '<span style="color:var(--text-muted);font-size:0.75rem;">—</span>';
         }
+        // Badges de categorias: usa a lista `categorias` (pedido pode ser misto);
+        // fallback pro campo legado `categoria` em pacotes antigos.
+        const cats = (Array.isArray(p.categorias) && p.categorias.length)
+            ? p.categorias
+            : [p.categoria || 'epi'];
+        const catCell = cats.map(c => `<span class="categoria-badge">${escapeHtml(c)}</span>`).join(' ');
+        const isConfirmado = p.status === 'confirmado';
+        const statusCell = isConfirmado
+            ? '<span class="status-badge confirmado">Confirmado</span>'
+            : '<span class="status-badge pendente">Pendente</span>';
+        const confirmBtn = isConfirmado
+            ? `<button class="btn btn-secondary" style="padding:0.4rem 0.85rem;font-size:0.7rem;" title="Reabrir sai do faturamento" onclick="reabrirPedido(${p.id})">Reabrir</button>`
+            : `<button class="btn" style="padding:0.4rem 0.85rem;font-size:0.7rem;" onclick="confirmarRecebimento(${p.id})">Confirmar recebimento</button>`;
         return `
             <tr>
                 <td>#${p.id}${isLegacy ? ' <span class="legacy-badge">Legado</span>' : ''}</td>
+                <td>${catCell}</td>
+                <td>${formatMonth(p.created_at)}</td>
                 <td>${formatMonth(p.mes_ano)}</td>
                 <td>${p.codccu || '—'}</td>
                 <td>${t.funcionarios_distintos}</td>
                 <td>${t.itens_distintos}</td>
                 <td>${t.total_linhas}</td>
                 <td>R$ ${(valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td>${statusCell}</td>
                 <td>${solicitacaoCell}</td>
                 <td>
-                    <button class="btn btn-outline" style="padding:0.4rem 0.85rem;font-size:0.7rem;" onclick="openPackage(${p.id})">Editar</button>
-                    <button class="btn btn-danger" style="padding:0.4rem 0.85rem;font-size:0.7rem;" onclick="deletePackage(${p.id})">Excluir</button>
+                    <div class="acoes-cell">
+                        ${confirmBtn}
+                        <button class="btn btn-outline" style="padding:0.4rem 0.85rem;font-size:0.7rem;" onclick="openPackage(${p.id})">Editar</button>
+                        <button class="btn btn-danger" style="padding:0.4rem 0.85rem;font-size:0.7rem;" onclick="deletePackage(${p.id})">Excluir</button>
+                    </div>
                 </td>
             </tr>
         `;
     }).join('');
 }
 
+async function confirmarRecebimento(id) {
+    try {
+        const r = await fetch(`/api/epi-purchases/${id}/confirmar`, { method: 'POST' });
+        const j = await r.json();
+        if (!r.ok || j.status !== 'success') { toast(j.message || `Erro ${r.status}`, 'error'); return; }
+        toast('Recebimento confirmado — pedido entra no faturamento.', 'success');
+        loadPackages();
+    } catch (e) {
+        toast('Erro de rede: ' + e.message, 'error');
+    }
+}
+
+async function reabrirPedido(id) {
+    if (!confirm(`Reabrir o pedido #${id}? Ele sairá do faturamento até ser confirmado novamente.`)) return;
+    try {
+        const r = await fetch(`/api/epi-purchases/${id}/reabrir`, { method: 'POST' });
+        const j = await r.json();
+        if (!r.ok || j.status !== 'success') { toast(j.message || `Erro ${r.status}`, 'error'); return; }
+        toast('Pedido reaberto.', 'success');
+        loadPackages();
+    } catch (e) {
+        toast('Erro de rede: ' + e.message, 'error');
+    }
+}
+
 function formatMonth(s) {
     if (!s) return '—';
+    // Timezone-safe: uma data "YYYY-MM-DD" é interpretada como meia-noite UTC por
+    // new Date(); em fusos atrás de UTC (Brasil, UTC-3) isso recua para o dia
+    // anterior e exibe o MÊS errado (ex.: 2026-07-01 virava 06/2026). Por isso
+    // extraímos ano-mês direto da string, sem passar por Date.
+    const m = String(s).match(/^(\d{4})-(\d{2})/);
+    if (m) return `${m[2]}/${m[1]}`;
     const dt = new Date(s);
     if (Number.isNaN(dt.getTime())) return s;
     return dt.toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
@@ -1119,6 +1727,17 @@ async function openPackage(id) {
         const p = j.data;
         if (!p.codccu) {
             toast('Esta compra é legada (sem centro de custo). Edição precisa de CCU para continuar.', 'warning');
+        }
+        // Categoria por LINHA: linhas antigas sem `categoria` herdam o campo legado
+        // do pacote ('misto' não é categoria de linha — nesse caso deriva do tipo do item).
+        const fallbackCat = (p.categoria && p.categoria !== 'misto') ? p.categoria : null;
+        const linhasFlat = (p.linhas_flat || []).map(l => ({
+            ...l,
+            _categoria: l.categoria || (l.epi_id ? 'epi' : (fallbackCat || (l.produto_codigo ? 'uniforme' : 'epi'))),
+        }));
+        // Pré-carrega os catálogos de produto das categorias presentes no pacote.
+        for (const c of new Set(linhasFlat.map(l => l._categoria))) {
+            if (c !== 'epi') await ensureProductCatalog(c);
         }
         // CCU (combobox) — sem disparar onCcuChange ainda; vai ser disparado manualmente abaixo
         if (p.codccu) {
@@ -1138,31 +1757,50 @@ async function openPackage(id) {
             await onCcuChange();
             const saved = (p.agrupado?.funcionarios || []);
             for (const f of saved) {
-                employees.nomeByNumcad[f.numcad] = f.nome;
+                // `nome` pode vir null em pedidos novos (não é mais persistido):
+                // mantém o nome vindo do Senior (onCcuChange) ou cai pra matrícula.
+                if (f.nome) employees.nomeByNumcad[f.numcad] = f.nome;
+                else if (!employees.nomeByNumcad[f.numcad]) employees.nomeByNumcad[f.numcad] = 'matr. ' + f.numcad;
                 employees.selected.add(f.numcad);
                 if (!employees.all.some(e => e.numcad === f.numcad)) {
-                    employees.all.push({ numcad: f.numcad, nomfun: f.nome, codccu: p.codccu, cargo: '' });
+                    employees.all.push({ numcad: f.numcad, nomfun: employees.nomeByNumcad[f.numcad], codccu: p.codccu, cargo: '' });
                 }
             }
             renderEmployees();
             updateCounters();
         }
-        // Itens — usa agrupado_v2 (feature 002); fallback no legacy se vazio
+        // Itens — modelo 1:1: cada linha do banco vira uma linha no form, com a
+        // categoria da própria linha (pedidos mistos e legados abrem no mesmo editor).
         document.getElementById('items-body').innerHTML = '';
-        const itensV2 = (p.agrupado_v2?.itens || []);
-        if (itensV2.length) {
-            for (const it of itensV2) {
+        refreshAllFuncSelects();  // garante que pool já tem os funcs
+        let linhasAdicionadas = 0;
+        for (const l of linhasFlat) {
+            if (l._categoria === 'epi') {
+                if (!l.epi_id) continue;  // compra legada sem catálogo: não reconstrói
                 addItem({
-                    epi_id: it.epi_id,
-                    tamanho: it.tamanho,
-                    quantidade_por_funcionario: it.quantidade_por_funcionario,
-                    valor_unitario: it.valor_unitario,
+                    categoria: 'epi',
+                    numcad: l.employee_numcad,
+                    epi_id: l.epi_id,
+                    tamanho: l.tamanho,
+                    quantidade: l.quantidade_por_funcionario || l.quantidade,
+                    valor_unitario: l.valor_unitario,
+                    ca_numero: l.ca_numero,
+                });
+            } else {
+                if (!l.produto_codigo) continue;
+                addItem({
+                    categoria: l._categoria,
+                    numcad: l.employee_numcad,
+                    produto_codigo: l.produto_codigo,
+                    tamanho: l.tamanho,
+                    quantidade: l.quantidade_por_funcionario || l.quantidade,
+                    valor_unitario: l.valor_unitario,
                 });
             }
-        } else {
-            // Compra legada (sem catálogo): força usuário a adicionar de novo no novo formato.
-            addItem();
+            linhasAdicionadas++;
         }
+        // Compra legada (sem itens reconstituíveis): força adicionar de novo no formato novo.
+        if (!linhasAdicionadas) addItem();
         purchaseState.lastSavedPkg = p;
         showSolicitacaoCard(p);
         // estado edição
@@ -1171,6 +1809,7 @@ async function openPackage(id) {
         document.getElementById('editing-id').textContent = '#' + p.id;
         document.getElementById('form-title').textContent = 'Editando Compra #' + p.id;
         document.getElementById('btn-submit').textContent = 'Atualizar e Solicitar Compra';
+        showComprasTab('solicitar');
         window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
         toast('Erro ao abrir compra: ' + e.message, 'error');
@@ -1191,11 +1830,19 @@ async function deletePackage(id) {
     }
 }
 
+function showComprasTab(tab) {
+    document.querySelectorAll('.compras-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    const sol = document.getElementById('tab-solicitar');
+    const conf = document.getElementById('tab-confirmar');
+    if (sol) sol.style.display = (tab === 'solicitar') ? '' : 'none';
+    if (conf) conf.style.display = (tab === 'confirmar') ? '' : 'none';
+}
+
 function cancelEdit() {
     purchaseState.editingId = null;
     purchaseState.lastSavedPkg = null;
     document.getElementById('editing-banner').style.display = 'none';
-    document.getElementById('form-title').textContent = 'Nova Compra de EPI';
+    document.getElementById('form-title').textContent = 'Novo pedido de compra';
     document.getElementById('btn-submit').textContent = 'Salvar e Solicitar Compra';
     document.getElementById('solicitacao-card').style.display = 'none';
 }
@@ -1206,14 +1853,15 @@ function resetForm() {
     document.getElementById('codccu-search').value = '';
     document.getElementById('codccu-combo').classList.remove('has-value');
     document.getElementById('observacao').value = '';
-    document.getElementById('items-body').innerHTML = '';
-    addItem();
     employees.selected.clear();
     employees.all = [];
     document.getElementById('employee-search').value = '';
     document.getElementById('employee-list').innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text-muted);font-style:italic;">Selecione um centro de custo para listar os funcionários ativos.</div>';
     const now = new Date();
     document.getElementById('mes_ano').value = now.toISOString().slice(0, 7);
+    // Recria a tabela com 1 linha em branco (categoria padrão: EPI).
+    document.getElementById('items-body').innerHTML = '';
+    addItem();
     updateCounters();
 }
 

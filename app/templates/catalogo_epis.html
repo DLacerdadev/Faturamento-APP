@@ -92,6 +92,11 @@
         <input type="text" id="epi-nome" placeholder="Ex: Capacete classe B" maxlength="200">
     </div>
 
+    <div class="form-group">
+        <label for="epi-ca-padrao">CA padrão (opcional)</label>
+        <input type="text" id="epi-ca-padrao" placeholder="Ex: 35862" maxlength="50">
+    </div>
+
     <h3 style="font-size:0.875rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin:1rem 0 0.5rem;">Tamanhos e Valores</h3>
     <table class="sizes-table" id="sizes-table">
         <thead>
@@ -204,6 +209,7 @@ function validatePayload(p) {
 async function submitEpi() {
     const payload = {
         nome: document.getElementById('epi-nome').value.trim(),
+        ca_padrao: document.getElementById('epi-ca-padrao').value.trim() || null,
         sizes: collectSizes(),
     };
     const err = validatePayload(payload);
@@ -245,6 +251,7 @@ async function loadCatalog() {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (includeInactive) params.set('include_inactive', 'true');
+    params.set('per_page', '5000');  // catálogo é tela de gestão: carrega todos (evita item "sumir" na paginação)
     params.set('_', Date.now());
     try {
         const r = await fetch('/api/epi-catalog?' + params, { cache: 'no-store' });
@@ -307,6 +314,7 @@ async function editEpi(id) {
         if (j.status !== 'ok') throw new Error(j.message || 'erro');
         const e = j.data;
         document.getElementById('epi-nome').value = e.nome;
+        document.getElementById('epi-ca-padrao').value = e.ca_padrao || '';
         document.getElementById('sizes-body').innerHTML = '';
         for (const s of e.sizes) addSize(s);
         if (e.sizes.length === 0) addSize();
@@ -366,6 +374,7 @@ function cancelEdit() {
 function resetForm() {
     cancelEdit();
     document.getElementById('epi-nome').value = '';
+    document.getElementById('epi-ca-padrao').value = '';
     document.getElementById('sizes-body').innerHTML = '';
     addSize();
 }

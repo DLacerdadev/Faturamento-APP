@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}Relatório de Compras — Telos Consultoria{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filtros-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr auto;
+        gap: 1rem;
+        align-items: end;
+    }
+    @media (max-width: 900px) {
+        .filtros-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .rc-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .rc-toolbar .rc-count { color: var(--text-muted); font-size: 0.85rem; }
+    table.rc-table td, table.rc-table th { white-space: nowrap; }
+    table.rc-table td.num, table.rc-table th.num { text-align: right; }
+    .rc-check { width: 44px; text-align: center; }
+    .rc-empty {
+        text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);
+        font-style: italic;
+    }
+    .rc-table-wrap { overflow-x: auto; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Relatório de Compras / Entregas</h1>
+    <a href="/reports" class="btn btn-secondary">
+        <span class="material-symbols-outlined">arrow_back</span>
+        <span>Relatórios</span>
+    </a>
+</div>
+
+<!-- FILTROS -->
+<div class="card">
+    <div class="card-header"><h2>Filtros</h2></div>
+    <div class="filtros-grid">
+        <div class="form-group" style="margin-bottom:0;">
+            <label for="codccu">Centro de Custo (opcional)</label>
+            <input type="text" id="codccu" placeholder="Ex.: 010101 (deixe vazio p/ todos)">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+            <label for="data_ini">Data de</label>
+            <input type="date" id="data_ini">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+            <label for="data_fim">Data até</label>
+            <input type="date" id="data_fim">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+            <label for="status">Status</label>
+            <select id="status">
+                <option value="todos">Todos</option>
+                <option value="solicitado">Solicitado</option>
+                <option value="confirmado">Confirmado</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+            <button class="btn" id="btn-buscar" onclick="buscarPedidos()">
+                <span class="material-symbols-outlined">search</span>
+                <span>Buscar</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="rc-alert"></div>
+
+<!-- RESULTADOS -->
+<div class="card">
+    <div class="rc-toolbar">
+        <h2 style="color:var(--gold-text);font-size:1.05rem;">Pedidos encontrados</h2>
+        <div style="display:flex;align-items:center;gap:1rem;">
+            <span class="rc-count" id="rc-count">—</span>
+            <button class="btn btn-success" id="btn-emitir" onclick="emitirRelatorio()" disabled>
+                <span class="material-symbols-outlined">file_download</span>
+                <span>Emitir relatório</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="rc-table-wrap">
+        <table class="rc-table">
+            <thead>
+                <tr>
+                    <th class="rc-check">
+                        <input type="checkbox" id="check-all" onclick="toggleAll(this)"
+                               style="width:auto;cursor:pointer;">
+                    </th>
+                    <th>Competência</th>
+                    <th>Centro de Custo</th>
+                    <th>Categoria</th>
+                    <th class="num">Funcionários</th>
+                    <th class="num">Itens</th>
+                    <th class="num">Valor total</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="rc-tbody">
+                <tr><td colspan="8" class="rc-empty">Use os filtros e clique em <strong>Buscar</strong> para listar os pedidos.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+    // Estado da última busca (usado para casar exames/treinamentos ao emitir).
+    let ultimaBusca = { codccu: '', data_ini: '', data_fim: '', status: 'todos' };
+    let pedidos = [];
+
+    function brl(v) {
+        try {
+            return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        } catch (e) { return 'R$ ' + (v || 0); }
+    }
+
+    function badgeStatus(st) {
+        if (st === 'confirmado') return '<span class="badge badge-success">Confirmado</span>';
+        if (st === 'validado')   return '<span class="badge badge-warning">Validado</span>';
+        return '<span class="badge badge-neutral">Solicitado</span>';
+    }
+
+    function alerta(msg, tipo) {
+        const div = document.getElementById('rc-alert');
+        if (!msg) { div.innerHTML = ''; return; }
+        const cls = tipo === 'error' ? 'alert-error' : (tipo === 'success' ? 'alert-success' : 'alert-warning');
+        div.innerHTML = `<div class="alert ${cls}">${msg}</div>`;
+    }
+
+    async function buscarPedidos() {
+        const codccu = document.getElementById('codccu').value.trim();
+        const data_ini = document.getElementById('data_ini').value;
+        const data_fim = document.getElementById('data_fim').value;
+        const status = document.getElementById('status').value;
+        ultimaBusca = { codccu, data_ini, data_fim, status };
+
+        alerta('');
+        const btn = document.getElementById('btn-buscar');
+        btn.disabled = true;
+
+        const qs = new URLSearchParams();
+        if (codccu) qs.set('codccu', codccu);
+        if (data_ini) qs.set('data_ini', data_ini);
+        if (data_fim) qs.set('data_fim', data_fim);
+        qs.set('status', status || 'todos');
+
+        try {
+            const r = await fetch('/api/reports/compras/buscar?' + qs.toString(), { credentials: 'same-origin' });
+            const j = await r.json();
+            if (!r.ok || j.status !== 'ok') throw new Error(j.detail || 'Falha na busca');
+            pedidos = j.data || [];
+            renderPedidos();
+        } catch (e) {
+            alerta('Erro ao buscar pedidos: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function renderPedidos() {
+        const tbody = document.getElementById('rc-tbody');
+        document.getElementById('check-all').checked = false;
+        if (!pedidos.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="rc-empty">Nenhum pedido encontrado para os filtros selecionados.</td></tr>';
+            document.getElementById('rc-count').textContent = '0 pedidos';
+            atualizarEmitir();
+            return;
+        }
+        tbody.innerHTML = pedidos.map(p => `
+            <tr>
+                <td class="rc-check">
+                    <input type="checkbox" class="rc-row-check" value="${p.id}"
+                           onclick="atualizarEmitir()" style="width:auto;cursor:pointer;">
+                </td>
+                <td class="mono">${p.competencia || '—'}</td>
+                <td class="mono">${p.codccu || '—'}</td>
+                <td style="text-transform:capitalize;">${p.categoria || '—'}</td>
+                <td class="num">${p.n_funcionarios}</td>
+                <td class="num">${p.n_itens}</td>
+                <td class="num mono">${brl(p.valor_total)}</td>
+                <td>${badgeStatus(p.status)}</td>
+            </tr>
+        `).join('');
+        document.getElementById('rc-count').textContent = pedidos.length + ' pedido(s)';
+        atualizarEmitir();
+    }
+
+    function toggleAll(cb) {
+        document.querySelectorAll('.rc-row-check').forEach(c => { c.checked = cb.checked; });
+        atualizarEmitir();
+    }
+
+    function idsSelecionados() {
+        return Array.from(document.querySelectorAll('.rc-row-check:checked')).map(c => parseInt(c.value, 10));
+    }
+
+    function atualizarEmitir() {
+        const n = idsSelecionados().length;
+        document.getElementById('btn-emitir').disabled = (n === 0);
+    }
+
+    async function emitirRelatorio() {
+        const ids = idsSelecionados();
+        if (!ids.length) { alerta('Selecione ao menos um pedido.', 'warning'); return; }
+        alerta('');
+        const btn = document.getElementById('btn-emitir');
+        btn.disabled = true;
+
+        const payload = {
+            package_ids: ids,
+            codccu: ultimaBusca.codccu || null,
+            data_ini: ultimaBusca.data_ini || null,
+            data_fim: ultimaBusca.data_fim || null,
+            status: ultimaBusca.status || 'todos',
+        };
+
+        try {
+            const r = await fetch('/api/reports/compras/emitir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload),
+            });
+            if (!r.ok) {
+                let msg = 'Falha ao emitir relatório';
+                try { const j = await r.json(); msg = j.detail || msg; } catch (e) {}
+                throw new Error(msg);
+            }
+            // Extrai o nome do arquivo do Content-Disposition, se houver.
+            let filename = 'relatorio_compras.xlsx';
+            const cd = r.headers.get('Content-Disposition') || '';
+            const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
+            if (m && m[1]) { try { filename = decodeURIComponent(m[1]); } catch (e) { filename = m[1]; } }
+
+            const blob = await r.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            alerta('Relatório gerado com sucesso.', 'success');
+        } catch (e) {
+            alerta('Erro ao emitir relatório: ' + e.message, 'error');
+        } finally {
+            atualizarEmitir();
+        }
+    }
+{% endblock %}

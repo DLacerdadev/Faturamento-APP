@@ -1,11 +1,14 @@
 """
-Geração do Excel da Solicitação de Compra de EPI (feature 002).
+Geração do Excel da Solicitação de Compra (pedido de compra — EPI, uniforme e
+equipamento, inclusive pedidos MISTOS).
 
-Layout (R6 da research.md):
+Layout (revisão 2026-07 — pedido centrado em ITENS, sem nomes de funcionários):
 - Cabeçalho com empresa / CCU / competência / solicitante / data-hora
-- Tabela de itens (Nome EPI, Tamanho, Qtde/func., Func. atendidos, Qtde total, Valor unit., Valor total)
-- Linha TOTAL GERAL em destaque
-- Bloco "Funcionários atendidos" (matrícula + nome)
+- Tabela de itens: Item, Categoria, Tamanho, C.A, Qtde, Valor unit., Valor total
+- Linha TOTAL DO PEDIDO em destaque
+
+Os funcionários NÃO aparecem no pedido de compra — o vínculo por matrícula
+(employee_numcad) continua persistido nas linhas e é usado só pelo faturamento.
 """
 from datetime import datetime
 from io import BytesIO
@@ -25,59 +28,53 @@ TOTAL_FILL = PatternFill(start_color="FFF4DC", end_color="FFF4DC", fill_type="so
 THIN = Side(border_style="thin", color="999999")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
+CATEGORIA_LABEL = {"epi": "EPI", "uniforme": "Uniforme", "equipamento": "Equipamento"}
 
-def _group_items(items: List[EpiPurchaseItem]) -> List[Dict]:
-    """
-    Agrupa linhas do cartesiano por (epi_id, tamanho, qtde_por_func, valor_unitario)
-    para reconstruir a visão "por item" da compra.
 
-    `quantidade_total` por item: prefere `quantidade_total_item` (override do
-    usuário, replicado em cada linha do cartesiano). Se NULL em todas as linhas,
-    cai pro fallback `qpf × n_funcionários`.
-    `valor_total` é sempre recalculado: `quantidade_total × valor_unitario`.
+def _categoria_item(it: EpiPurchaseItem, pkg: EpiPurchasePackage) -> str:
+    return (it.categoria or pkg.categoria or "epi").strip().lower()
+
+
+def _group_items(pkg: EpiPurchasePackage) -> List[Dict]:
     """
+    Agrupa as linhas (funcionário × item) na visão "por item" do pedido:
+    chave = (categoria, item do catálogo, tamanho, valor_unitario).
+
+    Quantidade do item: prefere `quantidade_total_item` (override do usuário,
+    replicado nas linhas do cartesiano); sem override, soma `quantidade` das
+    linhas (modo 1:1). `valor_total` = quantidade × valor_unitario.
+    """
+    items = list(pkg.items or [])
     buckets: Dict[Tuple, Dict] = {}
     for it in items:
-        key = (
-            it.epi_id,
-            it.tamanho or "",
-            it.quantidade_por_funcionario if it.quantidade_por_funcionario is not None else it.quantidade,
-            round(it.valor_unitario or 0.0, 6),
-        )
+        cat = _categoria_item(it, pkg)
+        item_key = it.epi_id if it.epi_id is not None else ("p:" + str(it.produto_codigo or ""))
+        key = (cat, item_key, it.tamanho or "", round(it.valor_unitario or 0.0, 6))
         bucket = buckets.setdefault(key, {
-            "epi_id": it.epi_id,
+            "categoria": cat,
             "descricao": it.descricao or "",
             "tamanho": it.tamanho or "",
-            "quantidade_por_funcionario": it.quantidade_por_funcionario or it.quantidade,
+            "ca_numero": it.ca_numero or "",
             "valor_unitario": it.valor_unitario or 0.0,
             "valor_unitario_catalogo": it.valor_unitario_catalogo,
-            "funcionarios": [],
-            "quantidade_total": None,  # override
+            "quantidade_override": None,
+            "_quantidade_soma": 0,
         })
-        if it.employee_numcad is not None and it.employee_numcad not in [f["numcad"] for f in bucket["funcionarios"]]:
-            bucket["funcionarios"].append({"numcad": it.employee_numcad, "nome": it.employee_nome or ""})
-        if bucket["quantidade_total"] is None and it.quantidade_total_item is not None:
-            bucket["quantidade_total"] = it.quantidade_total_item
+        if bucket["quantidade_override"] is None and it.quantidade_total_item is not None:
+            bucket["quantidade_override"] = it.quantidade_total_item
+        bucket["_quantidade_soma"] += (it.quantidade or 0)
+        if not bucket["ca_numero"] and it.ca_numero:
+            bucket["ca_numero"] = it.ca_numero
 
-    # Pós-processamento: fallback + cálculo do valor_total
     out = []
     for b in buckets.values():
-        if b["quantidade_total"] is None:
-            b["quantidade_total"] = (b["quantidade_por_funcionario"] or 0) * len(b["funcionarios"])
-        b["valor_total"] = round(b["quantidade_total"] * (b["valor_unitario"] or 0.0), 2)
+        b["quantidade"] = b["quantidade_override"] if b["quantidade_override"] is not None else b["_quantidade_soma"]
+        b["valor_total"] = round((b["quantidade"] or 0) * (b["valor_unitario"] or 0.0), 2)
+        del b["quantidade_override"], b["_quantidade_soma"]
         out.append(b)
-    return out
-
-
-def _distinct_employees(items: List[EpiPurchaseItem]) -> List[Dict]:
-    seen = set()
-    out = []
-    for it in items:
-        if it.employee_numcad is None or it.employee_numcad in seen:
-            continue
-        seen.add(it.employee_numcad)
-        out.append({"numcad": it.employee_numcad, "nome": it.employee_nome or ""})
-    out.sort(key=lambda e: (e["nome"] or "").upper())
+    # Ordena por categoria (EPI, uniforme, equipamento) e nome do item
+    ordem_cat = {"epi": 0, "uniforme": 1, "equipamento": 2}
+    out.sort(key=lambda b: (ordem_cat.get(b["categoria"], 9), (b["descricao"] or "").upper(), b["tamanho"]))
     return out
 
 
@@ -86,7 +83,11 @@ def _format_money(value: float) -> str:
 
 
 def generate_solicitacao_xlsx(pkg: EpiPurchasePackage) -> bytes:
-    """Gera o Excel da solicitação de compra como bytes."""
+    """Gera o Excel da solicitação de compra (pedido) como bytes.
+
+    Uma linha POR ITEM do pedido (agrupado por categoria/item/tamanho/valor),
+    sem nomes de funcionários. Total do pedido ao final.
+    """
     wb = Workbook()
     ws = wb.active
     ws.title = "Solicitação"
@@ -96,9 +97,11 @@ def generate_solicitacao_xlsx(pkg: EpiPurchasePackage) -> bytes:
     title = Font(name="Calibri", size=14, bold=True, color="1A1A1A")
     muted = Font(name="Calibri", size=10, color="6B6B6B")
 
+    NCOL = 7  # Item | Categoria | Tamanho | C.A | Qtde | Valor unit. | Valor total
+
     # Título
-    ws.merge_cells("A1:G1")
-    ws["A1"] = "SOLICITAÇÃO DE COMPRA — EPI"
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=NCOL)
+    ws["A1"] = "SOLICITAÇÃO DE COMPRA"
     ws["A1"].font = title
     ws["A1"].fill = GOLD_FILL
     ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
@@ -107,27 +110,30 @@ def generate_solicitacao_xlsx(pkg: EpiPurchasePackage) -> bytes:
     # Cabeçalho
     competencia = pkg.mes_ano.strftime("%m/%Y") if pkg.mes_ano else "—"
     gen_at = (pkg.solicitacao_generated_at or datetime.utcnow()).strftime("%d/%m/%Y %H:%M")
+    linhas_itens = _group_items(pkg)
+    cats = sorted({b["categoria"] for b in linhas_itens}, key=lambda c: {"epi": 0, "uniforme": 1, "equipamento": 2}.get(c, 9))
+    categorias_str = " + ".join(CATEGORIA_LABEL.get(c, c.capitalize()) for c in cats) or "—"
 
     header_rows = [
         ("Empresa solicitante", pkg.empresa or "—"),
         ("Centro de custo", pkg.codccu or "—"),
         ("Competência", competencia),
+        ("Categorias", categorias_str),
         ("Solicitante", pkg.solicitante_nome or "—"),
         ("Gerada em", gen_at),
-        ("ID da compra", f"#{pkg.id}"),
+        ("ID do pedido", f"#{pkg.id}"),
     ]
     row = 3
     for label, value in header_rows:
         ws.cell(row=row, column=1, value=label).font = bold
         ws.cell(row=row, column=1).fill = SUBTLE_FILL
-        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=7)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=NCOL)
         ws.cell(row=row, column=2, value=value).alignment = Alignment(horizontal="left")
         row += 1
 
-    # Tabela de itens
+    # Tabela por item
     row += 1
-    table_header_row = row
-    headers = ["EPI", "Tamanho", "Qtde / func.", "Func. atendidos", "Qtde total", "Valor unit.", "Valor total"]
+    headers = ["Item", "Categoria", "Tamanho", "C.A", "Qtde", "Valor unit.", "Valor total"]
     for col_idx, h in enumerate(headers, start=1):
         cell = ws.cell(row=row, column=col_idx, value=h)
         cell.font = bold_gold
@@ -136,59 +142,37 @@ def generate_solicitacao_xlsx(pkg: EpiPurchasePackage) -> bytes:
         cell.border = BORDER
     row += 1
 
-    grouped = _group_items(list(pkg.items or []))
     total_qtde = 0
     total_valor = 0.0
-    for item in grouped:
-        ws.cell(row=row, column=1, value=item["descricao"]).border = BORDER
-        ws.cell(row=row, column=2, value=item["tamanho"]).border = BORDER
-        ws.cell(row=row, column=3, value=item["quantidade_por_funcionario"]).border = BORDER
-        ws.cell(row=row, column=4, value=len(item["funcionarios"])).border = BORDER
-        ws.cell(row=row, column=5, value=item["quantidade_total"]).border = BORDER
-        ws.cell(row=row, column=6, value=_format_money(item["valor_unitario"])).border = BORDER
-        ws.cell(row=row, column=7, value=_format_money(item["valor_total"])).border = BORDER
+    for b in linhas_itens:
+        ws.cell(row=row, column=1, value=b["descricao"] or "—").border = BORDER
+        ws.cell(row=row, column=2, value=CATEGORIA_LABEL.get(b["categoria"], b["categoria"].capitalize())).border = BORDER
+        ws.cell(row=row, column=3, value=b["tamanho"] or "").border = BORDER
+        ws.cell(row=row, column=4, value=b["ca_numero"] or "").border = BORDER
+        ws.cell(row=row, column=5, value=b["quantidade"]).border = BORDER
+        ws.cell(row=row, column=6, value=_format_money(b["valor_unitario"])).border = BORDER
+        ws.cell(row=row, column=7, value=_format_money(b["valor_total"])).border = BORDER
 
-        # Aviso de override de valor
-        if item.get("valor_unitario_catalogo") is not None and abs((item["valor_unitario_catalogo"] or 0) - item["valor_unitario"]) > 0.001:
-            ws.cell(row=row, column=6).comment = None  # comment intentional skip
+        # Aviso visual se valor difere do catálogo
+        if b["valor_unitario_catalogo"] is not None and abs((b["valor_unitario_catalogo"] or 0) - (b["valor_unitario"] or 0)) > 0.001:
             ws.cell(row=row, column=6).font = Font(name="Calibri", size=11, italic=True, color="B8923F")
 
-        total_qtde += item["quantidade_total"]
-        total_valor += item["valor_total"]
+        total_qtde += b["quantidade"] or 0
+        total_valor += b["valor_total"] or 0.0
         row += 1
 
-    # Total geral
-    for col in range(1, 8):
+    # Total do pedido
+    for col in range(1, NCOL + 1):
         ws.cell(row=row, column=col).fill = TOTAL_FILL
         ws.cell(row=row, column=col).border = BORDER
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
-    ws.cell(row=row, column=1, value="TOTAL GERAL").font = bold
+    ws.cell(row=row, column=1, value="TOTAL DO PEDIDO").font = bold
     ws.cell(row=row, column=1).alignment = Alignment(horizontal="right")
     ws.cell(row=row, column=5, value=total_qtde).font = bold
     ws.cell(row=row, column=7, value=_format_money(total_valor)).font = bold
-    row += 2
-
-    # Bloco "Funcionários atendidos"
-    funcionarios = _distinct_employees(list(pkg.items or []))
-    if funcionarios:
-        ws.cell(row=row, column=1, value=f"Funcionários atendidos ({len(funcionarios)})").font = bold
-        ws.cell(row=row, column=1).fill = SUBTLE_FILL
-        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
-        row += 1
-        ws.cell(row=row, column=1, value="Matrícula").font = bold_gold
-        ws.cell(row=row, column=2, value="Nome").font = bold_gold
-        ws.cell(row=row, column=1).fill = GOLD_FILL
-        ws.cell(row=row, column=2).fill = GOLD_FILL
-        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=7)
-        row += 1
-        for f in funcionarios:
-            ws.cell(row=row, column=1, value=f["numcad"]).border = BORDER
-            ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=7)
-            ws.cell(row=row, column=2, value=f["nome"]).border = BORDER
-            row += 1
 
     # Larguras
-    widths = [32, 12, 14, 17, 12, 16, 16]
+    widths = [42, 14, 10, 12, 8, 14, 14]
     for idx, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(idx)].width = w
 
@@ -204,4 +188,4 @@ def generate_solicitacao_xlsx(pkg: EpiPurchasePackage) -> bytes:
 def build_filename(pkg: EpiPurchasePackage) -> str:
     """Retorna o nome canônico do arquivo da solicitação."""
     ts = (pkg.solicitacao_generated_at or datetime.utcnow()).strftime("%Y%m%d-%H%M%S")
-    return f"solicitacao_epi_{pkg.id}_{ts}.xlsx"
+    return f"pedido_compra_{pkg.id}_{ts}.xlsx"

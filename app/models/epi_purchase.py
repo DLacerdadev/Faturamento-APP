@@ -11,6 +11,12 @@ class EpiCatalog(Base):
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String(200), nullable=False)
     ativo = Column(Boolean, nullable=False, default=True, index=True)
+    # CA = Certificado de Aprovação (registro do MTE para EPIs). Snapshot padrão
+    # do catálogo; pode ser sobrescrito em cada linha de compra/entrega.
+    ca_padrao = Column(String(50), nullable=True)
+    # Vínculo com o catálogo de produtos do TOTVS (ProductCatalog.codigo) quando o
+    # EPI foi sincronizado de lá. NULL = EPI cadastrado manualmente nesta tela.
+    produto_codigo = Column(String(40), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -38,6 +44,11 @@ class EpiPurchasePackage(Base):
     mes_ano = Column(Date, nullable=False)
     observacao = Column(Text, nullable=True)
     codccu = Column(String(20), nullable=True, index=True)
+    # Generalização "Compras/Entregas" (mantém as tabelas epi_* como store genérico):
+    # categoria do pacote, valor total efetivamente pago (do pedido/arquivo) e status do fluxo.
+    categoria = Column(String(20), nullable=False, default="epi", index=True)  # epi | uniforme | equipamento
+    valor_total_pago = Column(Float, nullable=True)
+    status = Column(String(20), nullable=False, default="rascunho", index=True)  # rascunho | validado | confirmado
     # Feature 002: snapshot do usuário que salvou + totais agregados persistidos
     solicitante_nome = Column(String(200), nullable=True)
     quantidade_total_geral = Column(Integer, nullable=True)
@@ -61,14 +72,25 @@ class EpiPurchaseItem(Base):
     valor_unitario = Column(Float, nullable=False, default=0.0)
     valor_total = Column(Float, nullable=False, default=0.0)
     employee_numcad = Column(Integer, nullable=True, index=True)
+    # employee_nome/cargo: legado — pedidos novos NÃO persistem nome/cargo (só a
+    # matrícula, que é o que o faturamento usa). Colunas mantidas pelos dados antigos.
     employee_nome = Column(String(200), nullable=True)
+    employee_cargo = Column(String(200), nullable=True)
+    # Categoria POR ITEM (epi | uniforme | equipamento) — pedido misto numa única
+    # solicitação. NULL = linha antiga (vale a categoria do pacote).
+    categoria = Column(String(20), nullable=True, index=True)
     # Feature 002: vínculo com catálogo + snapshot do valor de catálogo
     epi_id = Column(Integer, ForeignKey("epi_catalog.id"), nullable=True, index=True)
+    # Vínculo genérico com ProductCatalog.codigo (uniforme/equipamento e EPIs vindos do TOTVS).
+    produto_codigo = Column(String(40), nullable=True, index=True)
     tamanho = Column(String(20), nullable=True)
     quantidade_por_funcionario = Column(Integer, nullable=True)
     # Quantidade TOTAL do item na compra (replicada em cada linha do cartesiano).
     # Permite override manual pelo usuário. Quando NULL, calcular como qpf × n_funcionários.
     quantidade_total_item = Column(Integer, nullable=True)
+    # CA (Certificado de Aprovação) snapshot por linha — pode diferir do
+    # ca_padrao do catálogo quando o usuário sobrescreve no momento da compra.
+    ca_numero = Column(String(50), nullable=True)
     valor_unitario_catalogo = Column(Float, nullable=True)
 
     package = relationship("EpiPurchasePackage", back_populates="items")
