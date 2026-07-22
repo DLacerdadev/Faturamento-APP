@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Catálogo e Preços de Exames - Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .tab-btn {
+        padding: 0.6rem 1.2rem; cursor: pointer; background: var(--bg-tertiary);
+        color: var(--text-secondary); border: 1px solid var(--border-color);
+        font-weight: 600; text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem;
+        font-family: 'Space Grotesk', sans-serif;
+    }
+    .tab-btn.active { background: var(--gold); color: #1A1A1A; border-color: var(--gold); }
+    .model-item {
+        padding: 0.85rem; border: 1px solid var(--border-color); background: var(--bg-tertiary);
+        margin-bottom: 0.5rem; cursor: pointer; transition: border-color 0.2s;
+    }
+    .model-item:hover { border-color: var(--gold); }
+    .model-item.active { border-color: var(--gold); border-left: 4px solid var(--gold); }
+    .model-item .nm { font-weight: 600; color: var(--text-primary); }
+    .model-item .meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem; }
+    .price-row {
+        display: grid; grid-template-columns: 1fr 140px; gap: 1rem; align-items: center;
+        padding: 0.4rem 0; border-bottom: 1px solid var(--border-color);
+    }
+    .price-row .lbl { font-size: 0.85rem; color: var(--text-secondary); }
+    .price-row input { padding: 0.5rem 0.7rem; }
+    .syn-row { display: grid; grid-template-columns: 220px 1fr auto; gap: 0.8rem; align-items: center; margin-bottom: 0.5rem; }
+    .msg { padding: 0.8rem 1rem; margin-top: 1rem; border-left: 4px solid; font-weight: 500; display: none; font-size: 0.85rem; }
+    .msg.show { display: block; }
+    .msg.ok { background: rgba(74,222,128,0.1); color: var(--success); border-color: var(--success); }
+    .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
+    .hint { font-size: 0.8rem; color: var(--text-muted); }
+    .hidden { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Catálogo e Preços de Exames</h1>
+</div>
+
+<p class="hint" style="margin-bottom: 1.5rem;">Crie um <b>modelo</b> (tabela de preço por clínica/contrato) e defina o preço de cada exame. No upload de um ASO você escolhe o modelo e os exames identificados já vêm com o valor certo.</p>
+
+<div class="tabs">
+    <div class="tab-btn active" id="tab-modelos" onclick="switchCatTab('modelos')">Modelos de Preço</div>
+    <div class="tab-btn" id="tab-catalogo" onclick="switchCatTab('catalogo')">Catálogo (sinônimos)</div>
+</div>
+
+<!-- MODELOS -->
+<div id="view-modelos" class="grid-2">
+    <div class="card">
+        <div class="card-header"><h2>Modelos</h2></div>
+        <div id="model-list"></div>
+        <button class="btn" onclick="newModel()" style="margin-top: 1rem;">+ Novo modelo</button>
+    </div>
+    <div class="card">
+        <div class="card-header"><h2 id="model-title">Editor de modelo</h2></div>
+        <div class="form-group">
+            <label for="m-nome">Nome</label>
+            <input type="text" id="m-nome" placeholder="Ex.: Clínica São Lucas / Contrato FEMSA">
+        </div>
+        <div class="form-group">
+            <label for="m-desc">Descrição</label>
+            <input type="text" id="m-desc" placeholder="Observações do modelo">
+        </div>
+        <button class="btn" onclick="saveModel()">Salvar modelo</button>
+        <button class="btn btn-danger" id="m-del" onclick="deleteModel()" style="display:none;">Excluir</button>
+
+        <div id="prices-block" class="hidden" style="margin-top: 1.5rem;">
+            <div class="card-header"><h2 style="font-size:1rem;">Preços por exame</h2></div>
+            <p class="hint" style="margin-bottom: 0.5rem;">Deixe em branco/0 os exames que o modelo não cobre.</p>
+            <div id="price-grid"></div>
+            <button class="btn" onclick="savePrices()" style="margin-top: 1rem;">Salvar preços</button>
+        </div>
+        <div id="model-result" class="msg"></div>
+    </div>
+</div>
+
+<!-- CATALOGO -->
+<div id="view-catalogo" class="card hidden">
+    <div class="card-header"><h2>Catálogo de exames</h2></div>
+    <p class="hint" style="margin-bottom: 1rem;">Os sinônimos ajudam o sistema a identificar o exame no ASO. Separe por vírgula (sem acento).</p>
+    <div id="catalog-list"></div>
+    <div id="catalog-result" class="msg"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const HEADERS = { "Authorization": "Bearer " + AUTH_TOKEN };
+const JSON_HEADERS = { ...HEADERS, "Content-Type": "application/json" };
+let catalog = [];
+let models = [];
+let editingModelId = null;
+
+function showResult(el, text, ok) {
+    const b = document.getElementById(el);
+    b.className = "msg show " + (ok ? "ok" : "err");
+    b.textContent = (typeof text === "string") ? text : JSON.stringify(text, null, 2);
+}
+function switchCatTab(t) {
+    document.getElementById("tab-modelos").classList.toggle("active", t === "modelos");
+    document.getElementById("tab-catalogo").classList.toggle("active", t === "catalogo");
+    document.getElementById("view-modelos").classList.toggle("hidden", t !== "modelos");
+    document.getElementById("view-catalogo").classList.toggle("hidden", t !== "catalogo");
+}
+async function loadCatalog() {
+    const r = await fetch("/api/exam-catalog", { headers: HEADERS, credentials: "same-origin" });
+    catalog = (await r.json()).data || [];
+    renderCatalog();
+}
+async function loadModels() {
+    const r = await fetch("/api/price-models", { headers: HEADERS, credentials: "same-origin" });
+    models = (await r.json()).data || [];
+    renderModelList();
+}
+function renderModelList() {
+    const c = document.getElementById("model-list");
+    if (!models.length) { c.innerHTML = "<p class='hint'>Nenhum modelo ainda.</p>"; return; }
+    c.innerHTML = models.map(m => `
+        <div class="model-item ${m.id === editingModelId ? "active" : ""}" onclick="selectModel(${m.id})">
+            <div class="nm">${m.nome} ${m.ativo ? "" : "(inativo)"}</div>
+            <div class="meta">${m.descricao || ""}</div>
+        </div>`).join("");
+}
+function renderPriceGrid(items) {
+    const byCat = {};
+    (items || []).forEach(it => { byCat[it.exam_catalog_id] = it.preco; });
+    document.getElementById("price-grid").innerHTML = catalog.map(cat => `
+        <div class="price-row">
+            <div class="lbl">${cat.nome}</div>
+            <input type="number" step="0.01" min="0" data-cat="${cat.id}" value="${byCat[cat.id] != null ? byCat[cat.id] : ''}" placeholder="0,00">
+        </div>`).join("");
+}
+function newModel() {
+    editingModelId = null;
+    document.getElementById("model-title").textContent = "Novo modelo";
+    document.getElementById("m-nome").value = "";
+    document.getElementById("m-desc").value = "";
+    document.getElementById("m-del").style.display = "none";
+    document.getElementById("prices-block").classList.add("hidden");
+    renderModelList();
+}
+async function selectModel(id) {
+    const r = await fetch(`/api/price-models/${id}`, { headers: HEADERS, credentials: "same-origin" });
+    const m = (await r.json()).data;
+    editingModelId = id;
+    document.getElementById("model-title").textContent = "Editando: " + m.nome;
+    document.getElementById("m-nome").value = m.nome;
+    document.getElementById("m-desc").value = m.descricao || "";
+    document.getElementById("m-del").style.display = "inline-block";
+    document.getElementById("prices-block").classList.remove("hidden");
+    renderPriceGrid(m.items);
+    renderModelList();
+}
+async function saveModel() {
+    const nome = document.getElementById("m-nome").value.trim();
+    if (!nome) { showResult("model-result", "Informe o nome do modelo.", false); return; }
+    const payload = { nome, descricao: document.getElementById("m-desc").value.trim(), ativo: true };
+    const url = editingModelId ? `/api/price-models/${editingModelId}` : "/api/price-models";
+    const method = editingModelId ? "PUT" : "POST";
+    const r = await fetch(url, { method, headers: JSON_HEADERS, credentials: "same-origin", body: JSON.stringify(payload) });
+    const j = await r.json();
+    if (r.ok) {
+        editingModelId = j.data.id;
+        await loadModels();
+        await selectModel(editingModelId);
+        showResult("model-result", "Modelo salvo. Agora defina os preços abaixo.", true);
+    } else { showResult("model-result", j.detail || "Erro ao salvar.", false); }
+}
+async function savePrices() {
+    if (!editingModelId) return;
+    const prices = Array.from(document.querySelectorAll("#price-grid input")).map(inp => ({
+        exam_catalog_id: parseInt(inp.getAttribute("data-cat")),
+        preco: parseFloat(inp.value) || 0
+    })).filter(p => p.preco > 0);
+    const r = await fetch(`/api/price-models/${editingModelId}/prices`, {
+        method: "PUT", headers: JSON_HEADERS, credentials: "same-origin", body: JSON.stringify({ prices })
+    });
+    const j = await r.json();
+    if (r.ok) {
+        renderPriceGrid(j.data.items);
+        showResult("model-result", `Preços salvos: ${j.data.items.length} exame(s) com valor neste modelo.`, true);
+    } else { showResult("model-result", j.detail || "Erro ao salvar preços.", false); }
+}
+async function deleteModel() {
+    if (!editingModelId || !confirm("Excluir este modelo de preço?")) return;
+    const r = await fetch(`/api/price-models/${editingModelId}`, { method: "DELETE", headers: HEADERS, credentials: "same-origin" });
+    if (r.ok) { newModel(); await loadModels(); }
+}
+function renderCatalog() {
+    document.getElementById("catalog-list").innerHTML = catalog.map(cat => `
+        <div class="syn-row">
+            <div><b>${cat.nome}</b><br><span class="hint">${cat.coluna}</span></div>
+            <input type="text" id="syn-${cat.id}" value="${(cat.sinonimos || []).join(', ')}">
+            <button class="btn btn-secondary" onclick="saveSynonyms(${cat.id})" style="padding:0.5rem 0.9rem;">Salvar</button>
+        </div>`).join("");
+}
+async function saveSynonyms(id) {
+    const raw = document.getElementById(`syn-${id}`).value;
+    const sinonimos = raw.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+    const r = await fetch(`/api/exam-catalog/${id}`, {
+        method: "PUT", headers: JSON_HEADERS, credentials: "same-origin", body: JSON.stringify({ sinonimos })
+    });
+    if (r.ok) {
+        const idx = catalog.findIndex(c => c.id === id);
+        if (idx >= 0) catalog[idx].sinonimos = sinonimos;
+        showResult("catalog-result", "Sinônimos salvos.", true);
+    } else { showResult("catalog-result", "Erro ao salvar sinônimos.", false); }
+}
+(async function initCat() {
+    await loadCatalog();
+    await loadModels();
+    newModel();
+})();
+{% endblock %}

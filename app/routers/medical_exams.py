@@ -6,12 +6,21 @@ from pydantic import BaseModel
 from app.db import get_db
 from app.models.medical_exam import MedicalExam
 
-router = APIRouter(prefix="/api/medical-exams", tags=["medical_exams"])
+from app.routers.auth import require_login
+
+# Todas as rotas exigem login (dependency no nível do router).
+router = APIRouter(prefix="/api/medical-exams", tags=["medical_exams"],
+                   dependencies=[Depends(require_login)])
 
 
 class MedicalExamCreate(BaseModel):
     nome_funcionario: str
     numcad: Optional[int] = None
+    cpf: Optional[str] = None
+    codccu: Optional[str] = None
+    nome_ccu: Optional[str] = None
+    origem: str = "manual"
+    status: str = "confirmado"
     data_exame: date
     clinic: float = 0.0
     audio: float = 0.0
@@ -40,6 +49,11 @@ class MedicalExamCreate(BaseModel):
 class MedicalExamUpdate(BaseModel):
     nome_funcionario: Optional[str] = None
     numcad: Optional[int] = None
+    cpf: Optional[str] = None
+    codccu: Optional[str] = None
+    nome_ccu: Optional[str] = None
+    origem: Optional[str] = None
+    status: Optional[str] = None
     data_exame: Optional[date] = None
     clinic: Optional[float] = None
     audio: Optional[float] = None
@@ -70,6 +84,11 @@ def exam_to_dict(exam: MedicalExam) -> dict:
         "id": exam.id,
         "nome_funcionario": exam.nome_funcionario,
         "numcad": exam.numcad,
+        "cpf": exam.cpf,
+        "codccu": exam.codccu,
+        "nome_ccu": exam.nome_ccu,
+        "origem": exam.origem or "manual",
+        "status": exam.status or "confirmado",
         "data_exame": exam.data_exame.isoformat() if exam.data_exame else None,
         "clinic": exam.clinic or 0.0,
         "audio": exam.audio or 0.0,
@@ -118,6 +137,11 @@ async def create_exam(data: MedicalExamCreate, db: Session = Depends(get_db)):
     exam = MedicalExam(
         nome_funcionario=data.nome_funcionario,
         numcad=data.numcad,
+        cpf=data.cpf,
+        codccu=data.codccu,
+        nome_ccu=data.nome_ccu,
+        origem=data.origem,
+        status=data.status,
         data_exame=data.data_exame,
         clinic=data.clinic,
         audio=data.audio,

@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}Lançamento de Exames - Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .maptags { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.8rem 0; }
+    .tag { font-size: 0.72rem; padding: 0.2rem 0.6rem; border: 1px solid var(--gold); color: var(--gold); text-transform: uppercase; letter-spacing: 0.5px; }
+    .tag.miss { border-color: var(--error); color: var(--error); }
+    .kpis { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1rem 0; }
+    .kpi { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-left: 4px solid var(--gold); padding: 0.7rem 1rem; }
+    .kpi b { display: block; color: var(--gold); font-size: 1.4rem; font-family: 'JetBrains Mono', monospace; }
+    .kpi span { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .msg { padding: 0.9rem 1rem; margin-top: 1rem; border-left: 4px solid; font-weight: 500; display: none; white-space: pre-wrap; font-size: 0.85rem; }
+    .msg.show { display: block; }
+    .msg.ok { background: rgba(74,222,128,0.1); color: var(--success); border-color: var(--success); }
+    .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
+    .hint { font-size: 0.8rem; color: var(--text-muted); }
+    td .ok { color: var(--success); } td .no { color: var(--warning); }
+    .table-wrap { overflow-x: auto; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Lançamento de Exames</h1>
+</div>
+
+<p class="hint" style="margin-bottom: 1.5rem;">Suba a planilha/PDF de exames (ASO). O sistema reconhece as colunas, vincula pelo <b>CPF</b> e cria <b>rascunhos</b> na página de Exames para você revisar e confirmar. Escolha um <b>modelo de preço</b> para preencher os valores automaticamente.</p>
+
+<div class="card">
+    <div class="card-header"><h2>1. Arquivo de exames</h2></div>
+    <div class="form-group">
+        <label for="file">Arquivo (.xlsx, .xls, .csv, .pdf)</label>
+        <input type="file" id="file" accept=".xlsx,.xls,.csv,.pdf">
+        <p class="hint" style="margin-top: 0.4rem;">PDF escaneado (imagem) usa OCR.</p>
+    </div>
+    <div class="form-group">
+        <label for="price-model">Modelo de preço (opcional)</label>
+        <select id="price-model">
+            <option value="">— Sem modelo (usar valores do arquivo) —</option>
+        </select>
+        <p class="hint" style="margin-top: 0.4rem;">Com modelo, os exames identificados recebem o preço do modelo (o valor do arquivo é ignorado).</p>
+    </div>
+    <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; padding:0.6rem 0.8rem; background:var(--bg-tertiary); border:1px solid var(--border-color);">
+        <span class="hint">Varredura (diretório por CPF): <b id="dir-status" style="color:var(--text-secondary)">verificando...</b></span>
+        <button class="btn btn-secondary" onclick="refreshDirectory()" style="padding:0.4rem 0.8rem; font-size:0.75rem;">Atualizar diretório</button>
+    </div>
+    <button class="btn btn-outline" id="btn-preview" onclick="doPreview()">Pré-visualizar</button>
+    <button class="btn" id="btn-import" onclick="doImport()" disabled>Criar rascunhos</button>
+    <div id="msg" class="msg"></div>
+</div>
+
+<div class="card" id="preview-card" style="display:none;">
+    <div class="card-header"><h2>2. Pré-visualização</h2></div>
+    <div id="meta" class="hint"></div>
+    <div class="maptags" id="maptags"></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="table-wrap" id="table-wrap"></div>
+
+    <div id="cc-fallback" class="hidden" style="margin-top:1.5rem; border-top:1px solid var(--border-color); padding-top:1rem;">
+        <h3 style="color:var(--warning); font-size:1rem; margin-bottom:0.5rem;">Funcionários não localizados na varredura</h3>
+        <p class="hint" id="cc-nao-loc"></p>
+        <div class="form-group" style="margin-top:0.6rem;">
+            <label for="cc-filter">Indicar centro(s) de custo para buscar</label>
+            <input type="text" id="cc-filter" placeholder="Filtrar centro de custo..." oninput="filterCcHints()">
+            <select id="cc-hints" multiple size="6" style="margin-top:0.4rem;"></select>
+        </div>
+        <button class="btn btn-outline" onclick="doPreview()">Buscar nesses CCs e pré-visualizar</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+const HEADERS = { "Authorization": "Bearer " + AUTH_TOKEN };
+const FIELD_LABELS = { cpf:"CPF", nome:"Nome", centro_custo:"Centro de custo", cnpj:"CNPJ", valor:"Valor", data_exame:"Data do exame", exame:"Exame" };
+let canImport = false;
+
+function showMsg(text, ok) {
+    const m = document.getElementById("msg");
+    m.className = "msg show " + (ok ? "ok" : "err");
+    m.textContent = (typeof text === "string") ? text : JSON.stringify(text, null, 2);
+}
+function fileOrWarn() {
+    const f = document.getElementById("file").files[0];
+    if (!f) { showMsg("Selecione um arquivo primeiro.", false); return null; }
+    return f;
+}
+async function doPreview() {
+    const f = fileOrWarn(); if (!f) return;
+    document.getElementById("btn-preview").disabled = true;
+    showMsg("Lendo arquivo...", true);
+    const fd = new FormData(); fd.append("file", f);
+    const pm = document.getElementById("price-model").value;
+    if (pm) fd.append("price_model_id", pm);
+    const hints = selectedCcHints();
+    if (hints) fd.append("cc_hints", hints);
+    try {
+        const r = await fetch("/api/exames/preview", { method:"POST", headers:HEADERS, credentials:"same-origin", body:fd });
+        const j = await r.json();
+        document.getElementById("btn-preview").disabled = false;
+        if (!r.ok) { showMsg(j.detail || "Erro no preview.", false); return; }
+        renderPreview(j);
+    } catch (e) { document.getElementById("btn-preview").disabled = false; showMsg(e.message, false); }
+}
+function renderPreview(j) {
+    document.getElementById("preview-card").style.display = "block";
+    document.getElementById("meta").innerHTML =
+        `Leitura: <b style="color:var(--gold)">${j.modo_leitura}</b> · vínculo por <b style="color:var(--gold)">CPF</b> · destino: rascunhos na página de Exames` +
+        (j.modelo_aplicado ? ` · <b style="color:var(--gold)">modelo de preço aplicado</b>` : "");
+    if (j.modo_leitura === "pdf-aso") {
+        // ASO é documento (não planilha): lido por palavras-chave, sem colunas.
+        document.getElementById("maptags").innerHTML =
+            `<span class="tag">Documento ASO — lido por palavras-chave</span>` +
+            `<span class="tag">CPF detectado</span>` +
+            `<span class="tag">Data detectada</span>` +
+            `<span class="tag">Exames por nome</span>` +
+            `<span class="tag miss">Nome/CC vêm da varredura por CPF</span>`;
+    } else {
+        document.getElementById("maptags").innerHTML = Object.keys(FIELD_LABELS).map(f => {
+            const col = j.mapping[f];
+            return col ? `<span class="tag">${FIELD_LABELS[f]} → ${col}</span>`
+                       : `<span class="tag miss">${FIELD_LABELS[f]} (n/d)</span>`;
+        }).join("");
+    }
+    const naoLoc = (j.nao_localizados || []).length;
+    document.getElementById("kpis").innerHTML = `
+        <div class="kpi"><b>${j.funcionarios}</b><span>funcionários</span></div>
+        <div class="kpi"><b style="color:var(--success)">${j.localizados || 0}</b><span>identificados</span></div>
+        <div class="kpi"><b style="color:var(--warning)">${naoLoc}</b><span>não localizados</span></div>
+        <div class="kpi"><b>${j.linhas_sem_cpf}</b><span>linhas sem CPF</span></div>
+        <div class="kpi"><b>R$ ${j.total_valor}</b><span>total</span></div>`;
+    let html = "<table><thead><tr><th></th><th>CPF</th><th>Funcionário</th><th>Matríc.</th><th>Centro de Custo</th><th>Data</th><th>Exames identificados</th><th>Total</th></tr></thead><tbody>";
+    (j.sample || []).forEach(s => {
+        const mark = s.localizado ? '<span class="ok">✓</span>' : '<span class="no">⚠</span>';
+        const cc = s.centro_custo ? (s.centro_custo + (s.nome_ccu ? " - " + s.nome_ccu : "")) : '<span class="no">—</span>';
+        html += `<tr><td>${mark}</td><td>${s.cpf||""}</td><td>${s.nome||""}</td><td>${s.numcad||""}</td><td>${cc}</td><td>${s.data_exame||""}</td><td><span class="ok">${(s.exames_identificados||[]).join(", ")}</span>${(s.exames_nao_identificados||[]).length ? ' <span class="no">(+'+s.exames_nao_identificados.length+' n/ident.)</span>' : ''}</td><td>R$ ${s.total}</td></tr>`;
+    });
+    html += "</tbody></table>";
+    document.getElementById("table-wrap").innerHTML = html;
+
+    // Fallback: CCs para os não-localizados
+    const fb = document.getElementById("cc-fallback");
+    if (naoLoc > 0) {
+        fb.classList.remove("hidden");
+        document.getElementById("cc-nao-loc").textContent =
+            `${naoLoc} CPF(s) não casado(s) com funcionário/CC: ${(j.nao_localizados || []).slice(0,20).join(", ")}. ` +
+            `Clique em "Atualizar diretório" (acima) para varrer a folha do mês, OU selecione os centros de custo prováveis abaixo e pré-visualize de novo.`;
+        loadCostCentersForHints();
+    } else {
+        fb.classList.add("hidden");
+    }
+
+    if (!j.cpf_mapeado) {
+        canImport = false; document.getElementById("btn-import").disabled = true;
+        showMsg("Não dá para importar: coluna de CPF não encontrada (o vínculo é por CPF). Ajuste o arquivo.", false);
+    } else if (!j.funcionarios) {
+        canImport = false; document.getElementById("btn-import").disabled = true;
+        showMsg("Nenhum funcionário com CPF identificado no arquivo.", false);
+    } else {
+        canImport = true; document.getElementById("btn-import").disabled = false;
+        const aviso = naoLoc > 0 ? ` (${naoLoc} sem CC — indique os CCs abaixo e pré-visualize de novo, ou importe assim mesmo)` : "";
+        showMsg(`Pronto. ${j.funcionarios} rascunho(s) serão criados na página de Exames para revisão${aviso}.`, true);
+    }
+}
+async function doImport() {
+    const f = fileOrWarn(); if (!f || !canImport) return;
+    if (!confirm("Criar os rascunhos destes exames na página de Exames?")) return;
+    document.getElementById("btn-import").disabled = true;
+    showMsg("Importando...", true);
+    const fd = new FormData(); fd.append("file", f);
+    const pm = document.getElementById("price-model").value;
+    if (pm) fd.append("price_model_id", pm);
+    const hints = selectedCcHints();
+    if (hints) fd.append("cc_hints", hints);
+    try {
+        const r = await fetch("/api/exames/importar", { method:"POST", headers:HEADERS, credentials:"same-origin", body:fd });
+        const j = await r.json();
+        if (j.success) {
+            showMsg(`✅ ${j.rascunhos_criados} rascunho(s) criado(s) na página de Exames` +
+                    (j.linhas_sem_cpf ? ` · ${j.linhas_sem_cpf} linha(s) sem CPF ignorada(s)` : "") +
+                    `\n\nRevise e confirme em Faturamento → Exames Médicos (rascunhos só entram na exportação após confirmados).` +
+                    (j.erros && j.erros.length ? `\n\nObservações:\n- ${j.erros.slice(0,15).join("\n- ")}` : ""), true);
+        } else {
+            showMsg("Falha: " + (j.erros || []).join("; "), false);
+            document.getElementById("btn-import").disabled = false;
+        }
+    } catch (e) { showMsg(e.message, false); document.getElementById("btn-import").disabled = false; }
+}
+async function loadPriceModels() {
+    try {
+        const r = await fetch("/api/price-models", { headers: HEADERS, credentials: "same-origin" });
+        const j = await r.json();
+        const sel = document.getElementById("price-model");
+        (j.data || []).filter(m => m.ativo).forEach(m => {
+            const o = document.createElement("option");
+            o.value = m.id; o.textContent = m.nome;
+            sel.appendChild(o);
+        });
+    } catch (e) { /* segue sem modelos */ }
+}
+
+// ----- Varredura: status/atualização do diretório -----
+async function loadDirectoryStatus() {
+    try {
+        const r = await fetch("/api/exames/directory-status", { headers: HEADERS, credentials: "same-origin" });
+        const j = await r.json();
+        document.getElementById("dir-status").textContent = j.carregado
+            ? `${j.total_cpfs} CPFs em cache` : "não carregado (será montado no 1º uso)";
+    } catch (e) { document.getElementById("dir-status").textContent = "indisponível"; }
+}
+async function refreshDirectory() {
+    const el = document.getElementById("dir-status");
+    el.textContent = "varrendo a folha do mês no Senior... (pode demorar)";
+    try {
+        const r = await fetch("/api/exames/refresh-directory", { method: "POST", headers: HEADERS, credentials: "same-origin" });
+        const j = await r.json();
+        if (r.ok) { el.textContent = `${j.total_cpfs} CPFs em cache (atualizado)`; }
+        else { el.textContent = "falha: " + (j.detail || "erro"); }
+    } catch (e) { el.textContent = "falha: " + e.message; }
+}
+
+// ----- Fallback: CCs indicados -----
+let allCcHintsData = [];
+function selectedCcHints() {
+    const sel = document.getElementById("cc-hints");
+    if (!sel) return "";
+    return Array.from(sel.selectedOptions).map(o => o.value).join(",");
+}
+async function loadCostCentersForHints() {
+    if (allCcHintsData.length) return;
+    try {
+        const r = await fetch("/integrations/senior/cost-centers", { headers: HEADERS, credentials: "same-origin" });
+        const j = await r.json();
+        allCcHintsData = j.data || [];
+        renderCcHints(allCcHintsData);
+    } catch (e) { /* ignore */ }
+}
+function renderCcHints(list) {
+    const sel = document.getElementById("cc-hints");
+    sel.innerHTML = list.slice(0, 500).map(c => {
+        const cod = c.codccu || c.CODCCU || "";
+        const nome = c.nomccu || c.NOMCCU || "";
+        return `<option value="${cod}">${cod} - ${nome}</option>`;
+    }).join("");
+}
+function filterCcHints() {
+    const f = document.getElementById("cc-filter").value.toLowerCase().trim();
+    const list = !f ? allCcHintsData : allCcHintsData.filter(c =>
+        String(c.codccu || c.CODCCU || "").toLowerCase().includes(f) ||
+        String(c.nomccu || c.NOMCCU || "").toLowerCase().includes(f));
+    renderCcHints(list);
+}
+
+loadPriceModels();
+loadDirectoryStatus();
+{% endblock %}

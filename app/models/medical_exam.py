@@ -9,6 +9,11 @@ class MedicalExam(Base):
     id = Column(Integer, primary_key=True, index=True)
     nome_funcionario = Column(String(255), nullable=False, index=True)
     numcad = Column(Integer)
+    cpf = Column(String(14), index=True)              # vínculo com a folha (export casa por CPF)
+    codccu = Column(String(50))                        # centro de custo de referência
+    nome_ccu = Column(String(255))
+    origem = Column(String(30), default="manual")     # 'manual' | 'upload'
+    status = Column(String(20), default="confirmado")  # 'confirmado' | 'rascunho'
     data_exame = Column(Date, default=date.today)
     clinic = Column(Float, default=0.0)
     audio = Column(Float, default=0.0)
