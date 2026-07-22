@@ -13,6 +13,13 @@ wheels/
 *.db
 *.sqlite
 *.sqlite3
+*.db.bak-*
+
+# Snapshots de rollback locais
+.rollback/
+
+# Planilhas reais de cliente (PII) — só a doc do modelo vai pro git
+docs/modelos/*.xlsx
 
 # Variáveis de ambiente com segredos
 .env
