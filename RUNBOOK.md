@@ -319,6 +319,24 @@ o ExportJob guarda user_id/username de quem enfileirou) e importações de dados
 em `/auditoria` (somente admin), com filtros e paginação — sem endpoints de
 escrita/exclusão.
 
+### 006 — Conciliação contábil (codcal_classifications)
+
+Tabela nova `codcal_classifications` (criada pelo `create_all` no startup — sem
+ALTER manual; migração aditiva). Classificação GLOBAL por código de cálculo
+(codcal unique) da folha Senior: `recorte_mensal` (bool), `descricao` (rótulo
+humano — o WS não fornece o nome), `origem` (manual|heuristica|oficial),
+`observacao`, timestamps. Ausência de linha para um codcal presente na folha =
+"não classificado" → conciliação daquela competência fica `incompleta`.
+
+A conciliação em `/conciliacao` (gestor+) consulta a folha via `fetch_payroll`
+em **job assíncrono** (mesmo padrão das exportações — requer **1 worker**), monta
+a ponte competência inteira × recorte mensal (serviço puro
+`app/services/conciliacao.py`) e **não persiste** o resultado; a planilha
+exportada (`/api/conciliacao/export/{job_id}`) é derivada do JSON retido no job
+(retenção 1h), sem segunda ida ao WS. Ações auditadas: `conciliacao.gerar`,
+`conciliacao.classificar`, `conciliacao.export`. Documento de critérios em
+`docs/CONCILIACAO.md`. Spec: [specs/004-relatorio-conciliacao/](specs/004-relatorio-conciliacao/).
+
 ---
 
 ## Cache Senior e throttle (feature 003)

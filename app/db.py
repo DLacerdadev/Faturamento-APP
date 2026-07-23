@@ -24,7 +24,7 @@ def get_db():
         db.close()
 
 def init_db():
-    from app.models import customer, employee, integrations, report, user, billing, medical_exam, epi_purchase, exam_catalog, benefit_event, product_catalog, training_catalog, training_record, cc_item_price, billing_model, audit_log
+    from app.models import customer, employee, integrations, report, user, billing, medical_exam, epi_purchase, exam_catalog, benefit_event, product_catalog, training_catalog, training_record, cc_item_price, billing_model, audit_log, codcal_classification
     from app.models.billing import PayrollItemType, PayrollDirection
     from app.models.exam_catalog import ExamCatalog
     from app.models.benefit_event import BenefitEvent

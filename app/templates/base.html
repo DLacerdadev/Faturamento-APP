@@ -613,6 +613,11 @@
             <a href="/reports" class="{% if request.url.path == '/reports' %}active{% endif %}">
                 <span class="material-symbols-outlined">analytics</span><span>Relatórios</span>
             </a>
+            {% if user and (user.role or 'operador')|lower in ['gestor', 'admin'] %}
+            <a href="/conciliacao" class="{% if request.url.path == '/conciliacao' %}active{% endif %}">
+                <span class="material-symbols-outlined">balance</span><span>Conciliação</span>
+            </a>
+            {% endif %}
             {% if user and (user.role or 'operador')|lower == 'admin' %}
             <a href="/usuarios" class="{% if request.url.path == '/usuarios' %}active{% endif %}">
                 <span class="material-symbols-outlined">manage_accounts</span><span>Usuários</span>

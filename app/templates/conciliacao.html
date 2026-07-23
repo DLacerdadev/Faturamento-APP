@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+
+{% block title %}Conciliação Contábil - Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .msg { padding: 0.8rem 1rem; margin: 1rem 0; border-left: 4px solid; font-weight: 500; display: none; font-size: 0.85rem; }
+    .msg.show { display: block; }
+    .msg.ok { background: rgba(74,222,128,0.1); color: var(--success); border-color: var(--success); }
+    .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
+    .msg.warn { background: rgba(251,191,36,0.12); color: var(--warning); border-color: var(--warning); }
+    .hint { font-size: 0.82rem; color: var(--text-muted); }
+    .filtro-grid { display: grid; grid-template-columns: 180px 1fr auto; gap: 0.8rem; align-items: end; }
+    .filtro-grid label { display:block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 0.3rem; }
+    .filtro-grid input, .filtro-grid select { padding: 0.5rem 0.6rem; font-size: 0.85rem; width: 100%; }
+
+    .progress-wrap { margin: 1rem 0; display:none; }
+    .progress-wrap.show { display:block; }
+    .progress-bar { height: 10px; background: var(--bg-hover); border-radius: 6px; overflow:hidden; }
+    .progress-bar > div { height:100%; width:0%; background: var(--gold); transition: width .3s; }
+
+    .cards-totais { display:grid; grid-template-columns: repeat(4, 1fr); gap: 0.8rem; margin: 1rem 0; }
+    .tcard { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 0.9rem 1rem; }
+    .tcard .rot { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
+    .tcard .val { font-family: 'JetBrains Mono', monospace; font-size: 1.15rem; font-weight: 700; margin-top: 0.3rem; }
+    .tcard.residuo .val.zero { color: var(--success); }
+    .tcard.residuo .val.nonzero { color: var(--error); }
+
+    .status-badge { font-size: 0.72rem; padding: 0.25rem 0.7rem; border-radius: 3px; font-weight: 700; text-transform: uppercase; }
+    .status-badge.fechada { background: rgba(74,222,128,0.2); color: var(--success); border: 1px solid var(--success); }
+    .status-badge.incompleta { background: rgba(251,191,36,0.18); color: var(--warning); border: 1px solid var(--warning); }
+    .status-badge.com_residuo { background: rgba(248,113,113,0.15); color: var(--error); border: 1px solid var(--error); }
+
+    table.cc { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    table.cc th { background: var(--table-header-bg); color: var(--gold); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; padding: 0.6rem; text-align: left; }
+    table.cc td { border-bottom: 1px solid var(--border-color); padding: 0.5rem 0.6rem; vertical-align: middle; }
+    .codcal { font-family: 'JetBrains Mono', monospace; color: var(--gold); font-weight: 700; }
+    .num { font-family: 'JetBrains Mono', monospace; text-align: right; }
+    .cls-pill { font-size: 0.66rem; padding: 0.14rem 0.55rem; border-radius: 2px; font-weight: 700; text-transform: uppercase; }
+    .cls-pill.mensal { background: rgba(74,222,128,0.18); color: var(--success); border: 1px solid var(--success); }
+    .cls-pill.fora { background: rgba(148,163,184,0.18); color: var(--text-muted); border: 1px solid var(--text-muted); }
+    .cls-pill.nao_classificado { background: rgba(251,191,36,0.18); color: var(--warning); border: 1px solid var(--warning); }
+    tr.evrow td { background: var(--bg-hover); font-size: 0.78rem; color: var(--text-muted); }
+    tr.evrow .num { color: var(--text); }
+    .link-btn { background:none; border:none; color: var(--gold); cursor:pointer; font-size:0.8rem; padding:0; text-decoration: underline; }
+    .row-actions button { font-size: 0.7rem; padding: 0.3rem 0.55rem; margin-right: 0.2rem; }
+
+    /* modal de classificação */
+    .modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:1000; align-items:center; justify-content:center; }
+    .modal-bg.show { display:flex; }
+    .modal { background: var(--card-bg); border:1px solid var(--border-color); border-radius:6px; padding:1.3rem; width:min(460px, 92vw); }
+    .modal h3 { margin:0 0 0.4rem; }
+    .modal label { display:block; font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin:0.7rem 0 0.25rem; }
+    .modal input, .modal select { width:100%; padding:0.5rem 0.6rem; font-size:0.85rem; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Conciliação Contábil</h1>
+</div>
+
+<div class="card">
+    <p class="hint">Demonstra a ponte entre a <b>competência inteira</b> (todos os códigos de cálculo da folha) e o <b>recorte mensal</b> que a contabilidade confere no relatório da Senior. Os números vêm da Senior no momento da geração. Critérios e exemplos aprovados em <code>docs/CONCILIACAO.md</code> (repositório).</p>
+    {% if ccu_erro %}<div class="msg warn show">{{ ccu_erro }}</div>{% endif %}
+    <div id="msg" class="msg"></div>
+
+    <div class="filtro-grid">
+        <div>
+            <label>Competência</label>
+            <input type="month" id="f-periodo">
+        </div>
+        <div>
+            <label>Centro de custo (opcional)</label>
+            <select id="f-ccu">
+                <option value="">Todos os centros de custo</option>
+                {% for c in ccus %}
+                <option value="{{ c.codccu }}">{{ c.codccu }} — {{ c.nomccu or c.codccu }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <button class="btn" id="btn-gerar" onclick="gerar()">Gerar conciliação</button>
+        </div>
+    </div>
+
+    <div class="progress-wrap" id="progress">
+        <div class="progress-bar"><div id="progress-fill"></div></div>
+        <p class="hint" id="progress-msg" style="margin-top:0.4rem;"></p>
+    </div>
+</div>
+
+<div id="resultado" style="display:none;">
+    <div class="card">
+        <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
+            <h2 style="margin:0;">Resultado <span id="r-status" class="status-badge"></span></h2>
+            <div>
+                <span class="hint" id="r-meta"></span>
+                <button class="btn" id="btn-export" onclick="exportar()" style="margin-left:0.8rem;">Exportar planilha</button>
+            </div>
+        </div>
+
+        <div class="cards-totais">
+            <div class="tcard"><div class="rot">Competência inteira</div><div class="val" id="t-inteira">—</div></div>
+            <div class="tcard"><div class="rot">Recorte mensal</div><div class="val" id="t-mensal">—</div></div>
+            <div class="tcard"><div class="rot">Fora do recorte</div><div class="val" id="t-fora">—</div></div>
+            <div class="tcard residuo"><div class="rot">Resíduo</div><div class="val" id="t-residuo">—</div></div>
+        </div>
+        <p class="hint" id="r-aviso"></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2>Decomposição por código de cálculo</h2></div>
+        <div style="overflow-x:auto;">
+            <table class="cc">
+                <thead>
+                    <tr>
+                        <th>CODCAL</th><th>Descrição</th><th>Classificação</th>
+                        <th style="text-align:right;">Valor total</th><th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="cc-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de classificação -->
+<div class="modal-bg" id="modal">
+    <div class="modal">
+        <h3>Classificar código de cálculo</h3>
+        <p class="hint">CODCAL <span class="codcal" id="m-codcal"></span></p>
+        <div id="m-sugestao" class="msg warn" style="display:none;"></div>
+        <label>Descrição</label>
+        <input type="text" id="m-desc" placeholder="ex.: Folha mensal">
+        <label>Classificação</label>
+        <select id="m-recorte">
+            <option value="true">Entra no recorte mensal</option>
+            <option value="false">Fora do recorte</option>
+        </select>
+        <label>Observação</label>
+        <input type="text" id="m-obs" placeholder="ex.: confirmado com a contabilidade 07/2026">
+        <input type="hidden" id="m-origem" value="manual">
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
+            <button class="btn" onclick="salvarClassificacao()">Salvar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TOKEN = {{ token|tojson }};
+const H = { "Content-Type": "application/json" };
+if (TOKEN) H["Authorization"] = "Bearer " + TOKEN;
+
+let ULTIMO_JOB = null;
+let ULTIMO_RESULTADO = null;
+let POLL = null;
+
+function showMsg(text, kind) {
+    const m = document.getElementById("msg");
+    m.textContent = text;
+    m.className = "msg show " + (kind || "ok");
+}
+function clearMsg() { document.getElementById("msg").className = "msg"; }
+
+function brl(v) {
+    if (v === null || v === undefined) return "—";
+    return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+async function gerar() {
+    clearMsg();
+    const periodo = document.getElementById("f-periodo").value;   // 'YYYY-MM'
+    const codccu = document.getElementById("f-ccu").value || null;
+    if (!periodo) { showMsg("Escolha a competência.", "err"); return; }
+
+    document.getElementById("btn-gerar").disabled = true;
+    document.getElementById("resultado").style.display = "none";
+    const pw = document.getElementById("progress");
+    pw.classList.add("show");
+    setProgress(0, "Enfileirando…");
+
+    try {
+        const r = await fetch("/api/conciliacao/gerar", {
+            method: "POST", headers: H,
+            body: JSON.stringify({ periodo: periodo, codccu: codccu }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || "Falha ao iniciar a geração.");
+        ULTIMO_JOB = data.job_id;
+        POLL = setInterval(checarStatus, 1200);
+    } catch (e) {
+        showMsg(e.message, "err");
+        document.getElementById("btn-gerar").disabled = false;
+        pw.classList.remove("show");
+    }
+}
+
+function setProgress(pct, msg) {
+    document.getElementById("progress-fill").style.width = (pct || 0) + "%";
+    document.getElementById("progress-msg").textContent = msg || "";
+}
+
+async function checarStatus() {
+    if (!ULTIMO_JOB) return;
+    try {
+        const r = await fetch("/api/conciliacao/status/" + ULTIMO_JOB, { headers: H });
+        const s = await r.json();
+        if (!r.ok) throw new Error(s.detail || "Falha ao consultar status.");
+        setProgress(s.percent, s.message);
+        if (s.status === "done") {
+            clearInterval(POLL); POLL = null;
+            await carregarResultado();
+        } else if (s.status === "error") {
+            clearInterval(POLL); POLL = null;
+            document.getElementById("progress").classList.remove("show");
+            document.getElementById("btn-gerar").disabled = false;
+            showMsg("Erro ao gerar: " + (s.error || "falha na Senior") + " — tente novamente.", "err");
+        }
+    } catch (e) {
+        clearInterval(POLL); POLL = null;
+        document.getElementById("btn-gerar").disabled = false;
+        showMsg(e.message, "err");
+    }
+}
+
+async function carregarResultado() {
+    const r = await fetch("/api/conciliacao/resultado/" + ULTIMO_JOB, { headers: H });
+    const data = await r.json();
+    document.getElementById("progress").classList.remove("show");
+    document.getElementById("btn-gerar").disabled = false;
+    if (!r.ok) { showMsg(data.detail || "Falha ao carregar resultado.", "err"); return; }
+    ULTIMO_RESULTADO = data;
+    render(data);
+}
+
+function render(data) {
+    document.getElementById("resultado").style.display = "block";
+    const t = data.totais || {};
+    document.getElementById("t-inteira").textContent = brl(t.competencia_inteira);
+    document.getElementById("t-mensal").textContent = brl(t.recorte_mensal);
+    document.getElementById("t-fora").textContent = brl(t.fora_recorte);
+    const rv = document.getElementById("t-residuo");
+    rv.textContent = brl(t.residuo);
+    rv.className = "val " + (Math.abs(t.residuo || 0) < 0.005 ? "zero" : "nonzero");
+
+    const badge = document.getElementById("r-status");
+    badge.textContent = data.status;
+    badge.className = "status-badge " + data.status;
+
+    const meta = [];
+    if (data.periodo) meta.push(data.periodo);
+    meta.push(data.codccu ? ("CCU " + data.codccu) : "Todos os CCUs");
+    if (data.gerado_em) meta.push("gerado " + data.gerado_em.replace("T", " ").slice(0, 16));
+    document.getElementById("r-meta").textContent = meta.join(" · ");
+
+    const aviso = document.getElementById("r-aviso");
+    if (data.status === "incompleta") {
+        aviso.textContent = "Há códigos de cálculo não classificados (destacados abaixo). Classifique-os para a ponte fechar.";
+    } else if (data.status === "com_residuo") {
+        aviso.textContent = "Tudo classificado, mas a ponte não fechou em zero — verifique os valores.";
+    } else {
+        aviso.textContent = "Ponte fechada: competência inteira = recorte mensal + fora do recorte.";
+    }
+
+    const body = document.getElementById("cc-body");
+    body.innerHTML = "";
+    (data.codcals || []).forEach(cc => {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+            '<td class="codcal">' + cc.codcal + '</td>' +
+            '<td>' + (cc.descricao || '<span class="hint">(sem descrição)</span>') + '</td>' +
+            '<td><span class="cls-pill ' + cc.classificacao + '">' + rotuloCls(cc.classificacao) + '</span></td>' +
+            '<td class="num">' + brl(cc.valor_total) + '</td>' +
+            '<td class="row-actions">' +
+                '<button class="btn" onclick=\'abrirModal(' + cc.codcal + ')\'>Classificar</button>' +
+                (cc.classificacao !== "nao_classificado" ? '<button class="btn btn-secondary" onclick=\'removerClassificacao(' + cc.codcal + ')\'>Remover</button>' : '') +
+                ' <button class="link-btn" onclick=\'toggleEventos(this, ' + cc.codcal + ')\'>ver eventos</button>' +
+            '</td>';
+        body.appendChild(tr);
+
+        (cc.eventos || []).forEach(ev => {
+            const er = document.createElement("tr");
+            er.className = "evrow codcal-" + cc.codcal;
+            er.style.display = "none";
+            er.innerHTML =
+                '<td></td>' +
+                '<td colspan="2">' + ev.codigo + ' — ' + (ev.descricao || '') + '</td>' +
+                '<td class="num">' + brl(ev.valor_total) + '</td>' +
+                '<td class="num">' + ev.lancamentos + ' lanç.</td>';
+            body.appendChild(er);
+        });
+    });
+}
+
+function rotuloCls(c) {
+    return c === "mensal" ? "Recorte mensal" : c === "fora" ? "Fora do recorte" : "Não classificado";
+}
+
+function toggleEventos(btn, codcal) {
+    const rows = document.querySelectorAll("tr.evrow.codcal-" + codcal);
+    const show = rows.length && rows[0].style.display === "none";
+    rows.forEach(r => r.style.display = show ? "" : "none");
+    btn.textContent = show ? "ocultar eventos" : "ver eventos";
+}
+
+// ---- Classificação ----
+function abrirModal(codcal) {
+    document.getElementById("m-codcal").textContent = codcal;
+    document.getElementById("modal").dataset.codcal = codcal;
+    const cc = (ULTIMO_RESULTADO.codcals || []).find(c => c.codcal === codcal);
+    document.getElementById("m-desc").value = cc && cc.descricao ? cc.descricao : "";
+    document.getElementById("m-obs").value = "";
+    document.getElementById("m-origem").value = "manual";
+    const sug = document.getElementById("m-sugestao");
+    // Heurística: sugere recorte mensal se algum evento parece de folha mensal
+    let sugerido = null;
+    if (cc && cc.classificacao === "nao_classificado") {
+        const marc = ["SALARIO", "SALÁRIO", "HORAS", "ADICIONAL", "DSR", "REPOUSO"];
+        if ((cc.eventos || []).some(e => marc.some(m => (e.descricao || "").toUpperCase().includes(m)))) {
+            sugerido = true;
+        }
+    }
+    if (sugerido === true) {
+        document.getElementById("m-recorte").value = "true";
+        document.getElementById("m-origem").value = "heuristica";
+        sug.textContent = "Sugestão: parece folha mensal (há eventos de salário/horas). Confirme ou ajuste.";
+        sug.style.display = "block";
+    } else {
+        document.getElementById("m-recorte").value = cc && cc.classificacao === "fora" ? "false" : "true";
+        sug.style.display = "none";
+    }
+    document.getElementById("modal").classList.add("show");
+}
+function fecharModal() { document.getElementById("modal").classList.remove("show"); }
+
+async function salvarClassificacao() {
+    const codcal = document.getElementById("modal").dataset.codcal;
+    const payload = {
+        descricao: document.getElementById("m-desc").value || null,
+        recorte_mensal: document.getElementById("m-recorte").value === "true",
+        observacao: document.getElementById("m-obs").value || null,
+        origem: document.getElementById("m-origem").value || "manual",
+    };
+    try {
+        const r = await fetch("/api/conciliacao/classificacoes/" + codcal, {
+            method: "PUT", headers: H, body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || "Falha ao salvar.");
+        fecharModal();
+        showMsg("Classificação salva. Recalculando…", "ok");
+        await carregarResultado();   // re-render com o status atualizado
+    } catch (e) { showMsg(e.message, "err"); }
+}
+
+async function removerClassificacao(codcal) {
+    if (!confirm("Remover a classificação do CODCAL " + codcal + "? Ele volta a 'não classificado'.")) return;
+    try {
+        const r = await fetch("/api/conciliacao/classificacoes/" + codcal, { method: "DELETE", headers: H });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || "Falha ao remover.");
+        showMsg("Classificação removida. Recalculando…", "ok");
+        await carregarResultado();
+    } catch (e) { showMsg(e.message, "err"); }
+}
+
+function exportar() {
+    if (!ULTIMO_JOB) return;
+    window.location.href = "/api/conciliacao/export/" + ULTIMO_JOB;
+}
+</script>
+{% endblock %}

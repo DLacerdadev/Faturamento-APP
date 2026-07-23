@@ -35,9 +35,9 @@
 
 | # | Tarefa | Status | Situação |
 |---|--------|--------|----------|
-| 3.1 | Documentar diferença de recorte (competência inteira × relatório mensal Senior) com exemplos reais | ⬜ | Conhecimento levantado (WS soma todos os ~10 codcal da competência; relatório "mensal" é recorte; 132/132 eventos batem) mas **sem documento formal**. |
-| 3.2 | Relatório de conciliação no sistema (ponte entre recortes) | ⬜ | **Nada no código** — nenhuma rota/tela/serviço de conciliação. É o próximo desenvolvimento (spec 004). |
-| 3.3 | Follow-up com a Senior: marcação de tipo de cálculo (TIPCAL) | ⏸️ 🔁 | Pendência conhecida; registrar formalmente junto à Senior com follow-up mensal. |
+| 3.1 | Documentar diferença de recorte (competência inteira × relatório mensal Senior) com exemplos reais | 🔨 | Documento criado em `docs/CONCILIACAO.md` (critérios + estrutura); **faltam preencher os 2 exemplos reais e colher a aprovação** de quem confere (T025/prod). |
+| 3.2 | Relatório de conciliação no sistema (ponte entre recortes) | 🔨 | **Implementado (spec 004)**: tela `/conciliacao` (gestor+), ponte por codcal→evento, classificação global auditada, geração via job e export .xlsx. Validado E2E em DEV_MODE; falta validação com competência real + contabilidade (T025). |
+| 3.3 | Follow-up com a Senior: marcação de tipo de cálculo (TIPCAL) | ⏸️ 🔁 | Registrar formalmente junto à Senior com follow-up mensal; seção de follow-up já existe em `docs/CONCILIACAO.md`. |
 
 ## Etapa 4 — Testes automatizados dos cálculos (MÉDIA · 2–3 semanas)
 

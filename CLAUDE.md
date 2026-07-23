@@ -38,9 +38,11 @@ Sistema de faturamento RH com integração Senior ERP.
 ## Active Spec Feature
 
 - **004 — Relatório de Conciliação Contábil** — [specs/004-relatorio-conciliacao/](specs/004-relatorio-conciliacao/)
-  - Status: **planejamento completo — pronto para `/speckit-tasks`**
-  - Etapa 3 do Plano de Execução ([docs/PLANO-EXECUCAO-STATUS.md](docs/PLANO-EXECUCAO-STATUS.md)): ponte competência inteira × recorte mensal Senior, decomposição por codcal→evento (agregado, sem dados de funcionário), classificação global de codcal (tabela nova `codcal_classifications`), geração via job assíncrono (WS ao vivo), export .xlsx derivado do job
-  - Documentos: [spec](specs/004-relatorio-conciliacao/spec.md) · [plan](specs/004-relatorio-conciliacao/plan.md) · [research](specs/004-relatorio-conciliacao/research.md) · [data-model](specs/004-relatorio-conciliacao/data-model.md) · [contracts](specs/004-relatorio-conciliacao/contracts/rest-endpoints.md) · [quickstart](specs/004-relatorio-conciliacao/quickstart.md)
+  - Status: **implementado (US1–US3) — pendente validação real em prod (T025/US4)**
+  - Etapa 3 do Plano de Execução ([docs/PLANO-EXECUCAO-STATUS.md](docs/PLANO-EXECUCAO-STATUS.md)): tela `/conciliacao` (gestor+) mostra a ponte competência inteira × recorte mensal Senior, decomposição por codcal→evento (agregado, sem dados de funcionário)
+  - Backend: model [`app/models/codcal_classification.py`](app/models/codcal_classification.py) (tabela `codcal_classifications`, criada via `create_all`); serviço puro [`app/services/conciliacao.py`](app/services/conciliacao.py) (`montar_conciliacao`, `conciliacao_para_xlsx`); router [`app/routers/conciliacao.py`](app/routers/conciliacao.py) — geração via job assíncrono (WS ao vivo, `export_jobs`), resultado JSON não persistido, export .xlsx derivado do job; classificação global de codcal (CRUD gestor+, auditado)
+  - Doc de critérios: [docs/CONCILIACAO.md](docs/CONCILIACAO.md) (exemplos reais + aprovação pendentes)
+  - Documentos: [spec](specs/004-relatorio-conciliacao/spec.md) · [plan](specs/004-relatorio-conciliacao/plan.md) · [research](specs/004-relatorio-conciliacao/research.md) · [data-model](specs/004-relatorio-conciliacao/data-model.md) · [contracts](specs/004-relatorio-conciliacao/contracts/rest-endpoints.md) · [quickstart](specs/004-relatorio-conciliacao/quickstart.md) · [tasks](specs/004-relatorio-conciliacao/tasks.md)
 
 ### Features anteriores
 

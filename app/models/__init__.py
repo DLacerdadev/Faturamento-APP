@@ -16,6 +16,7 @@ from app.models.import_template import ImportTemplate
 from app.models.exam_catalog import ExamCatalog, PriceModel, PriceModelItem
 from app.models.benefit_event import BenefitEvent
 from app.models.product_catalog import ProductCatalog
+from app.models.codcal_classification import CodcalClassification
 
 __all__ = [
     "Customer", "ReportTemplate", "Employee", "ExamRecord",
@@ -23,5 +24,6 @@ __all__ = [
     "Company", "Unit", "BillingEmployee", "EmploymentContract",
     "BillingPeriod", "PayrollItemType", "PayrollItem", "BillingExamRecord",
     "AdditionalValue", "MedicalExam", "ImportTemplate",
-    "ExamCatalog", "PriceModel", "PriceModelItem", "BenefitEvent", "ProductCatalog"
+    "ExamCatalog", "PriceModel", "PriceModelItem", "BenefitEvent", "ProductCatalog",
+    "CodcalClassification"
 ]
