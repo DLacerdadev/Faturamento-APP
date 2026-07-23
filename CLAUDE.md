@@ -37,20 +37,14 @@ Sistema de faturamento RH com integração Senior ERP.
 <!-- SPECKIT START -->
 ## Active Spec Feature
 
-- **003 — Cache e Throttle das Chamadas Senior** — [specs/003-senior-cache-throttle/](specs/003-senior-cache-throttle/)
-  - Status: **implementação em disco completa — pendente validação E2E**
-  - Backend: novo módulo [`app/services/senior_cache.py`](app/services/senior_cache.py) (TimedCache stdlib, 2 instâncias singleton, semáforo); refatorações em [`app/services/senior_connector.py`](app/services/senior_connector.py) (`fetch_cost_centers`, `fetch_all_cost_centers`, `fetch_active_employees`, `_post_soap_with_retry`); 3 endpoints admin em [`app/routers/integrations.py`](app/routers/integrations.py)
-  - TTL CCUs 6h, TTL funcionários 1h, max concorrência 3 SOAPs (configurável via `.env`); retry removido (falha rápida)
-  - Documentos: [spec](specs/003-senior-cache-throttle/spec.md) · [plan](specs/003-senior-cache-throttle/plan.md) · [research](specs/003-senior-cache-throttle/research.md) · [data-model](specs/003-senior-cache-throttle/data-model.md) · [contracts](specs/003-senior-cache-throttle/contracts/rest-endpoints.md) · [quickstart](specs/003-senior-cache-throttle/quickstart.md) · [tasks](specs/003-senior-cache-throttle/tasks.md)
+- **004 — Relatório de Conciliação Contábil** — [specs/004-relatorio-conciliacao/](specs/004-relatorio-conciliacao/)
+  - Status: **planejamento completo — pronto para `/speckit-tasks`**
+  - Etapa 3 do Plano de Execução ([docs/PLANO-EXECUCAO-STATUS.md](docs/PLANO-EXECUCAO-STATUS.md)): ponte competência inteira × recorte mensal Senior, decomposição por codcal→evento (agregado, sem dados de funcionário), classificação global de codcal (tabela nova `codcal_classifications`), geração via job assíncrono (WS ao vivo), export .xlsx derivado do job
+  - Documentos: [spec](specs/004-relatorio-conciliacao/spec.md) · [plan](specs/004-relatorio-conciliacao/plan.md) · [research](specs/004-relatorio-conciliacao/research.md) · [data-model](specs/004-relatorio-conciliacao/data-model.md) · [contracts](specs/004-relatorio-conciliacao/contracts/rest-endpoints.md) · [quickstart](specs/004-relatorio-conciliacao/quickstart.md)
 
-### Features concluídas
+### Features anteriores
 
+- **003 — Cache e Throttle das Chamadas Senior** — [specs/003-senior-cache-throttle/](specs/003-senior-cache-throttle/) — implementação em disco completa, **pendente validação E2E**. `senior_cache.py` (TTL CCUs 6h, funcionários 1h, máx. 3 SOAPs), refatorações no `senior_connector.py`, 3 endpoints admin.
 - **002 — Catálogo de EPIs e Pedido de Compra com Solicitação** — [specs/002-epi-catalog-orders/](specs/002-epi-catalog-orders/) — `/catalogo-epis` + `/epis` v2 com cartesiano, Excel auto-gerado ao salvar, email se SMTP. Migração 002 aplicada.
-
 - **001 — Fluxo de Compra de EPIs por Funcionário** — [specs/001-epi-purchase-flow/](specs/001-epi-purchase-flow/) — `/epis` com multi-select de funcionários e produto cartesiano funcionário×item, revalidação server-side, migração 001 aplicada.
-
-### Features concluídas
-
-- **001 — Fluxo de Compra de EPIs por Funcionário** — [specs/001-epi-purchase-flow/](specs/001-epi-purchase-flow/)
-  - Tela `/epis` com multi-select de funcionários e produto cartesiano funcionário×item, revalidação server-side ao salvar, migração 001 aplicada
 <!-- SPECKIT END -->
