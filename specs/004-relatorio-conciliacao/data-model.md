@@ -10,7 +10,7 @@ Padrão de tabela de configuração do repo (ref.: `benefit_events`). Arquivo: `
 | `codcal` | Integer | `unique`, `nullable=False`, index — código do cálculo Senior (ex.: 362) |
 | `descricao` | String(255) | rótulo humano editável (ex.: "Folha mensal", "13º adiantamento") — o WS não fornece nome |
 | `recorte_mensal` | Boolean, `nullable=False` | `True` = entra no recorte mensal; `False` = fora do recorte |
-| `origem` | String(20), default `"manual"` | `manual` \| `heuristica` \| `oficial` (TIPCAL futuro, FR-4/D4) |
+| `origem` | String(20), default `"manual"` | `manual` (digitada do zero) \| `heuristica` (sugestão aceita pelo gestor) \| `oficial` (marcação TIPCAL da Senior, futuro — FR-4/D4). Valor recebido no upsert; `oficial` só por sincronização interna. |
 | `observacao` | String(255), nullable | anotação livre (ex.: "confirmado com contabilidade em 07/2026") |
 | `created_at` | DateTime | default `utcnow` |
 | `updated_at` | DateTime | default `utcnow`, `onupdate=utcnow` |

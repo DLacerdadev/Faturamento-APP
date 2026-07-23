@@ -5,7 +5,7 @@ Router: `app/routers/conciliacao.py`. **Todos os endpoints exigem `require_role(
 ## Tela
 
 ### `GET /conciliacao` → HTML
-Renderiza `conciliacao.html` (herda `base.html`). Contexto: `user`, `token`, lista de CCUs (cache) e classificações existentes. Sem login → redirect 303 `/login`.
+Renderiza `conciliacao.html` (herda `base.html`). Contexto: `user`, `token`, lista de CCUs (cache 6h da feature 003) e classificações existentes. Sem login → redirect 303 `/login`. Se a lista de CCUs não estiver disponível no momento (cache vazio + WS indisponível), a página ainda renderiza com aviso e permite informar o CCU manualmente ou tentar de novo — nunca falha o carregamento por causa da lista.
 
 ## Geração (job assíncrono — padrão export-async)
 
@@ -43,11 +43,12 @@ Converte o JSON **retido no job** em `.xlsx` (abas Resumo/Decomposição/Eventos
 Upsert (cria se não existe — é assim que um "não classificado" é resolvido).
 ```jsonc
 // request
-{ "descricao": "Folha mensal", "recorte_mensal": true, "observacao": "ok contabilidade 07/2026" }
+{ "descricao": "Folha mensal", "recorte_mensal": true, "observacao": "ok contabilidade 07/2026",
+  "origem": "manual" }   // "manual" (default) | "heuristica" (sugestão aceita pelo gestor)
 // response 200
 { "success": true, "item": { ...como no GET... } }
 ```
-`origem` é gravada como `"manual"` neste endpoint (valores `heuristica`/`oficial` são de fluxos internos — D4). Audita `conciliacao.classificar` com antes/depois. 422 se payload inválido.
+`origem` aceita apenas `manual` (default) ou `heuristica` neste endpoint; `oficial` é reservada à sincronização interna do TIPCAL (D4) e é rejeitada aqui (422). Audita `conciliacao.classificar` com antes/depois. 422 se payload inválido.
 
 ### `DELETE /api/conciliacao/classificacoes/{codcal}`
 Remove a classificação (codcal volta a "não classificado"). Audita com o estado anterior. 404 se não existe.
@@ -61,4 +62,5 @@ Remove a classificação (codcal volta a "não classificado"). Audita com o esta
 | 404 | job expirado/inexistente; classificação inexistente (DELETE) |
 | 409 | resultado/export pedido antes de `status=="done"` |
 | 422 | payload inválido (Pydantic) |
-| 502 | falha do WS Senior na geração síncrona de contexto (a geração em si falha via job `status="error"`) |
+
+Falha do WS Senior **durante a geração** não é um código HTTP do POST (que já retornou `job_id`): o job termina em `status="error"` com a mensagem, e a tela exibe o erro com opção de tentar de novo (P2). O carregamento da tela degrada como descrito em `GET /conciliacao`.

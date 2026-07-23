@@ -62,10 +62,10 @@
 **Independent test**: Partindo de uma conciliação `incompleta`, classificar todos os codcal e ver o status migrar para `fechada` com resíduo R$ 0,00; remover uma classificação e ver voltar a `incompleta`.
 
 - [ ] T015 [P] [US2] Endpoint `GET /api/conciliacao/classificacoes` em `app/routers/conciliacao.py`: lista as classificações (require gestor+).
-- [ ] T016 [US2] Endpoint `PUT /api/conciliacao/classificacoes/{codcal}` (upsert) em `app/routers/conciliacao.py`: Pydantic `ClassificacaoIn` (descricao, recorte_mensal, observacao), grava `origem="manual"`, `audit("conciliacao.classificar", detalhe={antes, depois})`, retorna item.
-- [ ] T017 [P] [US2] Endpoint `DELETE /api/conciliacao/classificacoes/{codcal}` em `app/routers/conciliacao.py`: remove (volta a "não classificado"), audita com estado anterior, 404 se inexistente.
-- [ ] T018 [US2] Na tela `conciliacao.html`: destaque visual dos codcal "não classificados" e edição inline (descrição + toggle mensal/fora + observação) chamando o PUT; re-render dos totais/status após salvar.
-- [ ] T019 [US2] Sugestão de heurística na tela (não grava sozinho): para codcal não classificado, sugerir classificação a partir dos eventos agregados (ex.: presença de "SALARIO DIA" → provável mensal); gestor confirma. Nada é classificado silenciosamente (SC-3).
+- [ ] T016 [US2] Endpoint `PUT /api/conciliacao/classificacoes/{codcal}` (upsert) em `app/routers/conciliacao.py`: Pydantic `ClassificacaoIn` (descricao, recorte_mensal, observacao, `origem` opcional restrita a `manual`|`heuristica`, default `manual`; `oficial` → 422), grava a origem recebida, `audit("conciliacao.classificar", detalhe={antes, depois})`, retorna item. (FR-3, FR-4)
+- [ ] T017 [P] [US2] Endpoint `DELETE /api/conciliacao/classificacoes/{codcal}` em `app/routers/conciliacao.py`: remove a classificação (codcal volta a "não classificado"), `audit("conciliacao.classificar", detalhe={antes, depois:null})` com estado anterior, 404 se inexistente. (FR-3 — reverter classificação; sustenta SC-3)
+- [ ] T018 [US2] Na tela `conciliacao.html`: destaque visual dos codcal "não classificados", edição inline (descrição + toggle mensal/fora + observação) chamando o PUT e ação de remover (DELETE) com confirmação; re-render dos totais/status após salvar.
+- [ ] T019 [US2] Sugestão de heurística na tela (não grava sozinho): para codcal não classificado, sugerir classificação a partir dos eventos agregados (ex.: presença de "SALARIO DIA" → provável mensal); ao aceitar, o gestor grava via PUT com `origem="heuristica"` (digitar do zero grava `origem="manual"`). Nada é classificado silenciosamente (SC-3, FR-4).
 
 **Checkpoint**: US2 entregue — a ponte fecha; nenhum codcal novo passa despercebido.
 
@@ -98,7 +98,7 @@
 ## Phase 7 — Polish & Cross-Cutting
 
 - [ ] T026 [P] Revisar cobertura de auditoria e RBAC de todos os endpoints (gestor+ em 100%, operador → 403) — Scenario 4/FR-7.
-- [ ] T027 [P] Tratar edge cases na tela e no serviço: competência sem dados (mensagem clara), WS fora em prod (erro + tentar de novo), valores negativos somados com sinal, job expirado (>1h) — conforme "Edge Cases" da spec.
+- [ ] T027 [P] Tratar edge cases na tela e no serviço: competência sem dados (mensagem clara), WS fora em prod na geração (job `error` + tentar de novo), lista de CCUs indisponível no carregamento da tela (renderiza com aviso + entrada manual/retry, sem quebrar), valores negativos somados com sinal, job expirado (>1h) — conforme "Edge Cases" da spec e contrato.
 - [ ] T028 [P] Conferir aderência ao design system (`base.html`, JetBrains Mono, cards, paleta) e ao SC-4 (geração < 2 min com todos os CCUs, aproveitando cache/throttle da feature 003).
 - [ ] T029 Atualizar o bloco `<!-- SPECKIT -->` do `CLAUDE.md` para status "implementada" quando US1–US3 estiverem no ar.
 
