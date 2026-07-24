@@ -654,12 +654,11 @@ def billing_to_femsa_excel(
 
         row["SALÁRIO BRUTO "] = round(total_proventos, 2)
         row["SALÁRIO LÍQUIDO"] = round(total_proventos - total_descontos, 2)
-        # SEGURO DE VIDA: se um evento de benefício ativo (ex.: 2450) alimentou a
-        # coluna, o valor do EVENTO prevalece; sem evento, mantém o fixo R$ 5
-        # (comportamento contratual de sempre). Antes o 5 sobrescrevia o evento.
-        if not row.get("SEGURO DE VIDA"):
-            row["SEGURO DE VIDA"] = 5
-        row["DESC. SALDO NEGATIVO"] = row.get("DESC. SALDO NEGATIVO") or 0
+        # SEGURO DE VIDA: só recebe valor quando um evento de benefício ativo
+        # (ex.: 2450) alimenta a coluna. Sem evento, fica VAZIO — não inventamos
+        # valor (o valor contratual do seguro é decisão pendente da Etapa 2 do
+        # Plano de Execução). Antes gravava R$ 5 fixo.
+        # DESC. SALDO NEGATIVO: idem — vazio quando não há dado (não força 0).
         
         # (FAT) EXAMES MEDICOS: casa por CPF primeiro (unifica manual + upload),
         # cai para matrícula se não houver CPF (exames legados). Evita dupla contagem.
@@ -670,10 +669,11 @@ def billing_to_femsa_excel(
         elif matricula and int(matricula) in exams_by_numcad:
             row["(FAT) EXAMES MEDICOS"] = exams_by_numcad[int(matricula)]
 
-        # UNIFORMES/EPIS/EQUIPAMENTOS (Valor): valores dos pedidos CONFIRMADOS,
-        # casando por matrícula (numcad). Só grava quando a coluna existe no
-        # modelo (FEMSA não a tem → não aparece nem soma). TREINAMENTOS fica em 0
-        # (base ainda não existe). calcular_faturamento soma essas colunas no Sub-Total.
+        # UNIFORMES/EPIS/EQUIPAMENTOS/TREINAMENTOS (Valor): valores dos pedidos
+        # CONFIRMADOS, casando por matrícula (numcad). Só grava quando a coluna
+        # existe no modelo (FEMSA não a tem → não aparece nem soma) E quando há
+        # dado real; sem dado a célula fica VAZIA (não força 0).
+        # calcular_faturamento soma essas colunas no Sub-Total (vazio conta como 0).
         numcad_int = None
         if matricula not in (None, ""):
             try:
@@ -689,8 +689,6 @@ def billing_to_femsa_excel(
                 row["EQUIPAMENTOS (Valor)"] = equipamentos_by_numcad[numcad_int]
             if "TREINAMENTOS (Valor)" in row and numcad_int in treinamentos_by_numcad:
                 row["TREINAMENTOS (Valor)"] = treinamentos_by_numcad[numcad_int]
-        if "TREINAMENTOS (Valor)" in row and row.get("TREINAMENTOS (Valor)") is None:
-            row["TREINAMENTOS (Valor)"] = 0
 
         nome_func = emp.get("nome_funcionario", "")
         nome_norm = normalize_name_for_match(nome_func)
