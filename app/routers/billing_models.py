@@ -467,6 +467,49 @@ async def update_model(model_id: int, payload: BillingModelUpdate, request: Requ
     return {"success": True, "data": m.to_dict(with_colunas=True)}
 
 
+@router.post("/api/billing-models/{model_id}/copiar")
+async def copy_model(model_id: int, request: Request, db: Session = Depends(get_db)):
+    """Duplica um modelo (colunas, estrutura, template, percentuais, fórmulas)
+    com um nome único ('<nome> (cópia)'), para servir de base a uma variação.
+    A cópia nasce INATIVA para não ser usada antes de o usuário ajustar/renomear."""
+    import copy as _copy
+    user = require_role(request, db, "gestor")
+    origem = db.query(BillingModel).filter(BillingModel.id == model_id).first()
+    if not origem:
+        raise HTTPException(status_code=404, detail="Modelo não encontrado")
+
+    # Nome único: "<nome> (cópia)", "(cópia 2)", ...
+    base = f"{origem.nome} (cópia)"
+    nome = base
+    i = 2
+    while db.query(BillingModel).filter(BillingModel.nome == nome).first():
+        nome = f"{origem.nome} (cópia {i})"
+        i += 1
+
+    novo = BillingModel(
+        nome=nome,
+        descricao=origem.descricao,
+        is_base=False,                 # cópia nunca é o modelo base
+        ativo=False,                   # nasce inativa até o usuário finalizar
+        colunas=_copy.deepcopy(origem.colunas or []),
+        estrutura=_copy.deepcopy(origem.estrutura) if origem.estrutura else None,
+        arquivo_origem=origem.arquivo_origem,
+        arquivo_template=origem.arquivo_template,   # bytes imutável: pode compartilhar
+        encargos_pct=origem.encargos_pct,
+        taxa_adm_pct=origem.taxa_adm_pct,
+        imposto_pct=origem.imposto_pct,
+        salario_formula=origem.salario_formula,
+        campos_config=_copy.deepcopy(origem.campos_config) if origem.campos_config else None,
+    )
+    db.add(novo)
+    db.commit()
+    db.refresh(novo)
+    audit(request, "modelo.copiar", entidade="billing_models", entidade_id=novo.id,
+          detalhe={"origem_id": origem.id, "origem_nome": origem.nome, "nome": novo.nome},
+          user=user)
+    return {"success": True, "data": novo.to_dict(with_colunas=True)}
+
+
 @router.get("/api/billing-companies")
 async def list_companies(request: Request, db: Session = Depends(get_db)):
     """Contratos (Company) com o modelo de faturamento associado (para o de-para na tela)."""

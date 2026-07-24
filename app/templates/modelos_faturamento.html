@@ -160,6 +160,7 @@
 
             <div style="margin-top:1rem; display:flex; gap:0.6rem;">
                 <button class="btn" onclick="salvarModelo()">Salvar</button>
+                <button class="btn btn-outline" id="btn-copiar" onclick="copiarModelo()" style="display:none;">Copiar este modelo</button>
                 <button class="btn btn-outline" onclick="limparEditor()">Cancelar</button>
             </div>
         </div>
@@ -468,6 +469,7 @@ function novoModelo() {
     document.getElementById("m-salario-formula").value = "";
     document.getElementById("m-ativo").checked = true;
     document.getElementById("m-estrutura-info").style.display = "none";
+    document.getElementById("btn-copiar").style.display = "none";  // nada a copiar num modelo novo
     // Parte da lista do GERAL (todas marcadas) como ponto de partida.
     renderColsBox(ALL_COLUMNS);
     resetarCamposGrid();
@@ -501,7 +503,22 @@ async function editarModelo(id) {
     }
     renderColsBox(m.colunas || []);
     resetarCamposGrid();
+    document.getElementById("btn-copiar").style.display = "";  // modelo existente: pode copiar
     renderModelList();
+}
+
+async function copiarModelo() {
+    if (!selectedId) return;
+    hideMsg("topmsg");
+    if (!confirm("Criar uma cópia deste modelo para editar? A cópia nasce inativa até você finalizar.")) return;
+    const r = await fetch(`/api/billing-models/${selectedId}/copiar`, {
+        method: "POST", headers: JSON_HEADERS, credentials: "same-origin",
+    });
+    const j = await r.json();
+    if (!(r.ok && j.success)) { showMsg("topmsg", j.detail || "Erro ao copiar o modelo.", false); return; }
+    await loadModels();
+    await editarModelo(j.data.id);   // abre a cópia já pronta para editar
+    showMsg("topmsg", `Cópia criada: "${j.data.nome}" (inativa). Ajuste e salve.`, true);
 }
 
 async function salvarModelo() {
