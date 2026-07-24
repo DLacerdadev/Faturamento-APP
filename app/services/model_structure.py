@@ -42,6 +42,7 @@ BillingModel.estrutura = NULL  =>  modelo dirigido por "colunas" (fluxo atual,
 sem nenhuma mudança; regressão zero na exportação FEMSA).
 """
 import re
+import colorsys
 import unicodedata
 from datetime import datetime, date
 from io import BytesIO
@@ -51,6 +52,98 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 from app.services.excel_export import GERAL_COLUMNS
+
+# Índice de cor de tema (atributo theme="N" nas células) -> nome no clrScheme.
+# Ordem oficial do OOXML (com a troca dk1/lt1): 0=fundo1, 1=texto1, 2=fundo2, ...
+_THEME_NAMES = ["lt1", "dk1", "lt2", "dk2", "accent1", "accent2",
+                "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"]
+
+
+def _theme_palette(wb) -> Dict[str, str]:
+    """Extrai a paleta de cores do tema do workbook: nome (dk1/lt1/accentN...) -> hex."""
+    tema = getattr(wb, "loaded_theme", None)
+    if not tema:
+        return {}
+    if isinstance(tema, bytes):
+        tema = tema.decode("utf-8", "ignore")
+    m = re.search(r"<a:clrScheme.*?</a:clrScheme>", tema, re.S)
+    if not m:
+        return {}
+    bloco = m.group(0)
+    palette: Dict[str, str] = {}
+    for nome in ("dk1", "lt1", "dk2", "lt2", "accent1", "accent2",
+                 "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"):
+        seg = re.search(r"<a:" + nome + r">(.*?)</a:" + nome + r">", bloco, re.S)
+        if not seg:
+            continue
+        srgb = re.search(r'srgbClr val="([0-9A-Fa-f]{6})"', seg.group(1))
+        sysc = re.search(r'sysClr[^>]*lastClr="([0-9A-Fa-f]{6})"', seg.group(1))
+        if srgb:
+            palette[nome] = srgb.group(1).upper()
+        elif sysc:
+            palette[nome] = sysc.group(1).upper()
+    return palette
+
+
+def _aplicar_tint(hex_rgb: str, tint: float) -> str:
+    """Aplica o 'tint' do Excel (clareia se >0, escurece se <0) sobre um hex."""
+    if not tint:
+        return hex_rgb
+    r, g, b = int(hex_rgb[0:2], 16), int(hex_rgb[2:4], 16), int(hex_rgb[4:6], 16)
+    h, l, s = colorsys.rgb_to_hls(r / 255.0, g / 255.0, b / 255.0)
+    if tint < 0:
+        l = l * (1.0 + tint)
+    else:
+        l = l * (1.0 - tint) + tint  # aproximação padrão: L + tint*(1-L)
+    l = max(0.0, min(1.0, l))
+    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    return "%02X%02X%02X" % (round(r * 255), round(g * 255), round(b * 255))
+
+
+def _cor_para_hex(color, palette: Dict[str, str]) -> Optional[str]:
+    """Resolve uma cor openpyxl (rgb/tema/indexada) para hex 'RRGGBB', ou None."""
+    if color is None:
+        return None
+    try:
+        tipo = getattr(color, "type", None)
+        if tipo == "rgb":
+            rgb = color.rgb
+            if isinstance(rgb, str) and len(rgb) >= 6:
+                return rgb[-6:].upper()
+            return None
+        if tipo == "theme":
+            nome = _THEME_NAMES[color.theme] if 0 <= color.theme < len(_THEME_NAMES) else None
+            base = palette.get(nome) if nome else None
+            if not base:
+                return None
+            return _aplicar_tint(base, float(getattr(color, "tint", 0.0) or 0.0))
+    except (AttributeError, ValueError, TypeError):
+        return None
+    return None
+
+
+def _estilo_da_celula(cell, palette: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    """Captura estilo visível de uma célula: preenchimento, negrito, cor/tamanho
+    da fonte — como hex concreto (independe do tema do arquivo gerado)."""
+    fill_hex = None
+    try:
+        if cell.fill and cell.fill.patternType == "solid":
+            fill_hex = _cor_para_hex(cell.fill.fgColor, palette)
+    except AttributeError:
+        pass
+    font = cell.font
+    est: Dict[str, Any] = {}
+    if fill_hex:
+        est["fill"] = fill_hex
+    if font is not None:
+        if font.bold:
+            est["bold"] = True
+        fc = _cor_para_hex(font.color, palette)
+        if fc:
+            est["font_color"] = fc
+        if font.sz:
+            est["size"] = float(font.sz)
+    return est or None
 
 # Superconjunto de colunas conhecidas do sistema (modelo GERAL):
 # FEMSA_COLUMNS + UNIFORMES/EPIS/EQUIPAMENTOS/TREINAMENTOS (Valor).
@@ -276,7 +369,10 @@ def parse_model_xlsx(conteudo: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
 
     header_rows, data_row = _detectar_cabecalho(ws)
 
+    palette = _theme_palette(wb)  # para resolver cores de tema -> hex
+
     headers: Dict[str, Dict[str, str]] = {}
+    estilos_header: Dict[str, Dict[str, Any]] = {}   # letra -> {linha -> estilo}
     colunas: List[Dict[str, Any]] = []
     max_col = ws.max_column or 1
 
@@ -284,12 +380,17 @@ def parse_model_xlsx(conteudo: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
         letra = get_column_letter(idx)
 
         textos: Dict[str, str] = {}
+        estilos_linha: Dict[str, Any] = {}
         for r in header_rows:
-            v = ws.cell(row=r, column=idx).value
-            if not _celula_vazia(v):
-                textos[str(r)] = str(v).strip()
+            cel = ws.cell(row=r, column=idx)
+            if not _celula_vazia(cel.value):
+                textos[str(r)] = str(cel.value).strip()
+                est = _estilo_da_celula(cel, palette)
+                if est:
+                    estilos_linha[str(r)] = est
 
-        celula_dado = ws.cell(row=data_row, column=idx).value
+        celula = ws.cell(row=data_row, column=idx)
+        celula_dado = celula.value
 
         # Coluna sem cabeçalho e sem dado na primeira linha: ignorada.
         if not textos and _celula_vazia(celula_dado):
@@ -297,6 +398,8 @@ def parse_model_xlsx(conteudo: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
 
         if textos:
             headers[letra] = textos
+            if estilos_linha:
+                estilos_header[letra] = estilos_linha
             linhas_ordenadas = sorted(textos.keys(), key=int)
             header_txt = textos[linhas_ordenadas[-1]]
         else:
@@ -318,9 +421,15 @@ def parse_model_xlsx(conteudo: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
                 col["tipo"] = "constante"
                 col["valor"] = _valor_json(celula_dado)
 
+        # Estilo da célula de DADOS (aplicado a todas as linhas de dados da coluna).
+        est_dado = _estilo_da_celula(celula, palette)
+        if est_dado:
+            col["estilo"] = est_dado
+
         colunas.append(col)
 
     return {
+        "estilos_header": estilos_header,
         "aba": ws.title,
         "header_rows": header_rows,
         "headers": headers,

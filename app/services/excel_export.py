@@ -878,6 +878,26 @@ _CONST_RATE_KEYS = ("TAXA", "ALIQUOTA", "ALÍQUOTA", "IMPOSTO", "TRIBUTO", "ISS"
                     "ADMINISTRATIV", "(%)")
 
 
+def _aplicar_estilo_modelo(cell, estilo: Optional[Dict[str, Any]]) -> bool:
+    """Aplica o estilo capturado da planilha-modelo (fill/negrito/cor/tamanho da
+    fonte, já em hex) na célula. Retorna True se aplicou algo."""
+    if not estilo:
+        return False
+    fill = estilo.get("fill")
+    if fill:
+        cell.fill = PatternFill(start_color=fill, end_color=fill, fill_type="solid")
+    fkw = {}
+    if estilo.get("bold"):
+        fkw["bold"] = True
+    if estilo.get("font_color"):
+        fkw["color"] = estilo["font_color"]
+    if estilo.get("size"):
+        fkw["size"] = estilo["size"]
+    if fkw:
+        cell.font = Font(**fkw)
+    return bool(fill or fkw)
+
+
 def _resolver_constante(col: Dict[str, Any]):
     """Decide como escrever uma coluna 'constante' do modelo.
 
@@ -937,6 +957,7 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
 
     # Cabeçalhos: escreve os textos nas células indicadas, em negrito, com os
     # mesmos destaques do caminho atual quando o texto for de coluna destacada.
+    estilos_header = estrutura.get("estilos_header") or {}
     for letra, por_linha in headers.items():
         if not isinstance(por_linha, dict):
             continue
@@ -944,6 +965,7 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
         col_eh_taxa = any(
             any(k in str(t).upper() for k in _CONST_RATE_KEYS) for t in por_linha.values()
         )
+        est_col_hdr = estilos_header.get(letra) or {}
         for linha, texto in por_linha.items():
             try:
                 r = int(linha)
@@ -952,6 +974,7 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
             if r < 1 or r >= data_row:
                 continue
             cell = ws[f"{letra}{r}"]
+            estilo = est_col_hdr.get(linha)
             # Célula de PARÂMETRO no cabeçalho (ex.: taxa adm "0.07"): grava como
             # NÚMERO para as fórmulas que a referenciam calcularem — senão o texto
             # dá #VALOR!. Taxa em fração (0<v<1) recebe formato de porcentagem.
@@ -961,9 +984,14 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
                 cell.value = num
                 if col_eh_taxa and 0 < abs(num) < 1:
                     cell.number_format = "0%"
+                if not _aplicar_estilo_modelo(cell, estilo):
+                    cell.font = header_font
                 continue
             cell.value = texto
-            if texto in _HEADER_DARK_RED_COLS:
+            # Estilo capturado do modelo tem prioridade; senão, fallback antigo.
+            if _aplicar_estilo_modelo(cell, estilo):
+                pass
+            elif texto in _HEADER_DARK_RED_COLS:
                 cell.fill = dark_red_fill
                 cell.font = white_font
             elif texto in _HEADER_LIGHT_RED_COLS:
@@ -984,6 +1012,7 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
         serie = df[fonte] if (tipo == "campo" and fonte in df.columns) else None
         template = str(col.get("template") or "") if tipo == "formula" else ""
         num_fmt = _formato_numero_coluna(col)
+        est_dado = col.get("estilo")  # estilo capturado do modelo (fill/fonte)
         # Constante: decide uma vez (valor de exemplo -> vazio; taxa -> % ; texto -> mantém).
         const_val = const_fmt = None
         const_escrever = True
@@ -1012,6 +1041,8 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
                 tipo == "formula" or isinstance(cell.value, (int, float))
             ):
                 cell.number_format = num_fmt
+            # Cor/fonte do modelo (subtotais destacados, etc.).
+            _aplicar_estilo_modelo(cell, est_dado)
 
         # Largura básica pela maior linha do cabeçalho da coluna.
         textos_col = headers.get(letra) or {}
