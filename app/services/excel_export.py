@@ -895,7 +895,14 @@ def _aplicar_estilo_modelo(cell, estilo: Optional[Dict[str, Any]]) -> bool:
         fkw["size"] = estilo["size"]
     if fkw:
         cell.font = Font(**fkw)
-    return bool(fill or fkw)
+    if estilo.get("halign") or estilo.get("valign") or estilo.get("wrap"):
+        from openpyxl.styles import Alignment
+        cell.alignment = Alignment(
+            horizontal=estilo.get("halign"),
+            vertical=estilo.get("valign"),
+            wrap_text=bool(estilo.get("wrap")),
+        )
+    return True
 
 
 def _resolver_constante(col: Dict[str, Any]):
@@ -999,6 +1006,28 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
                 cell.font = dark_font
             else:
                 cell.font = header_font
+
+    # Bloco de TOPO: título/emitente/aprovação/revisão/datas acima do cabeçalho.
+    for letra, por_linha in (estrutura.get("topo") or {}).items():
+        if not isinstance(por_linha, dict):
+            continue
+        for linha, info in por_linha.items():
+            try:
+                r = int(linha)
+            except (TypeError, ValueError):
+                continue
+            if r < 1 or r >= data_row or not isinstance(info, dict):
+                continue
+            cell = ws[f"{letra}{r}"]
+            cell.value = info.get("v")   # fórmula '=...' é preservada pelo openpyxl
+            _aplicar_estilo_modelo(cell, info.get("estilo"))
+
+    # Mesclagens do cabeçalho (grupos como BENEFÍCIOS, TAXA ADM., título).
+    for rng in (estrutura.get("merges") or []):
+        try:
+            ws.merge_cells(str(rng))
+        except (ValueError, TypeError):
+            continue
 
     # Dados: df "Mensagem" (nenhum funcionário) => só cabeçalhos, sem linhas.
     n_linhas = 0 if "Mensagem" in df.columns else len(df)

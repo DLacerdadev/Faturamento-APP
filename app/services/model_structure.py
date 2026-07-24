@@ -143,6 +143,17 @@ def _estilo_da_celula(cell, palette: Dict[str, str]) -> Optional[Dict[str, Any]]
             est["font_color"] = fc
         if font.sz:
             est["size"] = float(font.sz)
+    try:
+        al = cell.alignment
+        if al is not None:
+            if al.horizontal:
+                est["halign"] = al.horizontal
+            if al.vertical:
+                est["valign"] = al.vertical
+            if al.wrap_text:
+                est["wrap"] = True
+    except AttributeError:
+        pass
     return est or None
 
 # Superconjunto de colunas conhecidas do sistema (modelo GERAL):
@@ -428,8 +439,36 @@ def parse_model_xlsx(conteudo: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
 
         colunas.append(col)
 
+    # Bloco de TOPO: linhas acima do cabeçalho (título, emitente, logo, datas...).
+    # O detector de cabeçalho aponta header_rows (rótulos das colunas); tudo que
+    # vem ANTES é o cabeçalho institucional do relatório — capturado para
+    # reaparecer na exportação. Guarda valor (fórmula '=...' preservada) + estilo.
+    min_hdr = min(header_rows) if header_rows else data_row
+    topo: Dict[str, Dict[str, Any]] = {}
+    for r in range(1, min_hdr):
+        for idx in range(1, max_col + 1):
+            cel = ws.cell(row=r, column=idx)
+            if _celula_vazia(cel.value):
+                continue
+            letra = get_column_letter(idx)
+            v = cel.value
+            val = v if (isinstance(v, str) and v.startswith("=")) else _valor_json(v)
+            topo.setdefault(letra, {})[str(r)] = {"v": val, "estilo": _estilo_da_celula(cel, palette)}
+
+    # Mesclagens (merges) inteiramente na região do cabeçalho (linhas < data_row):
+    # títulos e grupos como "BENEFÍCIOS", "TAXA ADM." dependem delas para o layout.
+    merges: List[str] = []
+    for rng in ws.merged_cells.ranges:
+        try:
+            if rng.max_row < data_row:
+                merges.append(str(rng))
+        except AttributeError:
+            continue
+
     return {
         "estilos_header": estilos_header,
+        "topo": topo,
+        "merges": merges,
         "aba": ws.title,
         "header_rows": header_rows,
         "headers": headers,
