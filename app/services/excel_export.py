@@ -456,7 +456,8 @@ def billing_to_femsa_excel(
     treinamentos_by_numcad: Dict[int, float] = None,
     estrutura: Dict[str, Any] = None,
     salario_formula: str = None,
-    campos_config: List[Dict[str, Any]] = None
+    campos_config: List[Dict[str, Any]] = None,
+    template_bytes: bytes = None
 ) -> bytes:
     """
     Converte dados de faturamento para formato Excel FEMSA.
@@ -755,6 +756,13 @@ def billing_to_femsa_excel(
     # da planilha segue o layout da planilha-modelo (CONTRATO C1). Sem estrutura,
     # o caminho atual (dirigido por colunas / FEMSA) segue INTOCADO abaixo.
     if estrutura:
+        # Opção 2 — preenche o TEMPLATE do cliente (logo/bordas/larguras/formatação
+        # perfeitos). Sem template salvo, cai no renderizador reconstruído.
+        if template_bytes:
+            try:
+                return _render_por_template(df, estrutura, template_bytes, mes_ref)
+            except Exception:
+                logger.exception("Falha ao preencher template; usando renderizador reconstruído.")
         return _render_por_estrutura(df, estrutura, mes_ref)
 
     output = BytesIO()
@@ -1078,6 +1086,94 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
         maior = max((len(str(t)) for t in textos_col.values()), default=0)
         maior = max(maior, len(str(col.get("header") or "")))
         ws.column_dimensions[letra].width = min(max(maior + 2, 12), 25)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
+
+
+def _render_por_template(df: "pd.DataFrame", estrutura: Dict[str, Any],
+                         template_bytes: bytes, mes_ref: str) -> bytes:
+    """OPÇÃO 2 — preenche a planilha-TEMPLATE do cliente (sem PII) com os dados.
+
+    Abre o template (logo, bordas, larguras, mesclagens e todo o cabeçalho já
+    prontos), escreve uma linha por funcionário a partir de data_row (copiando o
+    estilo da linha-modelo) e recria o rodapé de totais logo após, ajustando o
+    intervalo do SUM à quantidade de funcionários. Fidelidade total ao modelo.
+    """
+    from copy import copy
+    from openpyxl import load_workbook
+
+    wb = load_workbook(BytesIO(template_bytes))
+    aba = str(estrutura.get("aba") or "").strip()
+    ws = wb[aba] if aba in wb.sheetnames else wb.active
+
+    data_row = int(estrutura.get("data_row") or 1)
+    colunas = [c for c in (estrutura.get("colunas") or []) if isinstance(c, dict)]
+    n_linhas = 0 if "Mensagem" in df.columns else len(df)
+
+    # Estilo da linha-modelo (data_row) por coluna — replicado nas linhas novas.
+    estilo_ref: Dict[str, Any] = {}
+    for c in colunas:
+        letra = c.get("letra")
+        if letra:
+            estilo_ref[letra] = copy(ws[f"{letra}{data_row}"]._style)
+
+    # Valores por coluna
+    for c in colunas:
+        letra, tipo = c.get("letra"), c.get("tipo")
+        if not letra or not tipo:
+            continue
+        fonte = c.get("fonte")
+        serie = df[fonte] if (tipo == "campo" and fonte in df.columns) else None
+        template = str(c.get("template") or "") if tipo == "formula" else ""
+        num_fmt = _formato_numero_coluna(c)
+        const_val = const_fmt = None
+        const_escrever = True
+        if tipo == "constante":
+            const_val, const_fmt, const_escrever = _resolver_constante(c)
+
+        for i in range(n_linhas):
+            r = data_row + i
+            cell = ws[f"{letra}{r}"]
+            if i > 0 and letra in estilo_ref:
+                cell._style = copy(estilo_ref[letra])  # replica estilo da linha-modelo
+            if tipo == "campo":
+                cell.value = _valor_celula_estrutura(serie.iloc[i]) if serie is not None else None
+            elif tipo == "formula":
+                cell.value = template.replace("{row}", str(r)) if template else None
+            elif tipo == "constante":
+                cell.value = const_val if const_escrever else None
+                if const_escrever and const_fmt:
+                    cell.number_format = const_fmt
+            else:
+                cell.value = None
+            if num_fmt and not (tipo == "constante" and const_fmt) and (
+                tipo == "formula" or isinstance(cell.value, (int, float))
+            ):
+                cell.number_format = num_fmt
+
+    # Rodapé (totais) logo após a última linha de dados, com o SUM ajustado.
+    rodape = estrutura.get("rodape") or {}
+    linhas_rod = rodape.get("linhas") or []
+    if n_linhas > 0 and linhas_rod:
+        offset = int(rodape.get("offset", 1) or 1)
+        data_first, data_last = data_row, data_row + n_linhas - 1
+        base = data_last + offset
+        for j, linha in enumerate(linhas_rod):
+            if not isinstance(linha, dict):
+                continue
+            r = base + j
+            for letra, info in linha.items():
+                if not isinstance(info, dict):
+                    continue
+                cell = ws[f"{letra}{r}"]
+                v = info.get("v")
+                if isinstance(v, str):
+                    v = v.replace("{data_first}", str(data_first)).replace("{data_last}", str(data_last))
+                cell.value = v
+                _aplicar_estilo_modelo(cell, info.get("estilo"))
 
     output = BytesIO()
     wb.save(output)

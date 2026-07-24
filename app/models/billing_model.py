@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, LargeBinary
 from sqlalchemy.types import JSON
 from datetime import datetime
 from app.db import Base
@@ -34,6 +34,10 @@ class BillingModel(Base):
     colunas = Column(JSON, default=list)       # lista ordenada de nomes de coluna
     estrutura = Column(JSON, nullable=True)    # contrato C1 (modelos por upload); NULL = colunas-driven
     arquivo_origem = Column(String(500))       # nome do Excel que originou o modelo
+    # Planilha-modelo SEM PII (funcionários removidos), usada como TEMPLATE na
+    # exportação: preserva logo, bordas, larguras, mesclagens e formatação do
+    # cliente. NULL = usa o renderizador reconstruído (fallback). Ver excel_export.
+    arquivo_template = Column(LargeBinary, nullable=True)
     encargos_pct = Column(Float)               # % padrão de encargos sociais do modelo
     taxa_adm_pct = Column(Float)               # % padrão de taxa administrativa do modelo
     imposto_pct = Column(Float)                # alíquota padrão de imposto (%) do modelo
@@ -62,6 +66,7 @@ class BillingModel(Base):
             "imposto_pct": self.imposto_pct,
             "salario_formula": self.salario_formula,
             "tem_estrutura": bool(self.estrutura),
+            "tem_template": bool(self.arquivo_template),
             "arquivo_origem": self.arquivo_origem,
         }
         if with_colunas:

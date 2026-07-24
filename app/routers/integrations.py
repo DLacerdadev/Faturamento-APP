@@ -1295,6 +1295,9 @@ def _build_billing_export(db, modelo, periodo, codccu, encargos_pct=None,
                 estrutura_modelo = None
         if not isinstance(estrutura_modelo, dict):
             estrutura_modelo = None
+    # Template SEM PII (opção 2): se o modelo tem o arquivo salvo, a exportação
+    # preenche o próprio template do cliente (logo/bordas/formatação perfeitos).
+    template_bytes_modelo = getattr(_bm, "arquivo_template", None) if _bm else None
 
     # Itens CONFIRMADOS (uniformes/EPIs/equipamentos) do período viram custo por
     # funcionário. Agrega valor_total por employee_numcad, separado por categoria.
@@ -1360,6 +1363,7 @@ def _build_billing_export(db, modelo, periodo, codccu, encargos_pct=None,
         estrutura=estrutura_modelo,
         salario_formula=(_bm.salario_formula if _bm else None),
         campos_config=(_bm.campos_config if _bm else None),
+        template_bytes=template_bytes_modelo,
     )
     filename = generate_femsa_filename(periodo, codccu_label)
 

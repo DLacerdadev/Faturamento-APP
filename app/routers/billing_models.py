@@ -370,6 +370,13 @@ async def upload_model(
             detail="A planilha não pôde ser usada como modelo:\n- " + "\n- ".join(problemas),
         )
 
+    # Template SEM PII (opção 2): preserva logo/bordas/formatação na exportação.
+    try:
+        from app.services.model_structure import gerar_template_sem_pii
+        template_bytes = gerar_template_sem_pii(conteudo, estrutura)
+    except Exception:
+        template_bytes = None
+
     m = BillingModel(
         nome=nome,
         descricao=(descricao or "").strip() or None,
@@ -378,6 +385,7 @@ async def upload_model(
         colunas=derive_colunas(estrutura),
         estrutura=estrutura,
         arquivo_origem=(arquivo.filename or "").strip() or None,
+        arquivo_template=template_bytes,
         encargos_pct=_validar_pct(encargos_pct, "Encargos sociais (%)"),
         taxa_adm_pct=_validar_pct(taxa_adm_pct, "Taxa administrativa (%)"),
         imposto_pct=_validar_pct(imposto_pct, "Imposto (%)"),

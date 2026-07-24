@@ -76,6 +76,8 @@ def init_db():
             ("salario_formula", "VARCHAR(200)"),
             # Grade "Fórmulas": configuração por campo (código buscado + fórmula)
             ("campos_config", "JSONB" if _is_pg else "JSON"),
+            # Planilha-modelo sem PII usada como TEMPLATE na exportação (opção 2)
+            ("arquivo_template", "BYTEA" if _is_pg else "BLOB"),
         ]),
         # Papéis de usuário: 'operador' < 'gestor' < 'admin'
         ("users", [

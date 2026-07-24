@@ -49,9 +49,9 @@ from io import BytesIO
 from typing import Any, Dict, List, Optional
 
 from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
+from openpyxl.utils import get_column_letter, column_index_from_string
 
-from app.services.excel_export import GERAL_COLUMNS
+from app.services.excel_export import GERAL_COLUMNS, _CONST_RATE_KEYS, _coerce_numero
 
 # Índice de cor de tema (atributo theme="N" nas células) -> nome no clrScheme.
 # Ordem oficial do OOXML (com a troca dk1/lt1): 0=fundo1, 1=texto1, 2=fundo2, ...
@@ -253,6 +253,31 @@ def _valor_json(valor: Any) -> Any:
     return valor
 
 
+def _aba_principal(ws_wb):
+    """Primeira aba visível com dados (mesma escolha do parser e do template)."""
+    for sheet in ws_wb.worksheets:
+        if getattr(sheet, "sheet_state", "visible") == "visible" and _sheet_tem_dados(sheet):
+            return sheet
+    return None
+
+
+def _parametrizar_rodape(formula: str, data_row: int, last_data_row: int) -> str:
+    """Troca referências ao bloco de dados por marcadores {data_first}/{data_last}
+    para o rodapé (ex.: =SUM(AD5:AD120) -> =SUM(AD{data_first}:AD{data_last}))."""
+    padrao = re.compile(r"(\$?)([A-Za-z]{1,3})(\$?)(\d+)")
+
+    def _sub(m: "re.Match") -> str:
+        abscol, letra, absrow, num = m.group(1), m.group(2), m.group(3), m.group(4)
+        n = int(num)
+        if n == data_row:
+            return f"{abscol}{letra}{absrow}{{data_first}}"
+        if n == last_data_row:
+            return f"{abscol}{letra}{absrow}{{data_last}}"
+        return m.group(0)
+
+    return padrao.sub(_sub, formula)
+
+
 def _sheet_tem_dados(ws) -> bool:
     """Aba tem algum conteúdo nas primeiras linhas varridas?"""
     max_r = min(ws.max_row or 0, _MAX_LINHAS_VARREDURA)
@@ -370,11 +395,7 @@ def parse_model_xlsx(conteudo: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
         nome = nome_arquivo or "arquivo enviado"
         raise ValueError(f"Não foi possível ler '{nome}' como Excel (.xlsx): {exc}")
 
-    ws = None
-    for sheet in wb.worksheets:
-        if getattr(sheet, "sheet_state", "visible") == "visible" and _sheet_tem_dados(sheet):
-            ws = sheet
-            break
+    ws = _aba_principal(wb)
     if ws is None:
         raise ValueError("Nenhuma aba visível com dados foi encontrada na planilha-modelo.")
 
@@ -465,16 +486,113 @@ def parse_model_xlsx(conteudo: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
         except AttributeError:
             continue
 
+    # RODAPÉ (totais): linhas após o último funcionário. O intervalo do SUM é
+    # parametrizado ({data_first}/{data_last}) para acompanhar a qtde de linhas.
+    max_row = ws.max_row or data_row
+    key_letra = next((c["letra"] for c in colunas if c.get("tipo") == "campo"), None)
+    last_data_row = data_row
+    if key_letra:
+        kc = column_index_from_string(key_letra)
+        r = data_row
+        while r <= max_row and not _celula_vazia(ws.cell(row=r, column=kc).value):
+            last_data_row = r
+            r += 1
+    first_footer = None
+    for r in range(last_data_row + 1, max_row + 1):
+        if any(not _celula_vazia(ws.cell(row=r, column=cc).value) for cc in range(1, max_col + 1)):
+            first_footer = r
+            break
+    rodape: Dict[str, Any] = {}
+    if first_footer:
+        linhas_rod: List[Dict[str, Any]] = []
+        for r in range(first_footer, max_row + 1):
+            linha: Dict[str, Any] = {}
+            for cc in range(1, max_col + 1):
+                cel = ws.cell(row=r, column=cc)
+                if _celula_vazia(cel.value):
+                    continue
+                v = cel.value
+                if isinstance(v, str) and v.startswith("="):
+                    v = _parametrizar_rodape(v, data_row, last_data_row)
+                else:
+                    v = _valor_json(v)
+                linha[get_column_letter(cc)] = {"v": v, "estilo": _estilo_da_celula(cel, palette)}
+            linhas_rod.append(linha)
+        rodape = {"offset": first_footer - last_data_row, "linhas": linhas_rod}
+
     return {
         "estilos_header": estilos_header,
         "topo": topo,
         "merges": merges,
+        "rodape": rodape,
         "aba": ws.title,
         "header_rows": header_rows,
         "headers": headers,
         "data_row": data_row,
         "colunas": colunas,
     }
+
+
+def gerar_template_sem_pii(conteudo: bytes, estrutura: Dict[str, Any]) -> Optional[bytes]:
+    """Cria a planilha-TEMPLATE (opção 2): o arquivo do cliente SEM os dados dos
+    funcionários (PII), preservando logo, bordas, larguras, mesclagens e todo o
+    cabeçalho. Guardada em BillingModel.arquivo_template e usada na exportação
+    para preencher só as linhas de dados.
+
+    Passos: (1) corrige parâmetros de taxa no cabeçalho (texto '0.07' -> número
+    0,07 em %); (2) apaga os VALORES da linha-modelo (nome/salário/exemplos de
+    benefício), mantendo estilo e fórmulas; (3) remove todas as linhas de dados
+    e o rodapé (recriados na exportação). Retorna os bytes do .xlsx ou None."""
+    try:
+        wb = load_workbook(BytesIO(conteudo), data_only=False)
+    except Exception:
+        return None
+    ws = _aba_principal(wb)
+    if ws is None:
+        return None
+    try:
+        data_row = int(estrutura.get("data_row"))
+    except (TypeError, ValueError):
+        return None
+    max_row = ws.max_row or data_row
+    headers = estrutura.get("headers") or {}
+    colunas = estrutura.get("colunas") or []
+
+    # (1) Taxa/parâmetro numérico no cabeçalho: texto -> número (+ % se fração).
+    for letra, por_linha in headers.items():
+        if not isinstance(por_linha, dict):
+            continue
+        eh_taxa = any(any(k in str(t).upper() for k in _CONST_RATE_KEYS) for t in por_linha.values())
+        if not eh_taxa:
+            continue
+        for linha in por_linha:
+            try:
+                r = int(linha)
+            except (TypeError, ValueError):
+                continue
+            if r >= data_row:
+                continue
+            cell = ws[f"{letra}{r}"]
+            num = _coerce_numero(cell.value)
+            if isinstance(num, (int, float)) and not isinstance(num, bool):
+                cell.value = num
+                if 0 < abs(num) < 1:
+                    cell.number_format = "0%"
+
+    # (2) Apaga valores PII/exemplo da linha-modelo (mantém estilo/fórmula).
+    for c in colunas:
+        if c.get("tipo") in ("campo", "constante"):
+            letra = c.get("letra")
+            if letra:
+                ws[f"{letra}{data_row}"].value = None
+
+    # (3) Remove todas as linhas de dados e o rodapé (funcionários = PII).
+    if max_row > data_row:
+        ws.delete_rows(data_row + 1, max_row - data_row)
+
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue()
 
 
 def derive_colunas(estrutura: Dict[str, Any]) -> List[str]:
