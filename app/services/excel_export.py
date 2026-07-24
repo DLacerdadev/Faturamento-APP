@@ -872,6 +872,36 @@ def _formato_numero_coluna(col: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+# Cabeçalhos que indicam uma TAXA/parâmetro (constante legítima), não um valor
+# de exemplo copiado do template.
+_CONST_RATE_KEYS = ("TAXA", "ALIQUOTA", "ALÍQUOTA", "IMPOSTO", "TRIBUTO", "ISS",
+                    "ADMINISTRATIV", "(%)")
+
+
+def _resolver_constante(col: Dict[str, Any]):
+    """Decide como escrever uma coluna 'constante' do modelo.
+
+    Retorna (valor, formato_num, escrever):
+    - Valor numérico de EXEMPLO do template (ex.: benefícios CAFÉ/LANCHE/ALMOÇO)
+      NÃO é dado real — não escreve (célula fica VAZIA). Alinha com "não
+      preencher campo sem dado que foi buscado".
+    - Constante de TAXA/imposto expressa como fração (0<v<1) é parâmetro
+      legítimo — escreve como NÚMERO em formato PORCENTAGEM (0,07 -> 7%), assim
+      a fórmula que a referencia calcula e a célula mostra o %.
+    - Constante de TEXTO (rótulo) — mantém como está.
+    """
+    val = _coerce_numero(_valor_celula_estrutura(col.get("valor")))
+    if isinstance(val, bool):
+        return val, None, True
+    if isinstance(val, (int, float)):
+        ref = (str(col.get("header") or "") + " " + str(col.get("fonte") or "")).upper()
+        if any(k in ref for k in _CONST_RATE_KEYS):
+            fmt = "0%" if 0 < abs(val) < 1 else None
+            return val, fmt, True
+        return None, None, False  # valor de exemplo sem fonte real -> vazio
+    return val, None, True         # texto (rótulo) mantém
+
+
 def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref: str) -> bytes:
     """
     Escreve a planilha seguindo a "estrutura" do modelo (CONTRATO C1 em
@@ -940,6 +970,11 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
         serie = df[fonte] if (tipo == "campo" and fonte in df.columns) else None
         template = str(col.get("template") or "") if tipo == "formula" else ""
         num_fmt = _formato_numero_coluna(col)
+        # Constante: decide uma vez (valor de exemplo -> vazio; taxa -> % ; texto -> mantém).
+        const_val = const_fmt = None
+        const_escrever = True
+        if tipo == "constante":
+            const_val, const_fmt, const_escrever = _resolver_constante(col)
 
         for i in range(n_linhas):
             r = data_row + i
@@ -951,10 +986,17 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
                 if template:
                     cell.value = template.replace("{row}", str(r))
             elif tipo == "constante":
-                cell.value = _coerce_numero(_valor_celula_estrutura(col.get("valor")))
+                if not const_escrever:
+                    continue  # valor de exemplo do template -> célula em branco
+                cell.value = const_val
+                if const_fmt:
+                    cell.number_format = const_fmt
             else:
                 continue  # "vazio" (ou tipo desconhecido): célula em branco
-            if num_fmt and (tipo == "formula" or isinstance(cell.value, (int, float))):
+            # Formato padrão da coluna — não sobrescreve o % já aplicado à taxa.
+            if num_fmt and not (tipo == "constante" and const_fmt) and (
+                tipo == "formula" or isinstance(cell.value, (int, float))
+            ):
                 cell.number_format = num_fmt
 
         # Largura básica pela maior linha do cabeçalho da coluna.
