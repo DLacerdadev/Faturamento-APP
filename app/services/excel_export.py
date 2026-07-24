@@ -819,6 +819,36 @@ def _valor_celula_estrutura(v: Any) -> Any:
     return v
 
 
+def _coerce_numero(v: Any) -> Any:
+    """Converte uma constante de texto que representa número (ex.: "0.07",
+    "0,07", "1.234,56") no float correspondente, para o Excel tratar como
+    NÚMERO — assim a célula exibe no separador do idioma (0,07 em pt-BR) e as
+    fórmulas que a referenciam calculam em vez de devolver #VALOR!.
+
+    Só converte quando o texto é claramente numérico; caso contrário devolve o
+    valor original (constantes de texto legítimas, ex.: rótulos, ficam intactas).
+    """
+    if not isinstance(v, str):
+        return v
+    s = v.strip()
+    if not s:
+        return v
+    tem_ponto, tem_virgula = "." in s, "," in s
+    if tem_ponto and tem_virgula:
+        # formato pt-BR: ponto = milhar, vírgula = decimal (1.234,56)
+        candidato = s.replace(".", "").replace(",", ".")
+    elif tem_virgula:
+        candidato = s.replace(",", ".")
+    else:
+        candidato = s
+    if re.fullmatch(r"-?\d+(\.\d+)?", candidato):
+        try:
+            return float(candidato)
+        except ValueError:
+            return v
+    return v
+
+
 def _formato_numero_coluna(col: Dict[str, Any]) -> Optional[str]:
     """
     Formato numérico básico da coluna, inferido pela fonte/cabeçalho (consistente
@@ -923,7 +953,7 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
                 if template:
                     cell.value = template.replace("{row}", str(r))
             elif tipo == "constante":
-                cell.value = _valor_celula_estrutura(col.get("valor"))
+                cell.value = _coerce_numero(_valor_celula_estrutura(col.get("valor")))
             else:
                 continue  # "vazio" (ou tipo desconhecido): célula em branco
             if num_fmt and (tipo == "formula" or isinstance(cell.value, (int, float))):
