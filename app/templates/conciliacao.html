@@ -10,14 +10,28 @@
     .msg.err { background: rgba(248,113,113,0.1); color: var(--error); border-color: var(--error); }
     .msg.warn { background: rgba(251,191,36,0.12); color: var(--warning); border-color: var(--warning); }
     .hint { font-size: 0.82rem; color: var(--text-muted); }
-    .filtro-grid { display: grid; grid-template-columns: 180px 1fr auto; gap: 0.8rem; align-items: end; }
+    .filtro-grid { display: grid; grid-template-columns: 220px 1fr; gap: 0.8rem 1.2rem; align-items: start; }
     .filtro-grid label { display:block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 0.3rem; }
     .filtro-grid input, .filtro-grid select { padding: 0.5rem 0.6rem; font-size: 0.85rem; width: 100%; }
+    /* CCU com busca (mesmo padrão das outras telas): input filtra a lista abaixo */
+    #f-ccu { height:auto; min-height: 170px; max-height: 220px; overflow-y:auto; margin-top: 0.4rem; }
+    #f-ccu option { padding: 0.25rem 0.4rem; }
+    #f-ccu-sel { font-size: 0.78rem; color: var(--gold); margin-top: 0.35rem; min-height: 1em; }
+
+    .acoes { margin-top: 1rem; display:flex; align-items:center; gap:0.8rem; }
+    .btn[disabled] { opacity: 0.6; cursor: progress; }
+    .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,0.35);
+        border-top-color: currentColor; border-radius:50%; animation: spin 0.7s linear infinite; vertical-align:-2px; margin-right:0.45rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     .progress-wrap { margin: 1rem 0; display:none; }
     .progress-wrap.show { display:block; }
-    .progress-bar { height: 10px; background: var(--bg-hover); border-radius: 6px; overflow:hidden; }
+    .progress-bar { height: 12px; background: var(--bg-hover); border-radius: 6px; overflow:hidden; position:relative; }
     .progress-bar > div { height:100%; width:0%; background: var(--gold); transition: width .3s; }
+    /* Barra indeterminada enquanto ainda não há % (job na fila / iniciando) */
+    .progress-bar.indeterminado > div { width:35% !important; border-radius:6px;
+        animation: slide 1.1s ease-in-out infinite; }
+    @keyframes slide { 0%{ margin-left:-35%; } 100%{ margin-left:100%; } }
 
     .cards-totais { display:grid; grid-template-columns: repeat(4, 1fr); gap: 0.8rem; margin: 1rem 0; }
     .tcard { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 0.9rem 1rem; }
@@ -73,20 +87,24 @@
         </div>
         <div>
             <label>Centro de custo (opcional)</label>
-            <select id="f-ccu">
+            <input type="text" id="f-ccu-filter" placeholder="Digite para filtrar (código ou nome)…" autocomplete="off">
+            <select id="f-ccu" size="8">
                 <option value="">Todos os centros de custo</option>
                 {% for c in ccus %}
                 <option value="{{ c.codccu }}">{{ c.codccu }} — {{ c.nomccu or c.codccu }}</option>
                 {% endfor %}
             </select>
-        </div>
-        <div>
-            <button class="btn" id="btn-gerar" onclick="gerar()">Gerar conciliação</button>
+            <div id="f-ccu-sel">Todos os centros de custo</div>
         </div>
     </div>
 
+    <div class="acoes">
+        <button class="btn" id="btn-gerar" onclick="gerar()">Gerar conciliação</button>
+        <span class="hint" id="gerar-hint"></span>
+    </div>
+
     <div class="progress-wrap" id="progress">
-        <div class="progress-bar"><div id="progress-fill"></div></div>
+        <div class="progress-bar" id="progress-bar"><div id="progress-fill"></div></div>
         <p class="hint" id="progress-msg" style="margin-top:0.4rem;"></p>
     </div>
 </div>
@@ -178,11 +196,12 @@ async function gerar() {
     const codccu = document.getElementById("f-ccu").value || null;
     if (!periodo) { showMsg("Escolha a competência.", "err"); return; }
 
-    document.getElementById("btn-gerar").disabled = true;
     document.getElementById("resultado").style.display = "none";
+    setGerando(true);
+    document.getElementById("gerar-hint").textContent = "Consultando a Senior — pode levar alguns minutos.";
     const pw = document.getElementById("progress");
     pw.classList.add("show");
-    setProgress(0, "Enfileirando…");
+    setProgress(0, "Enfileirando o pedido…");
 
     try {
         const r = await fetch("/api/conciliacao/gerar", {
@@ -192,15 +211,19 @@ async function gerar() {
         const data = await r.json();
         if (!r.ok) throw new Error(data.detail || "Falha ao iniciar a geração.");
         ULTIMO_JOB = data.job_id;
+        setProgress(0, "Buscando a folha na Senior…");
         POLL = setInterval(checarStatus, 1200);
     } catch (e) {
         showMsg(e.message, "err");
-        document.getElementById("btn-gerar").disabled = false;
+        setGerando(false);
+        document.getElementById("gerar-hint").textContent = "";
         pw.classList.remove("show");
     }
 }
 
 function setProgress(pct, msg) {
+    const bar = document.getElementById("progress-bar");
+    if (bar && pct && pct > 0) bar.classList.remove("indeterminado");  // vira barra real
     document.getElementById("progress-fill").style.width = (pct || 0) + "%";
     document.getElementById("progress-msg").textContent = msg || "";
 }
@@ -218,12 +241,14 @@ async function checarStatus() {
         } else if (s.status === "error") {
             clearInterval(POLL); POLL = null;
             document.getElementById("progress").classList.remove("show");
-            document.getElementById("btn-gerar").disabled = false;
+            document.getElementById("gerar-hint").textContent = "";
+            setGerando(false);
             showMsg("Erro ao gerar: " + (s.error || "falha na Senior") + " — tente novamente.", "err");
         }
     } catch (e) {
         clearInterval(POLL); POLL = null;
-        document.getElementById("btn-gerar").disabled = false;
+        setGerando(false);
+        document.getElementById("gerar-hint").textContent = "";
         showMsg(e.message, "err");
     }
 }
@@ -232,7 +257,8 @@ async function carregarResultado() {
     const r = await fetch("/api/conciliacao/resultado/" + ULTIMO_JOB, { headers: H });
     const data = await r.json();
     document.getElementById("progress").classList.remove("show");
-    document.getElementById("btn-gerar").disabled = false;
+    document.getElementById("gerar-hint").textContent = "";
+    setGerando(false);
     if (!r.ok) { showMsg(data.detail || "Falha ao carregar resultado.", "err"); return; }
     ULTIMO_RESULTADO = data;
     render(data);
@@ -373,5 +399,58 @@ function exportar() {
     if (!ULTIMO_JOB) return;
     window.location.href = "/api/conciliacao/export/" + ULTIMO_JOB;
 }
+
+// ---- Filtro de CCU (busca digitável, mesmo padrão das outras telas) ----
+let ALL_CCU_OPTS = [];
+function setupCcuFilter() {
+    const sel = document.getElementById("f-ccu");
+    const filtro = document.getElementById("f-ccu-filter");
+    if (!sel || !filtro) return;
+    ALL_CCU_OPTS = Array.from(sel.options).filter(o => o.value !== "").map(o => ({ value: o.value, text: o.textContent }));
+    filtro.addEventListener("input", () => renderCcuOptions(filtro.value));
+    sel.addEventListener("change", atualizarCcuSel);
+    atualizarCcuSel();
+}
+function renderCcuOptions(termo) {
+    const sel = document.getElementById("f-ccu");
+    const atual = sel.value;
+    const t = (termo || "").toLowerCase().trim();
+    const filtrados = t ? ALL_CCU_OPTS.filter(o => o.text.toLowerCase().includes(t)) : ALL_CCU_OPTS;
+    sel.innerHTML = "";
+    const todos = document.createElement("option");
+    todos.value = ""; todos.textContent = "Todos os centros de custo";
+    sel.appendChild(todos);
+    filtrados.forEach(o => {
+        const op = document.createElement("option");
+        op.value = o.value; op.textContent = o.text;
+        sel.appendChild(op);
+    });
+    sel.value = Array.from(sel.options).some(o => o.value === atual) ? atual : "";
+    atualizarCcuSel();
+}
+function atualizarCcuSel() {
+    const sel = document.getElementById("f-ccu");
+    const op = sel.options[sel.selectedIndex];
+    document.getElementById("f-ccu-sel").textContent =
+        sel.value ? ("Selecionado: " + (op ? op.textContent : sel.value)) : "Todos os centros de custo";
+}
+
+// ---- Estado visual do botão Gerar ----
+function setGerando(on) {
+    const b = document.getElementById("btn-gerar");
+    const bar = document.getElementById("progress-bar");
+    if (on) {
+        b.disabled = true;
+        b.innerHTML = '<span class="spinner"></span>Gerando…';
+        if (bar) bar.classList.add("indeterminado");
+    } else {
+        b.disabled = false;
+        b.textContent = "Gerar conciliação";
+        if (bar) bar.classList.remove("indeterminado");
+    }
+}
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", setupCcuFilter);
+else setupCcuFilter();
 </script>
 {% endblock %}
