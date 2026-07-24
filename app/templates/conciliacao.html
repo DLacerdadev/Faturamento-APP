@@ -169,7 +169,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+// base.html já provê a tag de script em volta deste bloco — aqui vai JS puro.
 const TOKEN = {{ token|tojson }};
 const H = { "Content-Type": "application/json" };
 if (TOKEN) H["Authorization"] = "Bearer " + TOKEN;
@@ -452,5 +452,4 @@ function setGerando(on) {
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", setupCcuFilter);
 else setupCcuFilter();
-</script>
 {% endblock %}
