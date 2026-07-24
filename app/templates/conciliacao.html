@@ -120,11 +120,17 @@
         </div>
 
         <div class="cards-totais">
-            <div class="tcard"><div class="rot">Competência inteira</div><div class="val" id="t-inteira">—</div></div>
-            <div class="tcard"><div class="rot">Recorte mensal</div><div class="val" id="t-mensal">—</div></div>
+            <div class="tcard"><div class="rot">Competência inteira (proventos)</div><div class="val" id="t-inteira">—</div></div>
+            <div class="tcard"><div class="rot">Recorte mensal (proventos)</div><div class="val" id="t-mensal">—</div></div>
             <div class="tcard"><div class="rot">Fora do recorte</div><div class="val" id="t-fora">—</div></div>
             <div class="tcard residuo"><div class="rot">Resíduo</div><div class="val" id="t-residuo">—</div></div>
         </div>
+        <p class="hint" style="margin:0.2rem 0 0.6rem;">
+            Conferência com o resumo da folha —
+            Proventos: <b id="t-proventos">—</b> ·
+            Descontos: <b id="t-descontos">—</b> ·
+            Líquido: <b id="t-liquido">—</b>
+        </p>
         <p class="hint" id="r-aviso"></p>
     </div>
 
@@ -135,7 +141,9 @@
                 <thead>
                     <tr>
                         <th>CODCAL</th><th>Descrição</th><th>Classificação</th>
-                        <th style="text-align:right;">Valor total</th><th>Ações</th>
+                        <th style="text-align:right;">Proventos</th>
+                        <th style="text-align:right;">Descontos</th>
+                        <th style="text-align:right;">Líquido</th><th>Ações</th>
                     </tr>
                 </thead>
                 <tbody id="cc-body"></tbody>
@@ -273,6 +281,9 @@ function render(data) {
     const rv = document.getElementById("t-residuo");
     rv.textContent = brl(t.residuo);
     rv.className = "val " + (Math.abs(t.residuo || 0) < 0.005 ? "zero" : "nonzero");
+    document.getElementById("t-proventos").textContent = brl(t.proventos);
+    document.getElementById("t-descontos").textContent = brl(t.descontos);
+    document.getElementById("t-liquido").textContent = brl(t.liquido);
 
     const badge = document.getElementById("r-status");
     badge.textContent = data.status;
@@ -301,7 +312,9 @@ function render(data) {
             '<td class="codcal">' + cc.codcal + '</td>' +
             '<td>' + (cc.descricao || '<span class="hint">(sem descrição)</span>') + '</td>' +
             '<td><span class="cls-pill ' + cc.classificacao + '">' + rotuloCls(cc.classificacao) + '</span></td>' +
-            '<td class="num">' + brl(cc.valor_total) + '</td>' +
+            '<td class="num">' + brl(cc.proventos) + '</td>' +
+            '<td class="num">' + brl(cc.descontos) + '</td>' +
+            '<td class="num">' + brl(cc.liquido) + '</td>' +
             '<td class="row-actions">' +
                 '<button class="btn" onclick=\'abrirModal(' + cc.codcal + ')\'>Classificar</button>' +
                 (cc.classificacao !== "nao_classificado" ? '<button class="btn btn-secondary" onclick=\'removerClassificacao(' + cc.codcal + ')\'>Remover</button>' : '') +
@@ -316,7 +329,8 @@ function render(data) {
             er.innerHTML =
                 '<td></td>' +
                 '<td colspan="2">' + ev.codigo + ' — ' + (ev.descricao || '') + '</td>' +
-                '<td class="num">' + brl(ev.valor_total) + '</td>' +
+                '<td class="num">' + brl(ev.proventos) + '</td>' +
+                '<td class="num">' + brl(ev.descontos) + '</td>' +
                 '<td class="num">' + ev.lancamentos + ' lanç.</td>';
             body.appendChild(er);
         });

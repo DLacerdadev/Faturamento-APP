@@ -41,39 +41,51 @@ def montar_conciliacao(
         dict com 'totais', 'codcals' (decomposição), 'nao_classificados' e
         'status' — ver specs/004-relatorio-conciliacao/data-model.md.
     """
-    # Agregação: codcal -> { "eventos": {codigo: {desc, valor, qtd}}, "valor_total": x }
+    # Agregação por codcal separando PROVENTOS e DESCONTOS pelo tipo do evento
+    # (tipo_evento: 1,2 = provento/vantagem; 3 = desconto; demais = bases de FGTS/
+    # INSS etc., que NÃO entram no resumo da folha). Assim os totais batem com o
+    # "Resumo dos Valores Totais" da folha (Proventos / Descontos / Líquido), em
+    # vez de somar tudo junto (que não corresponde a nenhuma linha da folha).
     por_codcal: Dict[int, Dict[str, Any]] = {}
 
     for row in payroll_rows:
         codcal = _safe_int(row.get("codcal"))
         if codcal is None:
             codcal = 0  # linhas sem codcal caem num balde "0" (aparecerá como não classificado)
-        valor = _safe_float(row.get("valor_evento"))
+        valor = abs(_safe_float(row.get("valor_evento")))
+        tipe = _safe_int(row.get("tipo_evento")) or 0
         cod_ev = row.get("codigo_evento")
         cod_ev_key = str(cod_ev) if cod_ev is not None else "?"
 
-        bucket = por_codcal.setdefault(codcal, {"valor_total": 0.0, "eventos": {}})
-        bucket["valor_total"] += valor
-
+        bucket = por_codcal.setdefault(codcal, {"proventos": 0.0, "descontos": 0.0, "eventos": {}})
         ev = bucket["eventos"].setdefault(
             cod_ev_key,
-            {"codigo": cod_ev_key, "descricao": row.get("descricao_evento"), "valor_total": 0.0, "lancamentos": 0},
+            {"codigo": cod_ev_key, "descricao": row.get("descricao_evento"),
+             "proventos": 0.0, "descontos": 0.0, "lancamentos": 0},
         )
-        ev["valor_total"] += valor
+        if tipe == 3:
+            bucket["descontos"] += valor
+            ev["descontos"] += valor
+        elif tipe in (1, 2):
+            bucket["proventos"] += valor
+            ev["proventos"] += valor
+        # demais tipos (bases): não somam em proventos/descontos
         ev["lancamentos"] += 1
         if not ev["descricao"] and row.get("descricao_evento"):
             ev["descricao"] = row.get("descricao_evento")
 
     codcals_out: List[Dict[str, Any]] = []
     nao_classificados: List[int] = []
-    total_inteira = 0.0
-    total_mensal = 0.0
-    total_fora = 0.0
+    prov_inteira = desc_inteira = 0.0
+    prov_mensal = prov_fora = 0.0
 
     for codcal in sorted(por_codcal.keys()):
         bucket = por_codcal[codcal]
-        valor_total = round(bucket["valor_total"], 2)
-        total_inteira += valor_total
+        proventos = round(bucket["proventos"], 2)
+        descontos = round(bucket["descontos"], 2)
+        liquido = round(proventos - descontos, 2)
+        prov_inteira += proventos
+        desc_inteira += descontos
 
         cls = classificacoes.get(codcal)
         if cls is None:
@@ -85,19 +97,21 @@ def montar_conciliacao(
             classificacao = "mensal"
             descricao = cls.get("descricao")
             origem = cls.get("origem") or "manual"
-            total_mensal += valor_total
+            prov_mensal += proventos
         else:
             classificacao = "fora"
             descricao = cls.get("descricao")
             origem = cls.get("origem") or "manual"
-            total_fora += valor_total
+            prov_fora += proventos
 
         eventos = sorted(
             (
                 {
                     "codigo": e["codigo"],
                     "descricao": e["descricao"],
-                    "valor_total": round(e["valor_total"], 2),
+                    "proventos": round(e["proventos"], 2),
+                    "descontos": round(e["descontos"], 2),
+                    "valor_total": round(e["proventos"] - e["descontos"], 2),
                     "lancamentos": e["lancamentos"],
                 }
                 for e in bucket["eventos"].values()
@@ -110,14 +124,18 @@ def montar_conciliacao(
             "descricao": descricao,
             "classificacao": classificacao,
             "origem": origem,
-            "valor_total": valor_total,
+            "proventos": proventos,
+            "descontos": descontos,
+            "liquido": liquido,
+            "valor_total": proventos,   # a PONTE do faturamento é sobre proventos
             "eventos": eventos,
         })
 
-    total_inteira = round(total_inteira, 2)
-    total_mensal = round(total_mensal, 2)
-    total_fora = round(total_fora, 2)
-    residuo = round(total_inteira - total_mensal - total_fora, 2)
+    prov_inteira = round(prov_inteira, 2)
+    desc_inteira = round(desc_inteira, 2)
+    prov_mensal = round(prov_mensal, 2)
+    prov_fora = round(prov_fora, 2)
+    residuo = round(prov_inteira - prov_mensal - prov_fora, 2)
 
     if nao_classificados:
         status = "incompleta"
@@ -129,10 +147,15 @@ def montar_conciliacao(
     return {
         "status": status,
         "totais": {
-            "competencia_inteira": total_inteira,
-            "recorte_mensal": total_mensal,
-            "fora_recorte": total_fora,
+            # Ponte do faturamento (base = proventos)
+            "competencia_inteira": prov_inteira,
+            "recorte_mensal": prov_mensal,
+            "fora_recorte": prov_fora,
             "residuo": residuo,
+            # Conferência com o resumo da folha (Proventos / Descontos / Líquido)
+            "proventos": prov_inteira,
+            "descontos": desc_inteira,
+            "liquido": round(prov_inteira - desc_inteira, 2),
         },
         "codcals": codcals_out,
         "nao_classificados": nao_classificados,
@@ -179,20 +202,26 @@ def conciliacao_para_xlsx(resultado: Dict[str, Any]) -> bytes:
         ("Gerado por", resultado.get("gerado_por")),
         ("Status", resultado.get("status")),
         ("", ""),
+        ("PONTE DO FATURAMENTO (base = proventos)", ""),
         ("Competência inteira", totais.get("competencia_inteira")),
         ("Recorte mensal", totais.get("recorte_mensal")),
         ("Fora do recorte", totais.get("fora_recorte")),
         ("Resíduo", totais.get("residuo")),
+        ("", ""),
+        ("CONFERÊNCIA COM O RESUMO DA FOLHA", ""),
+        ("Proventos", totais.get("proventos")),
+        ("Descontos", totais.get("descontos")),
+        ("Líquido", totais.get("liquido")),
     ]
     for i, (rot, val) in enumerate(linhas_resumo, start=1):
         ws.cell(row=i, column=1, value=rot).font = bold
         ws.cell(row=i, column=2, value=val)
-    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["A"].width = 38
     ws.column_dimensions["B"].width = 40
 
     # --- Aba Decomposição ---
     wd = wb.create_sheet("Decomposição")
-    headers = ["CODCAL", "Descrição", "Classificação", "Origem", "Valor total"]
+    headers = ["CODCAL", "Descrição", "Classificação", "Origem", "Proventos", "Descontos", "Líquido"]
     for c, h in enumerate(headers, start=1):
         wd.cell(row=1, column=c, value=h).font = bold
     for r, cc in enumerate(resultado.get("codcals", []), start=2):
@@ -200,13 +229,15 @@ def conciliacao_para_xlsx(resultado: Dict[str, Any]) -> bytes:
         wd.cell(row=r, column=2, value=cc.get("descricao"))
         wd.cell(row=r, column=3, value=cc.get("classificacao"))
         wd.cell(row=r, column=4, value=cc.get("origem"))
-        wd.cell(row=r, column=5, value=cc.get("valor_total"))
-    for col, w in zip("ABCDE", (10, 32, 16, 12, 16)):
+        wd.cell(row=r, column=5, value=cc.get("proventos"))
+        wd.cell(row=r, column=6, value=cc.get("descontos"))
+        wd.cell(row=r, column=7, value=cc.get("liquido"))
+    for col, w in zip("ABCDEFG", (10, 32, 16, 12, 15, 15, 15)):
         wd.column_dimensions[col].width = w
 
     # --- Aba Eventos ---
     we = wb.create_sheet("Eventos")
-    headers = ["CODCAL", "Evento", "Descrição", "Valor total", "Lançamentos"]
+    headers = ["CODCAL", "Evento", "Descrição", "Proventos", "Descontos", "Lançamentos"]
     for c, h in enumerate(headers, start=1):
         we.cell(row=1, column=c, value=h).font = bold
     r = 2
@@ -215,10 +246,11 @@ def conciliacao_para_xlsx(resultado: Dict[str, Any]) -> bytes:
             we.cell(row=r, column=1, value=cc.get("codcal"))
             we.cell(row=r, column=2, value=ev.get("codigo"))
             we.cell(row=r, column=3, value=ev.get("descricao"))
-            we.cell(row=r, column=4, value=ev.get("valor_total"))
-            we.cell(row=r, column=5, value=ev.get("lancamentos"))
+            we.cell(row=r, column=4, value=ev.get("proventos"))
+            we.cell(row=r, column=5, value=ev.get("descontos"))
+            we.cell(row=r, column=6, value=ev.get("lancamentos"))
             r += 1
-    for col, w in zip("ABCDE", (10, 12, 34, 16, 14)):
+    for col, w in zip("ABCDEF", (10, 12, 34, 15, 15, 14)):
         we.column_dimensions[col].width = w
 
     buf = BytesIO()
