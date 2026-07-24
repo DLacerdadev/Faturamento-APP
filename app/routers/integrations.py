@@ -1180,6 +1180,25 @@ def _pct_se_gestor(request, db, enc, adm, imp):
     return None, None, None
 
 
+def _codcals_mensais(db) -> set:
+    """Códigos de cálculo (codcal) que compõem o CÁLCULO MENSAL — o recorte
+    faturado. Fonte primária: classificação da Conciliação (recorte_mensal=True);
+    fallback: env SENIOR_CODCAL_MENSAL. Vazio = sem filtro (comportamento antigo)."""
+    try:
+        from app.models.codcal_classification import CodcalClassification
+        mensais = {
+            c.codcal for c in db.query(CodcalClassification)
+            .filter(CodcalClassification.recorte_mensal.is_(True)).all()
+            if c.codcal is not None
+        }
+        if mensais:
+            return mensais
+    except Exception:
+        logger.warning("Não foi possível ler codcal_classifications; usando fallback de env.")
+    from app.config import SENIOR_CODCAL_MENSAL
+    return set(SENIOR_CODCAL_MENSAL or [])
+
+
 def _build_billing_export(db, modelo, periodo, codccu, encargos_pct=None,
                           taxa_adm_pct=None, imposto_pct=None, progress_cb=None):
     """Monta os bytes da exportação de faturamento. Retorna (content, filename,
@@ -1192,6 +1211,21 @@ def _build_billing_export(db, modelo, periodo, codccu, encargos_pct=None,
     modelo = (modelo or "femsa").lower()
     codccu = deduplicate_codccu(codccu)
     payroll_data = fetch_payroll(periodo, NUMEMP_TELOS, codccu, progress_cb=progress_cb)
+    # FATURAMENTO = só o CÁLCULO MENSAL. A integração devolve todos os cálculos da
+    # competência (mensal + rescisões/férias/13º/complementares), o que inflava o
+    # nº de funcionários. Filtra por codcal do mensal (não afeta as folhas cruas
+    # 'senior'/'payroll', que devem mostrar tudo). Sem codcal definido => sem filtro.
+    if modelo not in ("senior", "payroll"):
+        _mensais = _codcals_mensais(db)
+        if _mensais:
+            _n0 = len(payroll_data)
+            payroll_data = [r for r in payroll_data if r.get("codcal") in _mensais]
+            logger.info("Faturamento só-mensal: %d/%d lançamentos mantidos (codcals mensais=%s).",
+                        len(payroll_data), _n0, sorted(_mensais))
+        else:
+            logger.warning("Faturamento: nenhum codcal do mensal definido — export NÃO filtrado. "
+                           "Classifique o cálculo mensal em /conciliacao (recorte mensal) ou "
+                           "defina SENIOR_CODCAL_MENSAL no .env.")
     all_grouped_data = agrupar_por_matricula(payroll_data)
     codccu_label = "_".join(codccu) if len(codccu) <= 3 else f"{len(codccu)}_ccus"
     xlsx_mt = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

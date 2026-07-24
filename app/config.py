@@ -37,6 +37,18 @@ SENIOR_SOAP_PASSWORD = os.getenv("SENIOR_SOAP_PASSWORD", "")
 SENIOR_SOAP_TOKEN = os.getenv("SENIOR_SOAP_TOKEN", "")
 SENIOR_SOAP_ENCRYPTION = int(os.getenv("SENIOR_SOAP_ENCRYPTION", "0"))
 
+# Faturamento "só cálculo mensal": conjunto de códigos de cálculo (codcal) da
+# Senior que compõem o CÁLCULO MENSAL (o recorte que a folha conferida usa).
+# A integração devolve TODOS os cálculos da competência (mensal + rescisões,
+# férias, 13º, complementares); sem filtro, o faturamento infla o nº de pessoas.
+# Fonte primária é a classificação da Conciliação (codcal_classifications,
+# recorte_mensal=True); este env é fallback/override quando a tabela está vazia.
+# Ex.: SENIOR_CODCAL_MENSAL="362". Vazio = sem filtro (comportamento antigo).
+SENIOR_CODCAL_MENSAL = {
+    int(x) for x in os.getenv("SENIOR_CODCAL_MENSAL", "").replace(";", ",").split(",")
+    if x.strip().isdigit()
+}
+
 # Modo desenvolvimento: ativo quando credenciais Senior não estão configuradas.
 # Neste modo, endpoints que dependem do Senior usam dados locais do banco SQLite.
 #
