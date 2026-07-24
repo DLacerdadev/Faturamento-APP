@@ -940,6 +940,10 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
     for letra, por_linha in headers.items():
         if not isinstance(por_linha, dict):
             continue
+        # A coluna é de taxa/parâmetro? (algum rótulo do cabeçalho cita taxa/imposto)
+        col_eh_taxa = any(
+            any(k in str(t).upper() for k in _CONST_RATE_KEYS) for t in por_linha.values()
+        )
         for linha, texto in por_linha.items():
             try:
                 r = int(linha)
@@ -948,6 +952,16 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
             if r < 1 or r >= data_row:
                 continue
             cell = ws[f"{letra}{r}"]
+            # Célula de PARÂMETRO no cabeçalho (ex.: taxa adm "0.07"): grava como
+            # NÚMERO para as fórmulas que a referenciam calcularem — senão o texto
+            # dá #VALOR!. Taxa em fração (0<v<1) recebe formato de porcentagem.
+            num = _coerce_numero(texto)
+            tem_decimal = isinstance(texto, str) and ("." in texto or "," in texto)
+            if isinstance(num, (int, float)) and not isinstance(num, bool) and (tem_decimal or col_eh_taxa):
+                cell.value = num
+                if col_eh_taxa and 0 < abs(num) < 1:
+                    cell.number_format = "0%"
+                continue
             cell.value = texto
             if texto in _HEADER_DARK_RED_COLS:
                 cell.fill = dark_red_fill
