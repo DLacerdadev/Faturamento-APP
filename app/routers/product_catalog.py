@@ -10,8 +10,10 @@ from app.db import get_db
 from app.session_manager import validate_token
 from app.routers.auth import get_token_from_request
 from app.models.product_catalog import ProductCatalog
+from app.models.cc_item_price import CCItemPrice
 from app.services.product_import import import_produtos_totvs
 from app.services.audit import audit
+from app.services.permissions import require_role
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -30,6 +32,14 @@ class ProductUpdate(BaseModel):
     categoria: Optional[str] = None
     preco: Optional[float] = None
     ativo: Optional[bool] = None
+
+
+class CCPriceUpdate(BaseModel):
+    """Edição manual do valor de EPI de um CENTRO DE CUSTO específico.
+    Trava aquela linha (is_manual_price=True) — não propaga p/ outros CCUs."""
+    codccu: str
+    produto_codigo: str
+    valor: float
 
 
 @router.get("/catalogo-produtos", response_class=HTMLResponse)
@@ -127,3 +137,119 @@ async def import_products(request: Request, file: UploadFile = File(...), db: Se
           detalhe=resumo, user=user)
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Feature 008 — EPI automático via TOTVS, valor POR CENTRO DE CUSTO.
+# O valor de EPI vive em CCItemPrice (codccu, produto_codigo). A rotina diária
+# faz upsert automático; a trava manual é por linha (CCU × produto) — editar um
+# CCU não afeta os outros. Endpoints: listar preços por CCU, editar (trava),
+# voltar ao automático (destrava + ressincroniza), sincronizar agora (gestor+).
+# ---------------------------------------------------------------------------
+
+def _cc_price_row(db: Session, codccu: str, produto_codigo: str):
+    return (
+        db.query(CCItemPrice)
+        .filter(
+            CCItemPrice.codccu == str(codccu),
+            CCItemPrice.produto_codigo == str(produto_codigo),
+            CCItemPrice.tamanho == "",
+        )
+        .first()
+    )
+
+
+@router.get("/api/products/{prod_id}/cc-prices")
+async def list_cc_prices(prod_id: int, request: Request, db: Session = Depends(get_db)):
+    """Lista os preços por centro de custo (CCItemPrice) de um produto EPI —
+    com o estado manual/automático e a data da última sincronização."""
+    _require_user(request, db)
+    p = db.query(ProductCatalog).filter(ProductCatalog.id == prod_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    rows = (
+        db.query(CCItemPrice)
+        .filter(CCItemPrice.produto_codigo == p.codigo, CCItemPrice.tamanho == "")
+        .order_by(CCItemPrice.codccu)
+        .all()
+    )
+    return {"success": True, "produto": p.to_dict(), "data": [r.to_dict() for r in rows]}
+
+
+@router.put("/api/products/cc-price")
+async def update_cc_price(payload: CCPriceUpdate, request: Request, db: Session = Depends(get_db)):
+    """Edita o valor de EPI de UM centro de custo → marca SÓ aquela linha como
+    manual (trava). Nunca propaga para outros CCUs (isolamento)."""
+    user = _require_user(request, db)
+    codccu = (payload.codccu or "").strip()
+    produto = (payload.produto_codigo or "").strip()
+    if not codccu or not produto:
+        raise HTTPException(status_code=400, detail="Informe centro de custo e produto.")
+
+    row = _cc_price_row(db, codccu, produto)
+    antes_valor = float(row.valor) if row else None
+    if row is None:
+        row = CCItemPrice(codccu=codccu, produto_codigo=produto, tamanho="",
+                          valor=float(payload.valor), is_manual_price=True)
+        db.add(row)
+    else:
+        row.valor = float(payload.valor)
+        row.is_manual_price = True  # trava SÓ nesta linha (CCU × produto)
+    db.commit()
+    db.refresh(row)
+
+    audit(request, "catalogo_produto.cc_preco_manual", entidade="cc_item_price",
+          entidade_id=str(row.id),
+          detalhe={"codccu": codccu, "produto_codigo": produto,
+                   "de": antes_valor, "para": float(row.valor), "manual": True},
+          user=user)
+    return {"success": True, "data": row.to_dict()}
+
+
+@router.post("/api/products/cc-price/voltar-automatico")
+async def revert_cc_price_to_auto(payload: CCPriceUpdate, request: Request, db: Session = Depends(get_db)):
+    """"Voltar ao automático" para UM centro de custo: remove a trava manual e
+    ressincroniza aquela linha do TOTVS. Não afeta outros CCUs.
+
+    `valor` do payload é ignorado aqui (reusa o schema); o valor vem do TOTVS."""
+    user = _require_user(request, db)
+    codccu = (payload.codccu or "").strip()
+    produto = (payload.produto_codigo or "").strip()
+    if not codccu or not produto:
+        raise HTTPException(status_code=400, detail="Informe centro de custo e produto.")
+
+    row = _cc_price_row(db, codccu, produto)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Preço deste CC/produto não encontrado.")
+
+    row.is_manual_price = False  # destrava só esta linha
+    db.commit()
+
+    # Ressincroniza esta linha do TOTVS (falha-segura: não destrói o valor atual).
+    from app.services.price_autosync import resync_one_cc_item
+    resync = resync_one_cc_item(db, codccu, produto)
+    db.refresh(row)
+
+    audit(request, "catalogo_produto.cc_preco_automatico", entidade="cc_item_price",
+          entidade_id=str(row.id),
+          detalhe={"codccu": codccu, "produto_codigo": produto,
+                   "manual": False, "ressincronizado": resync.get("ok"),
+                   "valor": resync.get("valor")},
+          user=user)
+    return {"success": True, "data": row.to_dict(), "resync": resync}
+
+
+@router.post("/api/products/sync-totvs")
+async def sync_totvs_now(request: Request, db: Session = Depends(get_db)):
+    """"Sincronizar agora" — dispara a rotina de autosync de EPI do TOTVS sob
+    demanda (gestor+). Auditado. Falha de TOTVS não destrói preços existentes."""
+    user = require_role(request, db, "gestor")
+    from app.services.price_autosync import run_epi_price_autosync
+    result = run_epi_price_autosync(db)
+
+    resumo = {k: v for k, v in result.items()
+              if isinstance(v, (int, float, str, bool)) or v is None}
+    audit(request, "catalogo_produto.sync_totvs", entidade="cc_item_price",
+          detalhe=resumo, user=user,
+          status="ok" if result.get("ok") else "erro")
+    return {"success": bool(result.get("ok")), "result": result}
