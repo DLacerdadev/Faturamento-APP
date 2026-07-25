@@ -392,6 +392,62 @@ Por decisão arquitetural (evitar amplificar carga durante instabilidade da Seni
 
 ---
 
+## Testes
+
+Harness de testes com **pytest** (spec 006-harness-testes). Roda 100% **offline**
+(sem Senior/SMTP/LLM), determinístico, em segundos, e **nunca toca o banco real**
+(`app.db` nem o Postgres de dev) — cada execução usa um SQLite temporário isolado.
+
+### Comando único
+
+```bash
+python -m pytest
+```
+
+(no Windows sem `.venv` funcional, use o interpretador do sistema, ex.:
+`C:\Python313\python.exe -m pytest`). Rode na raiz do projeto — o `pytest.ini`
+já define `testpaths=tests` e coloca a raiz no `sys.path`.
+
+Instalar as deps de teste, se necessário:
+
+```bash
+python -m pip install pytest httpx   # ou: pip install -r requirements.txt
+```
+
+### O que o harness cobre
+
+- **Smoke** (`tests/test_smoke.py`): o app importa/sobe; `GET /health` → 200;
+  DEV_MODE ativo e apontando pro SQLite de teste; RBAC resolvido offline
+  (admin acessa `/api/users`, operador recebe 403).
+- **Fixtures** (`tests/conftest.py`), reutilizáveis pelas specs 007–010:
+  - `test_engine` — engine SQLAlchemy num SQLite temporário; schema via
+    `init_db()` (`Base.metadata.create_all` + migrações/seeds), removido ao fim.
+  - `db_session` — sessão transacional por teste (rollback no teardown; um teste
+    não vaza dados para o outro).
+  - `client` — `TestClient` do FastAPI com `get_db` sobrescrito para o banco de teste.
+  - `client_as(role)` — autentica como `operador`/`gestor`/`admin` criando um
+    usuário de teste e injetando o cookie de sessão real (`session_token`).
+  - Helpers de dados sintéticos **anônimos** (sem PII): `make_fake_employee()`,
+    `make_fake_customer()`, `fake_employee_factory`.
+
+### Isolamento do banco (por que `app.db` fica intacto)
+
+O `tests/conftest.py`, **antes** de importar `app.*`, seta `DATABASE_URL` para um
+SQLite temporário e `FORCE_DEV_MODE=1` (zera credenciais Senior). Como
+`python-dotenv` usa `override=False`, essas variáveis vencem o `.env` do projeto.
+Verificação (o hash de `app.db` não muda entre antes e depois):
+
+```bash
+md5sum app.db && python -m pytest && md5sum app.db   # hashes idênticos
+```
+
+> Nota de paridade: o harness registra um shim de compilação que renderiza
+> `BigInteger` como `INTEGER` no dialeto SQLite (o `User.id` é BigInteger
+> autoincrement, que só autoincrementa em `INTEGER PRIMARY KEY` no SQLite). É
+> apenas no ambiente de teste; não altera o código de produção nem o Postgres.
+
+---
+
 ## Checklist rápido
 
 ### Dev
