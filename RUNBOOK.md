@@ -465,3 +465,38 @@ cp .env.example .env   # edite com credenciais reais
 docker compose up --build -d
 # → http://localhost:5000/login
 ```
+
+---
+
+## EPI automático via TOTVS (feature 008)
+
+Sincroniza o valor de EPI **por centro de custo** direto do Protheus (WSGETDATA REST→SQL):
+o último `C7_PRECO` por `(produto, CCU)` do grupo `0003`, gravado em `cc_item_prices`.
+
+### Configuração (.env — nunca versionar)
+```
+TOTVS_WSGETDATA_URL=http://<host>:<porta>
+TOTVS_WSGETDATA_USER=<usuario>
+TOTVS_WSGETDATA_PASSWORD=<senha>
+TOTVS_SYNC_HORARIO=02:00
+```
+
+### Rotina / cron
+- Sync diário às `TOTVS_SYNC_HORARIO` (default 02:00) via APScheduler no processo do app
+  (**1 worker** — não usar `--workers` sem lock, senão o job dispara em cada worker).
+- Disparo manual: botão "Sincronizar EPIs do TOTVS agora" (gestor+) ou `POST /api/products/sync-totvs`.
+- **Trava manual por CCU**: valor editado à mão fica fixo (`is_manual_price=True`) e o cron não o
+  toca; "voltar ao automático" (por CCU) remove a trava e ressincroniza. Alteração num CCU não
+  afeta outro. Falha do TOTVS apenas loga e **preserva** os preços (não zera).
+
+### Migração (bancos já existentes)
+Postgres (prod):
+```sql
+ALTER TABLE cc_item_prices ADD COLUMN IF NOT EXISTS is_manual_price BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE cc_item_prices ADD COLUMN IF NOT EXISTS last_auto_sync TIMESTAMP NULL;
+```
+Em dev/SQLite o `init_db()` aplica o ALTER idempotente automaticamente.
+
+### Segurança
+- Credencial `powerbi` foi compartilhada em texto puro: **rotacionar** e, de preferência, criar
+  usuário Protheus dedicado com permissão mínima (só `SC7010`/`SB1010`). Atualizar o `.env` local.

@@ -95,11 +95,30 @@ async def startup_event():
     init_db()
     logger.info("Banco de dados inicializado com sucesso!")
     seed_dev_data()
+
+    # Feature 008: scheduler do sync diário de preços de EPI do TOTVS.
+    # Idempotente; só agenda se o TOTVS estiver configurado (env). 1 worker.
+    try:
+        from app.services.scheduler import start_scheduler
+        start_scheduler()
+    except Exception as _exc:  # nunca derruba o boot do app por causa do scheduler
+        logger.warning("Scheduler TOTVS não iniciado: %s", _exc)
     
     # NOTA DE SEGURANÇA: o seed de admin com credencial fixa (admin/admin123) foi
     # REMOVIDO — era um backdoor (conta ativa de credencial conhecida). O admin
     # real é semeado em app/db.py (ti@grupoopus.com). Novos usuários só pela
     # tela /usuarios (admin) ou /api/auth/register (admin).
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    # Feature 008: encerra o scheduler do TOTVS de forma limpa.
+    try:
+        from app.services.scheduler import shutdown_scheduler
+        shutdown_scheduler()
+    except Exception:
+        pass
+
 
 app.include_router(auth_router)
 app.include_router(customers_router)

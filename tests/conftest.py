@@ -35,6 +35,11 @@ os.environ["FORCE_DEV_MODE"] = "1"
 # Zera as credenciais do Senior herdadas do .env por garantia (defense-in-depth).
 for _k in ("SENIOR_SOAP_USER", "SENIOR_SOAP_PASSWORD", "SENIOR_SOAP_TOKEN"):
     os.environ[_k] = ""
+# Zera as credenciais do TOTVS/WSGETDATA (feature 008): nenhum teste pode alcançar
+# o Protheus real. Testes que precisam do TOTVS "configurado" setam via config
+# (monkeypatch.setattr), nunca com a credencial de produção.
+for _k in ("TOTVS_WSGETDATA_URL", "TOTVS_WSGETDATA_USER", "TOTVS_WSGETDATA_PASSWORD"):
+    os.environ[_k] = ""
 # Cookie sem `secure` para o TestClient (http://testserver).
 os.environ["SESSION_COOKIE_SECURE"] = "false"
 # Sessão em memória determinística.

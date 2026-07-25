@@ -83,6 +83,12 @@ def init_db():
         ("users", [
             ("role", "VARCHAR(20) NOT NULL DEFAULT 'operador'"),
         ]),
+        # Feature 008: trava de preço manual por centro de custo + timestamp da
+        # última sincronização automática do TOTVS. NULLable/default (P5).
+        ("cc_item_prices", [
+            ("is_manual_price", "BOOLEAN NOT NULL DEFAULT FALSE" if _is_pg else "BOOLEAN NOT NULL DEFAULT 0"),
+            ("last_auto_sync", "TIMESTAMP" if _is_pg else "DATETIME"),
+        ]),
     ]
     with engine.begin() as _conn:
         for _tbl, _cols in _migrations:

@@ -21,11 +21,15 @@ class _FakeResponse:
 
 @pytest.fixture()
 def totvs_env(monkeypatch):
-    """Configura env TOTVS (via os.getenv que o connector lê como fallback)."""
-    monkeypatch.setenv("TOTVS_WSGETDATA_URL", "http://totvs.example:8080")
-    monkeypatch.setenv("TOTVS_WSGETDATA_USER", "powerbi")
-    monkeypatch.setenv("TOTVS_WSGETDATA_PASSWORD", "s3nh4")
-    # Garante que config (se importável) não tenha esses atributos preenchidos.
+    """Configura o TOTVS via `app.config` (fonte canônica que o connector prefere).
+
+    O conftest zera as env TOTVS antes de importar o app, então `config.TOTVS_*`
+    nasce vazio nos testes; aqui injetamos valores FICTÍCIOS por setattr — nunca a
+    credencial real de produção."""
+    from app import config
+    monkeypatch.setattr(config, "TOTVS_WSGETDATA_URL", "http://totvs.example:8080")
+    monkeypatch.setattr(config, "TOTVS_WSGETDATA_USER", "powerbi")
+    monkeypatch.setattr(config, "TOTVS_WSGETDATA_PASSWORD", "s3nh4")
     return None
 
 

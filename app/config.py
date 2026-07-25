@@ -103,3 +103,17 @@ SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", _secure_default).stri
 # permite navegação top-level cross-site. "strict" é mais seguro mas quebra
 # links externos pro app. "none" exige HTTPS+secure=true.
 SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "lax").strip().lower()
+
+# ─── TOTVS Protheus – WSGETDATA (feature 008: preço de EPI por centro de custo) ─
+# Gateway de SQL REST do Protheus. Credenciais SÓ via env (.env gitignored) —
+# nunca versionadas. O conector/scheduler leem daqui (fallback os.getenv).
+TOTVS_WSGETDATA_URL = os.getenv("TOTVS_WSGETDATA_URL", "")
+TOTVS_WSGETDATA_USER = os.getenv("TOTVS_WSGETDATA_USER", "")
+TOTVS_WSGETDATA_PASSWORD = os.getenv("TOTVS_WSGETDATA_PASSWORD", "")
+# Horário (HH:MM, 24h) do sync diário de preços de EPI. Default 02:00.
+TOTVS_SYNC_HORARIO = os.getenv("TOTVS_SYNC_HORARIO", "02:00")
+
+
+def is_totvs_configured() -> bool:
+    """True se URL + usuário + senha do WSGETDATA estão preenchidos."""
+    return bool(TOTVS_WSGETDATA_URL and TOTVS_WSGETDATA_USER and TOTVS_WSGETDATA_PASSWORD)

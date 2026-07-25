@@ -14,6 +14,8 @@ pydantic==2.12.5
 lxml==5.3.0
 aiofiles==24.1.0
 pyodbc==5.2.0
+# Scheduler do sync diário de EPI/TOTVS (spec 008-epi-auto-totvs).
+APScheduler==3.11.3
 # Testes (spec 006-harness-testes) — harness pytest offline.
 pytest==9.1.1
 httpx==0.28.1
