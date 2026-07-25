@@ -43,6 +43,7 @@ sem nenhuma mudança; regressão zero na exportação FEMSA).
 """
 import re
 import colorsys
+import logging
 import unicodedata
 from datetime import datetime, date
 from io import BytesIO
@@ -52,6 +53,8 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter, column_index_from_string
 
 from app.services.excel_export import GERAL_COLUMNS, _CONST_RATE_KEYS, _coerce_numero
+
+logger = logging.getLogger(__name__)
 
 # Índice de cor de tema (atributo theme="N" nas células) -> nome no clrScheme.
 # Ordem oficial do OOXML (com a troca dk1/lt1): 0=fundo1, 1=texto1, 2=fundo2, ...
@@ -356,6 +359,34 @@ def _detectar_cabecalho(ws) -> tuple:
     return header_rows, data_row
 
 
+# Nº de linhas de dados varridas para decidir se uma coluna numérica "constante"
+# na verdade VARIA por funcionário (ex.: benefícios/descontos da Skyrail que o
+# sistema não sabe alimentar). Coluna que varia não é constante de verdade.
+_LINHAS_AMOSTRA_VARIACAO = 25
+
+
+def _coluna_varia(ws, idx: int, data_row: int, max_row: int) -> bool:
+    """Amostra algumas linhas de dados da coluna e diz se os valores VARIAM.
+
+    Usado para distinguir uma CONSTANTE real (mesmo valor em toda a planilha,
+    ex.: um parâmetro fixo) de uma coluna PER-FUNCIONÁRIO que o parser só viu na
+    primeira linha (ex.: 'ATRASOS' = 89,88 / 0 / 9,84 na Skyrail). Só considera
+    células não-vazias; ignora fórmulas.
+    """
+    limite = min(max_row, data_row + _LINHAS_AMOSTRA_VARIACAO)
+    visto = set()
+    for r in range(data_row, limite + 1):
+        v = ws.cell(row=r, column=idx).value
+        if _celula_vazia(v):
+            continue
+        if isinstance(v, str) and v.startswith("="):
+            continue
+        visto.add(v)
+        if len(visto) > 1:
+            return True
+    return False
+
+
 def _casar_fonte(textos_header: Dict[str, str]) -> Optional[str]:
     """
     Tenta casar o cabeçalho da coluna com uma coluna conhecida do sistema.
@@ -407,6 +438,8 @@ def parse_model_xlsx(conteudo: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
     estilos_header: Dict[str, Dict[str, Any]] = {}   # letra -> {linha -> estilo}
     colunas: List[Dict[str, Any]] = []
     max_col = ws.max_column or 1
+    max_row_ws = ws.max_row or data_row
+    campos_sem_fonte: List[str] = []  # colunas per-funcionário sem fonte no sistema
 
     for idx in range(1, max_col + 1):
         letra = get_column_letter(idx)
@@ -452,6 +485,20 @@ def parse_model_xlsx(conteudo: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
             else:
                 col["tipo"] = "constante"
                 col["valor"] = _valor_json(celula_dado)
+                # Coluna numérica cujo cabeçalho NÃO casou com nenhum campo do
+                # sistema, mas cujo valor VARIA por funcionário no modelo (ex.:
+                # benefícios/descontos da Skyrail: CAFÉ, ALMOÇO, ATRASOS, DSR...).
+                # Não é uma constante de verdade: o sistema não tem fonte para
+                # alimentá-la. Marca 'variavel' para o renderizador saber que a
+                # COLUNA deve ficar presente no layout mas a célula de dado sai
+                # VAZIA — NÃO fabricamos valor a partir da 1ª linha do template
+                # (isso replicaria um número errado para os demais funcionários).
+                # O aviso (parse + render) evita o sumiço silencioso (cenário 3).
+                num_val = _coerce_numero(celula_dado)
+                if (isinstance(num_val, (int, float)) and not isinstance(num_val, bool)
+                        and _coluna_varia(ws, idx, data_row, max_row_ws)):
+                    col["variavel"] = True
+                    campos_sem_fonte.append(f"{letra} ({header_txt or '?'})")
 
         # Estilo da célula de DADOS (aplicado a todas as linhas de dados da coluna).
         est_dado = _estilo_da_celula(celula, palette)
@@ -519,6 +566,15 @@ def parse_model_xlsx(conteudo: bytes, nome_arquivo: str = "") -> Dict[str, Any]:
                 linha[get_column_letter(cc)] = {"v": v, "estilo": _estilo_da_celula(cel, palette)}
             linhas_rod.append(linha)
         rodape = {"offset": first_footer - last_data_row, "linhas": linhas_rod}
+
+    if campos_sem_fonte:
+        logger.warning(
+            "parse_model_xlsx (%s): %d coluna(s) variam por funcionário mas NÃO "
+            "casaram com nenhum campo do sistema — a COLUNA fica presente no "
+            "layout, porém as células de dado sairão VAZIAS (o sistema não tem "
+            "fonte e não fabrica valor a partir do template): %s",
+            nome_arquivo or ws.title, len(campos_sem_fonte), ", ".join(campos_sem_fonte),
+        )
 
     return {
         "estilos_header": estilos_header,

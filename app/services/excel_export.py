@@ -933,8 +933,32 @@ def _resolver_constante(col: Dict[str, Any]):
         if any(k in ref for k in _CONST_RATE_KEYS):
             fmt = "0%" if 0 < abs(val) < 1 else None
             return val, fmt, True
-        return None, None, False  # valor de exemplo sem fonte real -> vazio
+        # Coluna marcada como VARIÁVEL pelo parser (per-funcionário, sem fonte no
+        # sistema — ex.: benefícios/descontos da Skyrail): o valor que o parser
+        # capturou é só o da 1ª linha do template. Repeti-lo em todos os
+        # funcionários fabricaria um número ERRADO (pior que vazio numa fatura).
+        # O template Skyrail é LAYOUT, não fonte de dados: não há como derivar o
+        # valor per-funcionário dele. Então a célula de dado sai VAZIA (a COLUNA
+        # continua presente no layout — cabeçalho/estilo/largura). No Excel, vazio
+        # conta como 0 nos SUBTOTAL/=SUM, então os totais fecham de forma honesta.
+        # O aviso (parse + render) garante que isso não passa em silêncio.
+        return None, None, False  # sem fonte real -> vazio (não fabrica dado)
     return val, None, True         # texto (rótulo) mantém
+
+
+def _fonte_vazia_no_df(df: "pd.DataFrame", fonte: str) -> bool:
+    """True se a coluna-fonte de um 'campo' sairia INTEIRA vazia: ou não existe no
+    DataFrame, ou existe mas todos os valores são nulos/vazios. Usado só para
+    emitir aviso (FR-4 da spec 007) — não altera a renderização."""
+    if fonte not in df.columns:
+        return True
+    try:
+        serie = df[fonte]
+        return bool(serie.isna().all()) or bool(
+            serie.map(lambda v: v is None or (isinstance(v, str) and v.strip() == "")).all()
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref: str) -> bytes:
@@ -1046,6 +1070,28 @@ def _render_por_estrutura(df: "pd.DataFrame", estrutura: Dict[str, Any], mes_ref
         if not letra or not tipo:
             continue
         fonte = col.get("fonte")
+        # Coluna 'campo' que sairia INTEIRA vazia: ou a fonte não existe no
+        # DataFrame montado, ou existe mas nenhum funcionário tem valor. Antes
+        # isso acontecia em silêncio; agora avisa (spec 007, FR-4) — coluna vazia
+        # vira um sinal, não um mistério.
+        if tipo == "campo" and fonte and n_linhas > 0 and _fonte_vazia_no_df(df, fonte):
+            logger.warning(
+                "Coluna '%s' (letra %s) do modelo mapeia a fonte '%s', %s — "
+                "sairá vazia no export.",
+                col.get("header") or fonte, letra, fonte,
+                "ausente no DataFrame" if fonte not in df.columns
+                else "presente mas sem dado para nenhum funcionário",
+            )
+        # Coluna 'constante variável' (Causa 1 da spec 007): per-funcionário sem
+        # fonte no sistema. A COLUNA fica no layout (cabeçalho/estilo/largura), mas
+        # a célula de dado sai VAZIA — não fabricamos valor a partir da 1ª linha do
+        # template. Avisa para não passar em silêncio.
+        if tipo == "constante" and col.get("variavel") and n_linhas > 0:
+            logger.warning(
+                "Coluna '%s' (letra %s) varia por funcionário mas não tem fonte no "
+                "sistema — coluna presente, células de dado VAZIAS (sem fabricar valor).",
+                col.get("header") or letra, letra,
+            )
         serie = df[fonte] if (tipo == "campo" and fonte in df.columns) else None
         template = str(col.get("template") or "") if tipo == "formula" else ""
         num_fmt = _formato_numero_coluna(col)
@@ -1126,6 +1172,20 @@ def _render_por_template(df: "pd.DataFrame", estrutura: Dict[str, Any],
         if not letra or not tipo:
             continue
         fonte = c.get("fonte")
+        if tipo == "campo" and fonte and n_linhas > 0 and _fonte_vazia_no_df(df, fonte):
+            logger.warning(
+                "Coluna '%s' (letra %s) do modelo mapeia a fonte '%s', %s — "
+                "sairá vazia no export.",
+                c.get("header") or fonte, letra, fonte,
+                "ausente no DataFrame" if fonte not in df.columns
+                else "presente mas sem dado para nenhum funcionário",
+            )
+        if tipo == "constante" and c.get("variavel") and n_linhas > 0:
+            logger.warning(
+                "Coluna '%s' (letra %s) varia por funcionário mas não tem fonte no "
+                "sistema — coluna presente, células de dado VAZIAS (sem fabricar valor).",
+                c.get("header") or letra, letra,
+            )
         serie = df[fonte] if (tipo == "campo" and fonte in df.columns) else None
         template = str(c.get("template") or "") if tipo == "formula" else ""
         num_fmt = _formato_numero_coluna(c)
