@@ -28,6 +28,7 @@ from app.routers.billing_models import router as billing_models_router
 from app.routers.users_admin import router as users_admin_router
 from app.routers.audit_logs import router as audit_logs_router
 from app.routers.conciliacao import router as conciliacao_router
+from app.routers.faturamento_grid import router as faturamento_grid_router
 from app.config import TEMPLATES_DIR
 from app.models.user import User
 from app.session_manager import session_manager
@@ -142,6 +143,7 @@ app.include_router(billing_models_router)
 app.include_router(users_admin_router)
 app.include_router(audit_logs_router)
 app.include_router(conciliacao_router)
+app.include_router(faturamento_grid_router)
 
 @app.get("/proposta-comercial", response_class=HTMLResponse)
 async def proposta_comercial(request: Request):

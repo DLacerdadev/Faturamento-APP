@@ -617,6 +617,9 @@
             <a href="/conciliacao" class="{% if request.url.path == '/conciliacao' %}active{% endif %}">
                 <span class="material-symbols-outlined">balance</span><span>Conciliação</span>
             </a>
+            <a href="/faturamento/planilha" class="{% if request.url.path == '/faturamento/planilha' %}active{% endif %}">
+                <span class="material-symbols-outlined">grid_on</span><span>Planilha</span>
+            </a>
             {% endif %}
             {% if user and (user.role or 'operador')|lower == 'admin' %}
             <a href="/usuarios" class="{% if request.url.path == '/usuarios' %}active{% endif %}">
