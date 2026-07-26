@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Planilha de Faturamento — Telos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .planilha-wrap { display: flex; gap: 1rem; height: calc(100vh - var(--topbar-h) - 3rem); }
+    .planilha-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .planilha-toolbar {
+        display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: flex-end;
+        margin-bottom: 0.75rem;
+    }
+    .planilha-toolbar .field { display: flex; flex-direction: column; gap: 0.25rem; }
+    .planilha-toolbar label { font-size: 0.72rem; color: var(--text-muted, #9aa5b1); }
+    .planilha-toolbar select,
+    .planilha-toolbar input {
+        background: var(--bg-card, #10203a); color: var(--text, #e8edf3);
+        border: 1px solid var(--border, #23344d); border-radius: 8px;
+        padding: 0.45rem 0.6rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+    }
+    .btn-consultar {
+        background: var(--gold, #D4A84B); color: #10203a; border: none;
+        border-radius: 8px; padding: 0.55rem 1rem; font-weight: 700; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .btn-consultar:disabled { opacity: 0.6; cursor: progress; }
+    .btn-ghost {
+        background: transparent; color: var(--gold-text, #D4A84B);
+        border: 1px solid var(--border, #23344d); border-radius: 8px;
+        padding: 0.55rem 0.9rem; font-weight: 600; cursor: pointer;
+    }
+    #grid-root, #grid-fallback {
+        flex: 1; min-height: 320px; border: 1px solid var(--border, #23344d);
+        border-radius: 10px; overflow: auto; background: var(--bg-card, #0d1a2f);
+    }
+    #grid-fallback table { border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+    #grid-fallback th, #grid-fallback td {
+        border: 1px solid var(--border, #23344d); padding: 3px 8px; white-space: nowrap;
+        color: var(--text, #e8edf3);
+    }
+    #grid-fallback thead th { background: var(--bg-hover, #17273f); position: sticky; top: 0; }
+    #grid-fallback td.hl, #grid-fallback th.hl { outline: 2px solid var(--gold, #D4A84B); }
+    #ai-assistant-root {
+        width: 340px; flex-shrink: 0; border: 1px solid var(--border, #23344d);
+        border-radius: 10px; background: var(--bg-card, #0d1a2f); overflow: auto;
+        padding: 0.9rem;
+    }
+    #ai-assistant-root .ai-placeholder { font-size: 0.8rem; color: var(--text-muted, #9aa5b1); line-height: 1.5; }
+    .planilha-status { font-size: 0.78rem; color: var(--text-muted, #9aa5b1); margin: 0.4rem 0; min-height: 1.1em; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 0.5rem;">
+    <h1 style="font-size:1.4rem; margin:0;">Planilha de Faturamento</h1>
+    <p style="color:var(--text-muted,#9aa5b1); font-size:0.85rem; margin:0.3rem 0 0;">
+        Consulte, confira e edite o faturamento no grid — o preview é fiel ao .xlsx exportado.
+    </p>
+</div>
+
+<div class="planilha-wrap">
+    <div class="planilha-main">
+        <div class="planilha-toolbar">
+            <div class="field">
+                <label for="pl-modelo">Modelo</label>
+                <select id="pl-modelo">
+                    <option value="femsa">FEMSA (padrão)</option>
+                    {% for m in modelos %}
+                    <option value="{{ m.nome }}" data-id="{{ m.id }}">{{ m.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="pl-competencia">Competência</label>
+                <input type="month" id="pl-competencia">
+            </div>
+            <div class="field">
+                <label for="pl-ccu">Centro de custo (opcional)</label>
+                <input type="text" id="pl-ccu" placeholder="todos">
+            </div>
+            <button class="btn-consultar" id="btn-consultar" type="button">
+                <span class="material-symbols-outlined" style="font-size:18px;">table_view</span>
+                Consultar faturamento
+            </button>
+            <button class="btn-ghost" id="btn-carregar-modelo" type="button" title="Carregar estrutura do modelo (sem dados)">
+                Carregar modelo
+            </button>
+            <button class="btn-ghost" id="btn-exportar" type="button" disabled>Exportar .xlsx</button>
+        </div>
+        <div class="planilha-status" id="pl-status"></div>
+
+        <!-- Ponto de montagem do grid Univer (fallback de tabela quando o bundle não está presente) -->
+        <div id="grid-root"></div>
+        <div id="grid-fallback" style="display:none;"></div>
+    </div>
+
+    <!-- Ponto de montagem da IA (contrato grid-ops §2) — preenchido por ai_assistant.js (spec 010) -->
+    <div id="ai-assistant-root">
+        <div class="ai-placeholder">
+            Assistente de IA (spec 010) monta aqui.<br>
+            Este painel usa <code>window.FaturamentoGrid</code>.
+        </div>
+    </div>
+</div>
+
+<!-- Config injetada pelo backend (sem PII) -->
+<script>window.PLANILHA_MODELOS = {{ modelos | tojson }};</script>
+
+<!-- Univer self-hosted (vendorizado em /static/vendor/univer/). Se o bundle não
+     estiver presente (não baixado no build), o faturamento_planilha.js cai para
+     um fallback de tabela mínima — o backend (serialização/apply-ops) é o núcleo. -->
+<link rel="stylesheet" href="/static/vendor/univer/univer.css" onerror="this.remove()">
+<script src="/static/vendor/univer/univer.full.umd.js" onerror="window.__UNIVER_MISSING=true"></script>
+
+<!-- Grid da planilha: inicializa Univer (ou fallback) e expõe window.FaturamentoGrid -->
+<script src="/static/js/faturamento_planilha.js"></script>
+
+<!-- Assistente de IA — entregue pela spec 010 (só referenciado aqui, nunca criado por 009) -->
+<script src="/static/js/ai_assistant.js" onerror="this.remove()"></script>
+{% endblock %}

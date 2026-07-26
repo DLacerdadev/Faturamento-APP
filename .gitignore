@@ -34,3 +34,7 @@ attached_assets/
 
 # Logs
 *.log
+
+# Bundle self-hosted do Univer (spec 009) — ~20 MB, baixado via scripts/fetch_univer.sh
+app/static/vendor/univer/univer.full.umd.js
+app/static/vendor/univer/univer.css
