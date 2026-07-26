@@ -40,6 +40,10 @@ for _k in ("SENIOR_SOAP_USER", "SENIOR_SOAP_PASSWORD", "SENIOR_SOAP_TOKEN"):
 # (monkeypatch.setattr), nunca com a credencial de produção.
 for _k in ("TOTVS_WSGETDATA_URL", "TOTVS_WSGETDATA_USER", "TOTVS_WSGETDATA_PASSWORD"):
     os.environ[_k] = ""
+# Zera o LLM local (feature 010): nenhum teste abre socket para o modelo. Testes
+# de IA injetam um chat_fn/mocks; o LLM real nunca é chamado.
+for _k in ("LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY"):
+    os.environ[_k] = ""
 # Cookie sem `secure` para o TestClient (http://testserver).
 os.environ["SESSION_COOKIE_SECURE"] = "false"
 # Sessão em memória determinística.

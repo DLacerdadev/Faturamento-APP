@@ -117,3 +117,16 @@ TOTVS_SYNC_HORARIO = os.getenv("TOTVS_SYNC_HORARIO", "02:00")
 def is_totvs_configured() -> bool:
     """True se URL + usuário + senha do WSGETDATA estão preenchidos."""
     return bool(TOTVS_WSGETDATA_URL and TOTVS_WSGETDATA_USER and TOTVS_WSGETDATA_PASSWORD)
+
+# ─── IA do faturamento – LLM local self-hosted (feature 010) ────────────────
+# Endpoint compatível OpenAI (ex.: Ollama/vLLM). O snapshot enviado é SEM PII
+# (sanitizado). Nada sai da infra. Vazio => IA indisponível (router responde 503).
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60") or "60")
+
+
+def is_llm_configured() -> bool:
+    """True se o LLM local (base URL + modelo) está configurado."""
+    return bool(LLM_BASE_URL and LLM_MODEL)

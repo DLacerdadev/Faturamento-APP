@@ -500,3 +500,35 @@ Em dev/SQLite o `init_db()` aplica o ALTER idempotente automaticamente.
 ### Segurança
 - Credencial `powerbi` foi compartilhada em texto puro: **rotacionar** e, de preferência, criar
   usuário Protheus dedicado com permissão mínima (só `SC7010`/`SB1010`). Atualizar o `.env` local.
+
+---
+
+## Assistente de IA do faturamento (feature 010)
+
+Chat que ajuda a criar/editar modelos de planilha via linguagem natural. A IA **não** escreve na
+planilha: ela devolve operações `grid-ops` validadas (contrato) que o front aplica no grid (009).
+
+### LLM 100% self-hosted (nada sai da infra)
+Endpoint compatível com a API OpenAI (`/chat/completions`) — ex.: **Ollama** ou **vLLM** na VPS.
+```
+LLM_BASE_URL=http://localhost:11434/v1   # ex.: Ollama
+LLM_MODEL=<modelo>                        # ex.: qwen2.5, llama3.1
+LLM_API_KEY=                              # opcional (Ollama não exige)
+LLM_TIMEOUT=60
+```
+Vazio ⇒ IA desativada: `POST /ia/chat` responde **503** com mensagem clara (a tela não quebra).
+
+### PII (política da organização)
+O snapshot enviado ao LLM é **sanitizado** (`app/services/ai_pii.py`): só estrutura
+(colunas/tipos/fórmulas/parâmetros), `sample_row` zerado; CPF/CNPJ/e-mail/telefone/dígitos longos
+são redigidos e chaves de PII descartadas. `assert_no_pii` é um guard em runtime antes de qualquer
+chamada ao modelo. Mesmo self-hosted, **nenhum dado individual de funcionário vai ao prompt**.
+
+### Deploy do LLM (Ollama, exemplo)
+```bash
+# na VPS (1 worker do app p/ o modo async do chat)
+ollama serve &            # sobe o endpoint em :11434
+ollama pull qwen2.5       # baixa o modelo
+# no .env do app: LLM_BASE_URL=http://localhost:11434/v1  LLM_MODEL=qwen2.5
+```
+Testes rodam offline (LLM mockado); o `conftest` zera `LLM_*` para nenhum teste abrir socket.
