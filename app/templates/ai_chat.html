@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Assistente de IA — Faturamento{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ia-page-wrap { max-width: 720px; }
+    .ia-toolbar { display: flex; gap: .75rem; align-items: flex-end; margin-bottom: 1rem; flex-wrap: wrap; }
+    .ia-toolbar .field { display: flex; flex-direction: column; gap: .25rem; }
+    .ia-toolbar label { font-size: .72rem; color: var(--text-muted, #9aa5b1); }
+    .ia-toolbar select {
+        background: var(--bg-card, #10203a); color: var(--text, #e8edf3);
+        border: 1px solid var(--border, #23344d); border-radius: 8px;
+        padding: .45rem .6rem; font-family: 'JetBrains Mono', monospace; font-size: .8rem;
+    }
+    #ai-assistant-root {
+        border: 1px solid var(--border, #23344d); border-radius: 10px;
+        background: var(--bg-card, #0d1a2f); padding: 1rem;
+    }
+    .ia-note {
+        font-size: .78rem; color: var(--text-muted, #9aa5b1); line-height: 1.5;
+        margin: .5rem 0 1rem;
+    }
+    .ia-warn {
+        border: 1px solid var(--gold, #D4A84B); border-radius: 8px; padding: .6rem .8rem;
+        font-size: .8rem; margin-bottom: 1rem; background: rgba(212,168,75,.08);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ia-page-wrap">
+    <div style="margin-bottom: .75rem;">
+        <h1 style="font-size:1.4rem; margin:0;">Assistente de IA — Faturamento</h1>
+        <p class="ia-note">
+            Página de teste/dev da IA (spec 010). Descreva a mudança no modelo e a IA
+            devolve operações <code>grid-ops</code> validadas. Aqui não há grid da planilha
+            (spec 009): as operações são geradas e pré-visualizadas; a aplicação automática
+            no grid só ocorre quando esta IA roda dentro da planilha.
+        </p>
+    </div>
+
+    {% if not llm_configurado %}
+    <div class="ia-warn">
+        ⚠ LLM local não configurado (<code>LLM_BASE_URL</code>/<code>LLM_MODEL</code>).
+        O envio retornará erro claro até a infra do modelo self-hosted estar de pé.
+    </div>
+    {% endif %}
+
+    <div class="ia-toolbar">
+        <div class="field">
+            <label for="ia-modelo">Modelo (contexto de estrutura, sem PII)</label>
+            <select id="ia-modelo">
+                {% for m in modelos %}
+                <option value="{{ m.nome }}" data-id="{{ m.id }}">{{ m.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Ponto de montagem da IA (mesmo id que a planilha da 009 expõe) -->
+    <div id="ai-assistant-root"></div>
+</div>
+
+<script>window.AI_MODELOS = {{ modelos | tojson }};</script>
+<script src="/static/js/ai_assistant.js"></script>
+{% endblock %}
