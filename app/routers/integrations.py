@@ -1180,23 +1180,22 @@ def _pct_se_gestor(request, db, enc, adm, imp):
     return None, None, None
 
 
-def _codcals_mensais(db) -> set:
-    """Códigos de cálculo (codcal) que compõem o CÁLCULO MENSAL — o recorte
-    faturado. Fonte primária: classificação da Conciliação (recorte_mensal=True);
-    fallback: env SENIOR_CODCAL_MENSAL. Vazio = sem filtro (comportamento antigo)."""
-    try:
-        from app.models.codcal_classification import CodcalClassification
-        mensais = {
-            c.codcal for c in db.query(CodcalClassification)
-            .filter(CodcalClassification.recorte_mensal.is_(True)).all()
-            if c.codcal is not None
-        }
-        if mensais:
-            return mensais
-    except Exception:
-        logger.warning("Não foi possível ler codcal_classifications; usando fallback de env.")
-    from app.config import SENIOR_CODCAL_MENSAL
-    return set(SENIOR_CODCAL_MENSAL or [])
+def _codcals_do_mensal(payroll_data) -> set:
+    """Códigos de cálculo (codcal) do CÁLCULO MENSAL — o recorte faturado.
+
+    O número do codcal MUDA a cada competência (cada cálculo da Senior recebe um
+    codcal novo — ex.: maio=392, julho=400), então NÃO dá pra fixar um número nem
+    depender de classificação manual. Identificamos o mensal pelos codcals que
+    contêm o EVENTO BASE do salário ("Dias Normais", cód. 200 — configurável em
+    SENIOR_EVENTO_BASE_MENSAL). Rescisões/férias/13º são cálculos SEM esse evento
+    e ficam de fora. Override manual: SENIOR_CODCAL_MENSAL (raro)."""
+    from app.config import SENIOR_CODCAL_MENSAL, SENIOR_EVENTO_BASE_MENSAL
+    if SENIOR_CODCAL_MENSAL:
+        return set(SENIOR_CODCAL_MENSAL)
+    return {
+        r.get("codcal") for r in payroll_data
+        if r.get("codigo_evento") == SENIOR_EVENTO_BASE_MENSAL and r.get("codcal") is not None
+    }
 
 
 def _build_billing_export(db, modelo, periodo, codccu, encargos_pct=None,
@@ -1216,16 +1215,16 @@ def _build_billing_export(db, modelo, periodo, codccu, encargos_pct=None,
     # nº de funcionários. Filtra por codcal do mensal (não afeta as folhas cruas
     # 'senior'/'payroll', que devem mostrar tudo). Sem codcal definido => sem filtro.
     if modelo not in ("senior", "payroll"):
-        _mensais = _codcals_mensais(db)
+        from app.config import SENIOR_EVENTO_BASE_MENSAL as _ev_base
+        _mensais = _codcals_do_mensal(payroll_data)
         if _mensais:
             _n0 = len(payroll_data)
             payroll_data = [r for r in payroll_data if r.get("codcal") in _mensais]
-            logger.info("Faturamento só-mensal: %d/%d lançamentos mantidos (codcals mensais=%s).",
-                        len(payroll_data), _n0, sorted(_mensais))
+            logger.info("Faturamento só-mensal: %d/%d lançamentos mantidos (codcals mensais=%s, auto por evento base %s).",
+                        len(payroll_data), _n0, sorted(_mensais), _ev_base)
         else:
-            logger.warning("Faturamento: nenhum codcal do mensal definido — export NÃO filtrado. "
-                           "Classifique o cálculo mensal em /conciliacao (recorte mensal) ou "
-                           "defina SENIOR_CODCAL_MENSAL no .env.")
+            logger.warning("Faturamento: não identifiquei o cálculo mensal (nenhum codcal com o evento "
+                           "base %s); export NÃO filtrado. Confira SENIOR_EVENTO_BASE_MENSAL.", _ev_base)
     all_grouped_data = agrupar_por_matricula(payroll_data)
     codccu_label = "_".join(codccu) if len(codccu) <= 3 else f"{len(codccu)}_ccus"
     xlsx_mt = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

@@ -48,6 +48,12 @@ SENIOR_CODCAL_MENSAL = {
     int(x) for x in os.getenv("SENIOR_CODCAL_MENSAL", "").replace(";", ",").split(",")
     if x.strip().isdigit()
 }
+# O número do codcal MUDA a cada competência (cada cálculo da Senior ganha um
+# codcal novo — ex.: maio=392, julho=400), então não dá pra fixar. O cálculo
+# MENSAL é identificado pelo EVENTO BASE presente nele: "Dias Normais" (cód. 200).
+# O faturamento auto-detecta os codcals que contêm esse evento. Configurável se
+# a numeração do evento base for outra. SENIOR_CODCAL_MENSAL (acima) é override.
+SENIOR_EVENTO_BASE_MENSAL = int(os.getenv("SENIOR_EVENTO_BASE_MENSAL", "200") or "200")
 
 # Modo desenvolvimento: ativo quando credenciais Senior não estão configuradas.
 # Neste modo, endpoints que dependem do Senior usam dados locais do banco SQLite.
